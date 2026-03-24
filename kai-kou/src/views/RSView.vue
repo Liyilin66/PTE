@@ -1,42 +1,267 @@
 <script setup>
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import RecordingWave from "@/components/RecordingWave.vue";
 import TimerBar from "@/components/TimerBar.vue";
+import { useRecorder } from "@/composables/useRecorder";
+import { useTimer } from "@/composables/useTimer";
 import { usePracticeStore } from "@/stores/practice";
 
+const router = useRouter();
 const practiceStore = usePracticeStore();
+const recorder = useRecorder();
+const timer = useTimer();
+
+const phase = computed(() => practiceStore.phase);
+const showAnswer = ref(false);
+
+const recordingSeconds = ref(0);
+const canSubmit = computed(() => phase.value === "recording" && recordingSeconds.value >= 3);
+
+const todayCount = computed(() => {
+  const rsTask = practiceStore.tasks.find((task) => task.id === "rs");
+  return rsTask?.todayCount ?? 1;
+});
 
 const tips = [
-  "专注记住关键的名词、动词和数字",
-  "不需要一字不差，踩中50%关键词就通过",
-  "保持流利，不要因为忘词而卡壳"
+  "Focus on rhythm and intonation, not only individual words.",
+  "For short sentences, aim for full repeat. For long ones, prioritize key words.",
+  "Even if you miss the middle, complete the sentence ending."
 ];
+
+const historicalStats = {
+  bestScore: 77,
+  totalAttempts: 15
+};
+
+let unmounted = false;
+let isSubmitting = false;
+let isStartingRecording = false;
+let recordingTicker = null;
+
+function startRecordingTicker() {
+  stopRecordingTicker();
+  recordingSeconds.value = 0;
+  recordingTicker = setInterval(() => {
+    recordingSeconds.value += 1;
+  }, 1000);
+}
+
+function stopRecordingTicker() {
+  clearInterval(recordingTicker);
+  recordingTicker = null;
+  recordingSeconds.value = 0;
+}
+
+function initializeQuestion() {
+  practiceStore.setQuestion({
+    id: "RS_001",
+    taskType: "RS",
+    content: practiceStore.rsSentence
+  });
+}
+
+function startPlaying() {
+  isSubmitting = false;
+  showAnswer.value = false;
+  practiceStore.setPhase("playing");
+  timer.start(5, startRecording);
+}
+
+async function startRecording() {
+  if (isStartingRecording || phase.value === "recording" || phase.value === "processing") return;
+  isStartingRecording = true;
+  try {
+    practiceStore.setPhase("recording");
+    const started = await recorder.startRecording();
+
+    if (!started) {
+      timer.stop();
+      practiceStore.setPhase("idle");
+      return;
+    }
+
+    startRecordingTicker();
+    timer.start(15, handleSubmit);
+  } finally {
+    isStartingRecording = false;
+  }
+}
+
+async function handleSubmit() {
+  if (isSubmitting || phase.value !== "recording") return;
+  isSubmitting = true;
+
+  stopRecordingTicker();
+  timer.stop();
+  recorder.stopRecording();
+
+  practiceStore.setTranscript(recorder.transcript.value);
+  practiceStore.setAudioBlob(recorder.audioBlob.value);
+  practiceStore.setPhase("processing");
+
+  const keywords = extractKeywords(practiceStore.rsSentence);
+
+  await practiceStore.mockScore("RS", recorder.transcript.value, {
+    sentence: practiceStore.rsSentence,
+    keywords
+  });
+
+  if (!unmounted) {
+    router.push("/rs/result");
+  }
+}
+
+async function skipQuestion() {
+  if (phase.value === "playing") {
+    timer.stop();
+    await startRecording();
+    return;
+  }
+
+  if (phase.value === "recording" && canSubmit.value) {
+    await handleSubmit();
+  }
+}
+
+function extractKeywords(sentence) {
+  const raw = sentence
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const unique = [];
+  for (const word of raw) {
+    if (word.length >= 5 && !unique.includes(word)) {
+      unique.push(word);
+    }
+  }
+
+  return unique.slice(0, 8);
+}
+
+onMounted(() => {
+  initializeQuestion();
+  startPlaying();
+});
+
+onUnmounted(() => {
+  unmounted = true;
+  stopRecordingTicker();
+  timer.stop();
+  recorder.stopRecording();
+});
 </script>
 
 <template>
   <div class="min-h-screen bg-bg">
-    <NavBar title="RS - 复述句子" back-to="/home" />
-    <TimerBar :current="1" :total="3" :progress="33" />
+    <NavBar title="Repeat Sentence" back-to="/home" />
 
-    <main class="mx-auto max-w-4xl px-4 py-6">
-      <section class="mb-4 rounded-xl border bg-card p-8 shadow-card">
-        <div class="space-y-4 text-center">
-          <p class="text-base text-[#6B7280]">{{ practiceStore.rsPrompt }}</p>
-          <button
-            type="button"
-            class="mx-auto inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#3565B5] px-6 text-sm font-medium text-white transition hover:bg-[#2D5798]"
-          >
-            <RecordingWave active color-class="bg-white" />
-            🔊 播放音频
+    <main class="mx-auto max-w-2xl px-4 py-6">
+      <section v-if="phase === 'playing'" class="space-y-4">
+        <section class="rounded-xl border bg-white p-6 text-center shadow-card">
+          <p class="text-base text-muted">Listen carefully and repeat right after playback.</p>
+        </section>
+
+        <div class="flex items-start gap-3">
+          <div class="flex-1">
+            <TimerBar label="Playback" :remaining="timer.remaining" :progress="timer.progress" :is-warning="timer.isWarning" />
+          </div>
+          <button type="button" class="pt-1 text-sm text-muted underline transition-colors hover:text-navy" @click="skipQuestion">
+            Skip
           </button>
         </div>
       </section>
 
-      <section class="rounded-xl border border-blue-200 bg-blue-50 p-5">
-        <h2 class="mb-3 font-bold text-[#1A1A2E]">💡 练习技巧</h2>
-        <ul class="space-y-2 text-sm text-[#6B7280]">
-          <li v-for="tip in tips" :key="tip">• {{ tip }}</li>
+      <section v-else-if="phase === 'recording'" class="space-y-4">
+        <section class="rounded-xl border bg-white p-6 text-center shadow-card">
+          <p class="text-base font-medium text-navy">Now repeat the sentence</p>
+          <p class="mt-2 text-sm text-muted">Speak naturally and keep your pacing stable.</p>
+        </section>
+
+        <div class="flex items-start gap-3">
+          <div class="flex-1">
+            <TimerBar label="Recording" :remaining="timer.remaining" :progress="timer.progress" :is-warning="timer.isWarning" />
+          </div>
+          <button type="button" class="pt-1 text-sm text-muted underline transition-colors hover:text-navy" @click="skipQuestion">
+            Skip
+          </button>
+        </div>
+
+        <section class="rounded-xl border bg-white p-4 shadow-card">
+          <RecordingWave :is-recording="recorder.isRecording" />
+
+          <button
+            type="button"
+            class="mt-4 w-full rounded-xl py-4 text-lg font-bold transition-all"
+            :class="canSubmit ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400'"
+            :disabled="!canSubmit"
+            @click="handleSubmit"
+          >
+            {{ canSubmit ? 'Submit Response' : 'Recording...' }}
+          </button>
+        </section>
+
+        <section class="mt-1">
+          <button type="button" class="text-sm text-orange underline transition-opacity hover:opacity-75" @click="showAnswer = !showAnswer">
+            {{ showAnswer ? 'Hide Original Sentence' : 'Show Original Sentence' }}
+          </button>
+          <div v-if="showAnswer" class="mt-2 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <p class="mb-1 text-xs text-muted">Original Sentence</p>
+            <p class="leading-relaxed text-navy">{{ practiceStore.rsSentence }}</p>
+          </div>
+        </section>
+      </section>
+
+      <section v-else-if="phase === 'processing'" class="py-10 text-center">
+        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange/10">
+          <div class="h-8 w-8 animate-spin rounded-full border-4 border-orange border-t-transparent" />
+        </div>
+        <p class="text-xl font-bold text-navy">Analyzing your response</p>
+        <p class="mt-2 text-sm text-muted">AI coach is generating feedback...</p>
+      </section>
+
+      <section v-else class="rounded-xl border bg-white p-6 text-center shadow-card">
+        <p class="text-sm text-muted">Ready after permission or device checks.</p>
+      </section>
+
+      <section class="mt-4 rounded-xl border-l-4 border-orange bg-white p-4 shadow-sm">
+        <p class="mb-2 text-sm font-semibold text-navy">Listening Strategy</p>
+        <ul class="space-y-1 text-sm text-muted">
+          <li v-for="tip in tips" :key="tip">- {{ tip }}</li>
         </ul>
+      </section>
+
+      <section class="mt-3 rounded-xl bg-white p-4 shadow-sm">
+        <p class="mb-3 text-sm font-semibold text-navy">Today RS Progress</p>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex gap-1.5">
+            <div v-for="i in 3" :key="i" class="h-3 w-3 rounded-full" :class="i <= todayCount ? 'bg-orange' : 'bg-gray-200'" />
+          </div>
+          <p class="text-sm text-muted">Completed {{ todayCount }} / 3 today</p>
+        </div>
+      </section>
+
+      <section v-if="recorder.error" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+        <p class="text-sm text-red-600">{{ recorder.error }}</p>
+      </section>
+
+      <section class="mb-8 mt-3 flex items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm">
+        <div>
+          <p class="text-xs text-muted">My Best</p>
+          <p class="mt-0.5 text-2xl font-bold text-navy">
+            {{ historicalStats.bestScore }} <span class="text-sm font-normal text-muted">pts</span>
+          </p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-muted">Total Practice</p>
+          <p class="mt-0.5 text-2xl font-bold text-navy">
+            {{ historicalStats.totalAttempts }} <span class="text-sm font-normal text-muted">times</span>
+          </p>
+        </div>
+        <div class="text-3xl text-orange">TOP</div>
       </section>
     </main>
   </div>

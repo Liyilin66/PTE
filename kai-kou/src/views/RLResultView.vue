@@ -19,9 +19,9 @@ const result = computed(() =>
 const transcript = computed(() => store.transcript || "");
 
 const scoreItems = [
-  { key: "pronunciation", label: "Pronunciation", tip: "Clarity and accuracy of sounds." },
-  { key: "fluency", label: "Fluency", tip: "Pace, rhythm, and smooth pauses." },
-  { key: "content", label: "Content", tip: "Coverage of key words and full sentence meaning." }
+  { key: "content", label: "Content", tip: "Key point coverage and summary structure." },
+  { key: "pronunciation", label: "Pronunciation", tip: "Clarity of words and sounds." },
+  { key: "fluency", label: "Fluency", tip: "Rhythm and smooth sentence connection." }
 ];
 
 const resultBadge = computed(() => {
@@ -33,9 +33,9 @@ const resultBadge = computed(() => {
 
 const resultTitle = computed(() => {
   const s = result.value.overall;
-  if (s >= 75) return "Great read aloud performance";
-  if (s >= 60) return "Solid attempt with good momentum";
-  return "Nice practice round, keep building fluency";
+  if (s >= 75) return "Retell completed with strong structure";
+  if (s >= 60) return "Good retell. Keep expanding key-point coverage";
+  return "Great practice. Next attempt will be more complete";
 });
 
 function scoreColor(score) {
@@ -53,7 +53,7 @@ function scoreBarColor(score) {
 
 <template>
   <div class="min-h-screen bg-bg">
-    <NavBar title="Read Aloud Result" back-to="/ra" />
+    <NavBar title="Re-tell Lecture Result" back-to="/rl" />
 
     <main class="mx-auto max-w-2xl px-4 py-6">
       <section class="mb-6 text-center">
@@ -94,14 +94,14 @@ function scoreBarColor(score) {
       </section>
 
       <section class="mb-6 rounded-xl bg-white p-4 shadow-sm">
-        <p class="mb-2 text-sm font-semibold text-navy">Recognized Transcript</p>
+        <p class="mb-2 text-sm font-semibold text-navy">Recognized Summary</p>
         <p class="text-sm italic leading-relaxed text-muted">
           "{{ transcript || '(No speech recognized. Please check microphone permissions.)' }}"
         </p>
       </section>
 
       <section class="space-y-3">
-        <OrangeButton full @click="router.push('/ra')">Practice Another RA</OrangeButton>
+        <OrangeButton full @click="router.push('/rl')">Practice Another RL</OrangeButton>
         <button
           type="button"
           class="w-full rounded-xl border border-gray-200 py-3 text-muted transition-all hover:border-navy hover:text-navy"

@@ -1,43 +1,36 @@
 <script setup>
-const props = defineProps({
-  current: {
-    type: Number,
-    default: 1
+defineProps({
+  label: {
+    type: String,
+    default: "Remaining Time"
   },
-  total: {
+  remaining: {
     type: Number,
-    default: 3
+    required: true
   },
   progress: {
     type: Number,
-    default: 33
+    required: true
   },
-  showNext: {
+  isWarning: {
     type: Boolean,
-    default: true
-  },
-  nextLabel: {
-    type: String,
-    default: "下一题"
+    default: false
   }
 });
 </script>
 
 <template>
-  <div class="border-b border-gray-200 bg-white">
-    <div class="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-      <span class="text-sm font-medium text-[#6B7280]">题目 {{ current }} / {{ total }}</span>
-      <button
-        v-if="showNext"
-        type="button"
-        class="text-sm font-medium text-[#2E5EA8] transition hover:underline"
-      >
-        {{ nextLabel }}
-      </button>
-      <span v-else class="w-10" />
+  <div class="w-full">
+    <div class="mb-1 flex items-center justify-between text-sm">
+      <span class="text-muted">{{ label }}</span>
+      <span :class="isWarning ? 'font-bold text-red-500' : 'text-text'">{{ remaining }}s</span>
     </div>
-    <div class="h-1 bg-gray-200">
-      <div class="h-full bg-[#2E5EA8] transition-all duration-300" :style="{ width: `${progress}%` }" />
+    <div class="h-2 w-full rounded-full bg-gray-200">
+      <div
+        class="h-2 rounded-full transition-all duration-1000 ease-linear"
+        :class="isWarning ? 'bg-red-500' : 'bg-orange'"
+        :style="{ width: `${Math.max(0, Math.min(100, progress))}%` }"
+      />
     </div>
   </div>
 </template>

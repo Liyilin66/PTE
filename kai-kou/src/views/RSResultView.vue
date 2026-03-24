@@ -1,41 +1,108 @@
 <script setup>
+import { computed } from "vue";
+import { useRouter } from "vue-router";
+import { usePracticeStore } from "@/stores/practice";
 import NavBar from "@/components/NavBar.vue";
 import OrangeButton from "@/components/OrangeButton.vue";
-import FeedbackBubble from "@/components/FeedbackBubble.vue";
 
-const tips = [
-  "专注记忆关键的名词和动词",
-  "不用纠结语法，按你记住的顺序说出来",
-  "踩中50%以上关键词就能通过",
-  "保持自信流利，比完美更重要"
-];
+const router = useRouter();
+const store = usePracticeStore();
+
+const result = computed(() =>
+  store.result || {
+    overall: 0,
+    feedback: "No feedback yet.",
+    meta: { keywordHits: [] }
+  }
+);
+
+const keywords = computed(() => {
+  const hits = result.value?.meta?.keywordHits || [];
+  if (hits.length) return hits;
+
+  return [
+    { word: "quick", hit: true },
+    { word: "brown", hit: true },
+    { word: "fox", hit: false },
+    { word: "jumps", hit: true },
+    { word: "lazy", hit: false },
+    { word: "dog", hit: true },
+    { word: "river", hit: false },
+    { word: "bank", hit: true }
+  ];
+});
+
+const originalSentence = computed(
+  () => store.currentQuestion?.content || store.rsSentence || "The quick brown fox jumps over the lazy dog near the river bank."
+);
+
+const resultBadge = computed(() => {
+  const s = result.value.overall;
+  if (s >= 70) return "Excellent";
+  if (s >= 50) return "Good";
+  return "Keep Going";
+});
+
+const resultTitle = computed(() => {
+  const s = result.value.overall;
+  if (s >= 70) return "Strong listening and repetition";
+  if (s >= 50) return "You captured most key words";
+  return "Good effort. Practice builds memory speed";
+});
 </script>
 
 <template>
   <div class="min-h-screen bg-bg">
-    <NavBar title="练习结果" back-to="/rs" />
+    <NavBar title="Repeat Sentence Result" back-to="/rs" />
 
     <main class="mx-auto max-w-2xl px-4 py-6">
-      <FeedbackBubble
-        title="✅ Pass"
-        body="关键词踩到 4/5 个"
-        tone="green"
-        container-class="p-8 mb-6"
-        title-class="text-3xl font-bold text-white flex items-center justify-center gap-2"
-        body-class="text-lg text-white"
-        centered
-      />
-
-      <section class="rounded-xl border bg-white p-6 shadow-card">
-        <h2 class="mb-3 flex items-center gap-2 font-bold text-[#1A1A2E]">💡 练习技巧</h2>
-        <ul class="space-y-2 text-sm text-[#6B7280]">
-          <li v-for="tip in tips" :key="tip">• {{ tip }}</li>
-        </ul>
+      <section class="mb-6 text-center">
+        <p class="text-sm font-semibold uppercase tracking-wide text-orange">{{ resultBadge }}</p>
+        <h1 class="mt-1 text-2xl font-bold text-navy">{{ resultTitle }}</h1>
+        <p class="mt-1 text-muted">
+          Keyword Coverage <span class="text-xl font-bold text-orange">{{ result.overall }}%</span>
+        </p>
       </section>
 
-      <section class="mt-6 grid grid-cols-2 gap-4">
-        <OrangeButton to="/rs" tone="outline">再试一次</OrangeButton>
-        <OrangeButton to="/rs">下一题 →</OrangeButton>
+      <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+        <p class="mb-3 text-sm font-semibold text-navy">Keyword Coverage Details</p>
+        <div class="flex flex-wrap gap-2">
+          <span
+            v-for="kw in keywords"
+            :key="kw.word"
+            class="rounded-full border px-3 py-1 text-sm font-medium"
+            :class="kw.hit ? 'border-green-200 bg-green-100 text-green-700' : 'border-gray-200 bg-gray-100 text-gray-400'"
+          >
+            {{ kw.hit ? 'hit' : 'miss' }} {{ kw.word }}
+          </span>
+        </div>
+        <p class="mt-3 text-xs text-muted">Green tags were covered. Gray tags were missed this round.</p>
+      </section>
+
+      <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+        <p class="mb-2 text-sm font-semibold text-navy">Original Sentence</p>
+        <p class="leading-relaxed text-text">{{ originalSentence }}</p>
+      </section>
+
+      <section class="mb-6 rounded-xl bg-white p-4 shadow-sm">
+        <div class="flex items-start gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">AI</div>
+          <div>
+            <p class="mb-1 text-xs text-muted">Coach Feedback</p>
+            <p class="leading-relaxed text-text">{{ result.feedback }}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="space-y-3">
+        <OrangeButton full @click="router.push('/rs')">Practice Another RS</OrangeButton>
+        <button
+          type="button"
+          class="w-full rounded-xl border border-gray-200 py-3 text-muted transition-all hover:border-navy hover:text-navy"
+          @click="router.push('/home')"
+        >
+          Back Home
+        </button>
       </section>
     </main>
   </div>

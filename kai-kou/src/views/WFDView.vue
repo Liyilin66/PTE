@@ -1,55 +1,91 @@
 <script setup>
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import NavBar from "@/components/NavBar.vue";
 import OrangeButton from "@/components/OrangeButton.vue";
-import RecordingWave from "@/components/RecordingWave.vue";
 import TimerBar from "@/components/TimerBar.vue";
+import { useTimer } from "@/composables/useTimer";
+import { useUIStore } from "@/stores/ui";
 
-const tips = [
-  "可以多次播放音频，直到听清为止",
-  "注意单词拼写，拼错也会失分",
-  "优先记住关键词（名词、动词、数字）",
-  "常见连词（and, the, is）也要写全"
-];
+const uiStore = useUIStore();
+const timer = useTimer();
+
+const phase = ref("playing");
+const answer = ref("");
+const replaysLeft = ref(2);
+const isPlayback = computed(() => phase.value === "playing");
+
+function startPlayback(isInitial = false) {
+  if (phase.value === "playing") return;
+  if (!isInitial && replaysLeft.value <= 0) return;
+
+  if (!isInitial) {
+    replaysLeft.value -= 1;
+  }
+
+  phase.value = "playing";
+  timer.start(3, () => {
+    phase.value = "typing";
+  });
+}
+
+function submitAnswer() {
+  if (!answer.value.trim()) {
+    uiStore.showToast("Please type what you heard first.", "warning");
+    return;
+  }
+
+  uiStore.showToast("Your answer is received. Scoring will be available soon.", "success");
+}
+
+onMounted(() => {
+  phase.value = "idle";
+  startPlayback(true);
+});
+
+onUnmounted(() => {
+  timer.stop();
+});
 </script>
 
 <template>
   <div class="min-h-screen bg-bg">
-    <NavBar title="WFD - 听写句子" back-to="/home" />
-    <TimerBar :current="1" :total="3" :progress="33" :show-next="false" />
+    <NavBar title="Write From Dictation" back-to="/home" />
 
-    <main class="mx-auto max-w-4xl px-4 py-6">
-      <section class="mb-4 rounded-xl border bg-white p-8 shadow-card">
-        <div class="text-center">
-          <p class="text-base text-[#6B7280]">点击播放按钮听音频，可以播放多次</p>
-          <button
-            type="button"
-            class="mt-4 inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-red-600 px-8 text-sm font-medium text-white transition hover:bg-red-700"
-          >
-            <RecordingWave active color-class="bg-white" />
-            🔊 播放音频
-          </button>
+    <main class="mx-auto max-w-2xl px-4 py-6">
+      <section class="rounded-xl border bg-white p-6 shadow-card">
+        <p class="text-sm text-muted">
+          {{ phase === "playing" ? "Audio is playing..." : "Type the sentence you heard." }}
+        </p>
+
+        <div class="mt-4">
+          <TimerBar label="Playback" :remaining="timer.remaining" :progress="timer.progress" :is-warning="false" />
         </div>
 
-        <div class="mx-auto mt-8 max-w-3xl">
-          <label class="mb-2 block text-base text-[#1A1A2E]">输入你听到的句子：</label>
+        <div class="mt-5 flex items-center gap-3">
+          <button
+            type="button"
+            class="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isPlayback || replaysLeft <= 0"
+            @click="startPlayback()"
+          >
+            Replay Audio
+          </button>
+          <span class="text-sm text-muted">Replays left: {{ replaysLeft }}</span>
+        </div>
+
+        <div class="mt-5">
+          <label class="mb-2 block text-sm font-medium text-text">Your answer</label>
           <input
+            v-model="answer"
             type="text"
-            disabled
             placeholder="Type what you hear..."
-            class="h-14 w-full rounded-md border border-[#D1D5DB] bg-white px-4 text-lg text-[#4A5E7A] placeholder:text-[#4A5E7A]"
+            class="h-12 w-full rounded-lg border border-[#D1D5DB] px-3 text-sm outline-none"
           />
         </div>
 
-        <div class="mt-6 flex justify-center">
-          <OrangeButton tone="soft">提交答案</OrangeButton>
+        <div class="mt-5 flex justify-end">
+          <OrangeButton @click="submitAnswer">Submit</OrangeButton>
         </div>
-      </section>
-
-      <section class="rounded-xl border border-[#F2BCC9] bg-[#F7EFF2] p-5">
-        <h2 class="mb-3 font-bold text-[#1A1A2E]">💡 练习技巧</h2>
-        <ul class="space-y-2 text-sm text-[#6B7280]">
-          <li v-for="tip in tips" :key="tip">• {{ tip }}</li>
-        </ul>
       </section>
     </main>
   </div>
