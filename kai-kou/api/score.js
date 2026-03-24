@@ -1,32 +1,33 @@
+import { verifyToken } from "./_auth.js";
+import { getUsageForUser } from "./_quota.js";
+import { getDB } from "../db/init.js";
+
 const modelName = "gemini-2.5-flash-lite";
-const apiKey = process.env.GEMINI_API_KEY;
-const hasValidApiKey = Boolean(apiKey && apiKey !== "YOUR_GEMINI_API_KEY");
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Content-Type", "application/json");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const payload = verifyToken(req);
+  if (!payload) {
+    return res.status(401).json({ error: "请先登录" });
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  const { taskType, transcript, questionContent } = req.body || {};
-
+  const { taskType, transcript, questionContent, question_id } = req.body || {};
   if (!transcript || transcript.trim().length < 3) {
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
-      feedback: "没有识别到你的语音，请检查麦克风权限后重试。",
+      feedback: "没有识别到你的语音，请检查麦克风后重试。",
       overall: 0
     });
   }
 
-  if (!hasValidApiKey) {
+  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "YOUR_GEMINI_API_KEY") {
     return res.status(500).json({
       error: "missing_api_key",
       scores: { pronunciation: 60, fluency: 60, content: 60 },
@@ -36,11 +37,39 @@ export default async function handler(req, res) {
   }
 
   try {
+    const db = getDB();
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(payload.user_id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const usage = getUsageForUser(db, user);
+    if (!usage.canPractice) {
+      return res.status(429).json({
+        error: "daily_limit_reached",
+        message: "今日 3 次免费额度已用完，明天凌晨 12 点重置，或升级解锁无限练习。"
+      });
+    }
+
     const prompt = buildPrompt(taskType, transcript, questionContent);
-    const text = await generateContentWithRest(prompt, apiKey);
+    const text = await generateContentWithRest(prompt, process.env.GEMINI_API_KEY);
     const parsed = normalizeResult(parseModelJson(text));
 
-    return res.status(200).json(parsed);
+    db.prepare(
+      `
+      INSERT INTO practice_logs (user_id, task_type, question_id, transcript, score_json, feedback)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `
+    ).run(
+      user.id,
+      taskType || "RA",
+      question_id || "unknown",
+      transcript,
+      JSON.stringify(parsed.scores || {}),
+      parsed.feedback || ""
+    );
+
+    return res.json(parsed);
   } catch (error) {
     console.error("Gemini error:", error);
 
@@ -110,10 +139,7 @@ function extractGeminiErrorMessage(data) {
 }
 
 function isQuotaError(error) {
-  if (Number(error?.status) === 429) {
-    return true;
-  }
-
+  if (Number(error?.status) === 429) return true;
   const message = `${error?.message || ""}`.toLowerCase();
   const statusText = `${error?.statusText || ""}`.toLowerCase();
   return message.includes("quota") || message.includes("too many requests") || statusText.includes("too many requests");
@@ -269,6 +295,36 @@ Respond ONLY with this JSON:
   },
   "feedback": "<Chinese feedback, 2-3 sentences, mention specific points they did well>",
   "overall": <average of three scores>
+}`,
+
+    WFD: `
+You are a PTE Academic examiner evaluating a Write From Dictation response.
+
+Original sentence:
+"${question}"
+
+Student input:
+"${transcript}"
+
+Evaluate:
+- content: exact word match coverage
+- pronunciation: use 0 for WFD
+- fluency: use 0 for WFD
+
+Rules:
+- Feedback in Chinese, warm coach tone
+- Focus on spelling, function words, and missing words
+- Never use negative words like "很差"
+
+Respond ONLY with this JSON:
+{
+  "scores": {
+    "pronunciation": 0,
+    "fluency": 0,
+    "content": <number 0-90>
+  },
+  "feedback": "<Chinese feedback, 1-2 sentences>",
+  "overall": <number 0-100>
 }`
   };
 

@@ -8,11 +8,13 @@ import TimerBar from "@/components/TimerBar.vue";
 import { getRandomQuestion } from "@/data/questions";
 import { useRecorder } from "@/composables/useRecorder";
 import { useTimer } from "@/composables/useTimer";
+import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useUIStore } from "@/stores/ui";
 
 const router = useRouter();
 const practiceStore = usePracticeStore();
+const authStore = useAuthStore();
 const uiStore = useUIStore();
 const recorder = useRecorder();
 const timer = useTimer();
@@ -120,9 +122,9 @@ async function handleSubmit() {
     practiceStore.setTranscript(transcript);
     practiceStore.setAudioBlob(recorder.audioBlob.value);
 
-    await practiceStore.submitScore("RA", transcript, question.value?.content || "");
+    const scoreResult = await practiceStore.submitScore("RA", transcript, question.value?.content || "", question.value?.id || "unknown");
 
-    if (!unmounted) {
+    if (!unmounted && practiceStore.phase === "done" && scoreResult && !scoreResult.error) {
       router.push("/ra/result");
     }
   } finally {
@@ -142,7 +144,14 @@ async function skipQuestion() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (!authStore.loaded) {
+    await authStore.loadStatus();
+  }
+  if (!authStore.canPractice) {
+    router.replace("/limit");
+    return;
+  }
   initializeQuestion();
   startPreparing();
 });

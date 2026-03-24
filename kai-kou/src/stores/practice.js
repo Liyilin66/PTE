@@ -1,4 +1,6 @@
 import { defineStore } from "pinia";
+import router from "@/router";
+import { useAuthStore } from "@/stores/auth";
 
 const TASKS = [
   {
@@ -111,25 +113,51 @@ export const usePracticeStore = defineStore("practice", {
       this.phase = "idle";
     },
 
-    async submitScore(taskType, transcript, questionContent) {
+    async submitScore(taskType, transcript, questionContent, questionId) {
       this.phase = "processing";
       this.transcript = transcript || "";
       this.questionContent = questionContent || this.questionContent || "";
+
+      const authStore = useAuthStore();
+      if (!authStore.token) {
+        authStore.logout();
+        router.push("/auth");
+        return null;
+      }
 
       try {
         const response = await fetch("/api/score", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authStore.token}`
           },
           body: JSON.stringify({
             taskType,
             transcript,
-            questionContent: this.questionContent
+            questionContent: this.questionContent,
+            question_id: questionId || this.currentQuestion?.id || "unknown"
           })
         });
 
         const data = await safeReadJson(response);
+
+        if (response.status === 429 && data?.error === "daily_limit_reached") {
+          this.result = {
+            error: "daily_limit_reached",
+            message: data.message || "今日免费额度已用完。"
+          };
+          this.phase = "limited";
+          await authStore.loadStatus();
+          router.push("/limit");
+          return this.result;
+        }
+
+        if (response.status === 401) {
+          authStore.logout();
+          router.push("/auth");
+          return null;
+        }
 
         if (!response.ok) {
           if (data && typeof data === "object" && data.scores) {
@@ -142,6 +170,7 @@ export const usePracticeStore = defineStore("practice", {
 
         this.result = normalizeScoreData(data || {});
         this.phase = "done";
+        authStore.decrementRemaining();
         return this.result;
       } catch (error) {
         console.error("Score API failed:", error);

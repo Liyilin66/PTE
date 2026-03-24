@@ -1,30 +1,42 @@
 import { createRouter, createWebHistory } from "vue-router";
-import HomeView from "@/views/HomeView.vue";
-import RAView from "@/views/RAView.vue";
-import RAResultView from "@/views/RAResultView.vue";
-import RSView from "@/views/RSView.vue";
-import RSResultView from "@/views/RSResultView.vue";
-import RLView from "@/views/RLView.vue";
-import RLResultView from "@/views/RLResultView.vue";
-import WEView from "@/views/WEView.vue";
-import WFDView from "@/views/WFDView.vue";
+import { useAuthStore } from "@/stores/auth";
 
 const routes = [
   { path: "/", redirect: "/home" },
-  { path: "/home", name: "home", component: HomeView },
-  { path: "/ra", name: "ra", component: RAView },
-  { path: "/ra/result", name: "ra-result", component: RAResultView },
-  { path: "/rs", name: "rs", component: RSView },
-  { path: "/rs/result", name: "rs-result", component: RSResultView },
-  { path: "/rl", name: "rl", component: RLView },
-  { path: "/rl/result", name: "rl-result", component: RLResultView },
-  { path: "/we", name: "we", component: WEView },
-  { path: "/wfd", name: "wfd", component: WFDView }
+  { path: "/auth", name: "auth", component: () => import("@/views/AuthView.vue") },
+  { path: "/home", name: "home", component: () => import("@/views/HomeView.vue"), meta: { requiresAuth: true } },
+  { path: "/ra", name: "ra", component: () => import("@/views/RAView.vue"), meta: { requiresAuth: true } },
+  { path: "/ra/result", name: "ra-result", component: () => import("@/views/RAResultView.vue"), meta: { requiresAuth: true } },
+  { path: "/rs", name: "rs", component: () => import("@/views/RSView.vue"), meta: { requiresAuth: true } },
+  { path: "/rs/result", name: "rs-result", component: () => import("@/views/RSResultView.vue"), meta: { requiresAuth: true } },
+  { path: "/rl", name: "rl", component: () => import("@/views/RLView.vue"), meta: { requiresAuth: true } },
+  { path: "/rl/result", name: "rl-result", component: () => import("@/views/RLResultView.vue"), meta: { requiresAuth: true } },
+  { path: "/we", name: "we", component: () => import("@/views/WEView.vue"), meta: { requiresAuth: true } },
+  { path: "/wfd", name: "wfd", component: () => import("@/views/WFDView.vue"), meta: { requiresAuth: true } },
+  { path: "/wfd/result", name: "wfd-result", component: () => import("@/views/WFDResultView.vue"), meta: { requiresAuth: true } },
+  { path: "/limit", name: "limit", component: () => import("@/views/LimitReachedView.vue"), meta: { requiresAuth: true } },
+  { path: "/upgrade", name: "upgrade", component: () => import("@/views/UpgradeView.vue"), meta: { requiresAuth: true } }
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+});
+
+router.beforeEach((to, _from, next) => {
+  const authStore = useAuthStore();
+
+  if (to.meta.requiresAuth && !authStore.isLoggedIn) {
+    next("/auth");
+    return;
+  }
+
+  if (to.path === "/auth" && authStore.isLoggedIn) {
+    next("/home");
+    return;
+  }
+
+  next();
 });
 
 export default router;

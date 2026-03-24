@@ -1,49 +1,125 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
-import OrangeButton from "@/components/OrangeButton.vue";
-import TimerBar from "@/components/TimerBar.vue";
-import { useTimer } from "@/composables/useTimer";
+import { useTTS } from "@/composables/useTTS";
+import { getRandomQuestion } from "@/data/questions";
+import { useAuthStore } from "@/stores/auth";
+import { usePracticeStore } from "@/stores/practice";
 import { useUIStore } from "@/stores/ui";
 
+const router = useRouter();
+const practiceStore = usePracticeStore();
+const authStore = useAuthStore();
 const uiStore = useUIStore();
-const timer = useTimer();
+const tts = useTTS();
 
-const phase = ref("playing");
-const answer = ref("");
+const phase = ref("active");
+const playbackStatus = ref("before"); // before -> playing -> after
+const userInput = ref("");
 const replaysLeft = ref(2);
-const isPlayback = computed(() => phase.value === "playing");
-
-function startPlayback(isInitial = false) {
-  if (phase.value === "playing") return;
-  if (!isInitial && replaysLeft.value <= 0) return;
-
-  if (!isInitial) {
-    replaysLeft.value -= 1;
+const questionIndex = ref(1);
+const question = ref(
+  getRandomQuestion("WFD") || {
+    id: "WFD_FALLBACK",
+    content: "The university library is closed on public holidays."
   }
+);
 
-  phase.value = "playing";
-  timer.start(3, () => {
-    phase.value = "typing";
+const canSubmit = computed(() => userInput.value.trim().length >= 3);
+const playbackText = computed(() => {
+  if (playbackStatus.value === "before") return "Playback will start shortly. You can start typing now.";
+  if (playbackStatus.value === "playing" || tts.isPlaying.value) return "Playing...";
+  return "Playback complete. You can keep editing before submit.";
+});
+
+const barHeights = [12, 20, 28, 36, 44, 36, 28, 20, 12];
+
+let unmounted = false;
+let playbackDelayTimer = null;
+
+function initializeQuestion() {
+  const picked = getRandomQuestion("WFD");
+  question.value = picked || question.value;
+  practiceStore.setQuestion({
+    id: question.value.id,
+    taskType: "WFD",
+    content: question.value.content
   });
 }
 
-function submitAnswer() {
-  if (!answer.value.trim()) {
+function playCurrentQuestion(delay = 700) {
+  cleanupPlaybackDelay();
+  tts.stop();
+  playbackStatus.value = "before";
+
+  playbackDelayTimer = setTimeout(() => {
+    if (unmounted || phase.value === "processing") return;
+
+    if (!tts.isSupported.value) {
+      uiStore.showToast("Speech synthesis is unavailable. You can still type manually.", "warning");
+      playbackStatus.value = "after";
+      return;
+    }
+
+    playbackStatus.value = "playing";
+    tts.speak(question.value.content, () => {
+      if (!unmounted) {
+        playbackStatus.value = "after";
+      }
+    });
+  }, delay);
+}
+
+function replayAudio() {
+  if (replaysLeft.value <= 0 || tts.isPlaying.value || phase.value === "processing") return;
+  replaysLeft.value -= 1;
+  playCurrentQuestion(100);
+}
+
+async function handleSubmit() {
+  if (!canSubmit.value) {
     uiStore.showToast("Please type what you heard first.", "warning");
     return;
   }
 
-  uiStore.showToast("Your answer is received. Scoring will be available soon.", "success");
+  phase.value = "processing";
+  const scoreResult = await practiceStore.submitScore("WFD", userInput.value, question.value.content, question.value.id);
+  if (practiceStore.phase === "done" && scoreResult && !scoreResult.error) {
+    router.push("/wfd/result");
+  }
 }
 
-onMounted(() => {
-  phase.value = "idle";
-  startPlayback(true);
+function skipQuestion() {
+  initializeQuestion();
+  questionIndex.value += 1;
+  userInput.value = "";
+  replaysLeft.value = 2;
+  playbackStatus.value = "before";
+  playCurrentQuestion(500);
+}
+
+function cleanupPlaybackDelay() {
+  clearTimeout(playbackDelayTimer);
+  playbackDelayTimer = null;
+}
+
+onMounted(async () => {
+  if (!authStore.loaded) {
+    await authStore.loadStatus();
+  }
+  if (!authStore.canPractice) {
+    router.replace("/limit");
+    return;
+  }
+  initializeQuestion();
+  playCurrentQuestion();
 });
 
 onUnmounted(() => {
-  timer.stop();
+  unmounted = true;
+  cleanupPlaybackDelay();
+  tts.stop();
 });
 </script>
 
@@ -52,40 +128,69 @@ onUnmounted(() => {
     <NavBar title="Write From Dictation" back-to="/home" />
 
     <main class="mx-auto max-w-2xl px-4 py-6">
-      <section class="rounded-xl border bg-white p-6 shadow-card">
-        <p class="text-sm text-muted">
-          {{ phase === "playing" ? "Audio is playing..." : "Type the sentence you heard." }}
-        </p>
+      <p class="mb-4 text-sm text-muted">Question {{ questionIndex }}</p>
 
-        <div class="mt-4">
-          <TimerBar label="Playback" :remaining="timer.remaining" :progress="timer.progress" :is-warning="false" />
-        </div>
+      <section v-if="phase !== 'processing'" class="space-y-4">
+        <article class="rounded-xl border bg-white p-6 text-center shadow-card">
+          <p class="text-lg font-bold text-navy">Listen and type what you hear</p>
+          <p class="mt-1 text-sm text-muted">You can type before, during, and after playback.</p>
+        </article>
 
-        <div class="mt-5 flex items-center gap-3">
+        <section class="rounded-xl border bg-white p-4 shadow-card text-center">
+          <div class="mb-3 flex h-10 items-end justify-center gap-1.5">
+            <div
+              v-for="(h, i) in barHeights"
+              :key="i"
+              class="w-2 rounded-full bg-orange"
+              :class="tts.isPlaying ? 'animate-pulse' : 'opacity-25'"
+              :style="{ height: `${h}px`, animationDelay: `${i * 0.08}s` }"
+            />
+          </div>
+          <p class="text-sm" :class="tts.isPlaying ? 'font-semibold text-orange' : 'text-muted'">
+            {{ playbackText }}
+          </p>
+        </section>
+
+        <article class="rounded-xl border bg-white p-5 shadow-card">
+          <p class="mb-3 text-sm font-semibold text-navy">Type what you heard</p>
+          <input
+            v-model="userInput"
+            type="text"
+            placeholder="Type the sentence here..."
+            class="h-12 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 text-sm text-text focus:border-orange focus:outline-none"
+            autofocus
+          />
+          <p class="mt-2 text-right text-xs text-muted">{{ userInput.split(/\s+/).filter(Boolean).length }} words</p>
+        </article>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-4 shadow-sm">
           <button
             type="button"
-            class="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="isPlayback || replaysLeft <= 0"
-            @click="startPlayback()"
+            class="rounded-lg border-2 border-orange px-4 py-2 text-sm font-semibold text-orange transition-all hover:bg-orange hover:text-white disabled:opacity-50"
+            :disabled="tts.isPlaying || replaysLeft <= 0"
+            @click="replayAudio"
           >
-            Replay Audio
+            Listen again ({{ replaysLeft }} left)
           </button>
-          <span class="text-sm text-muted">Replays left: {{ replaysLeft }}</span>
+          <button type="button" class="text-sm text-muted underline transition-colors hover:text-navy" @click="skipQuestion">Skip</button>
         </div>
 
-        <div class="mt-5">
-          <label class="mb-2 block text-sm font-medium text-text">Your answer</label>
-          <input
-            v-model="answer"
-            type="text"
-            placeholder="Type what you hear..."
-            class="h-12 w-full rounded-lg border border-[#D1D5DB] px-3 text-sm outline-none"
-          />
-        </div>
+        <button
+          type="button"
+          class="w-full rounded-xl py-4 text-lg font-bold transition-all"
+          :class="canSubmit ? 'bg-orange text-white shadow-md hover:opacity-90' : 'cursor-not-allowed bg-gray-200 text-gray-400'"
+          :disabled="!canSubmit"
+          @click="handleSubmit"
+        >
+          Submit
+        </button>
+      </section>
 
-        <div class="mt-5 flex justify-end">
-          <OrangeButton @click="submitAnswer">Submit</OrangeButton>
+      <section v-else class="py-12 text-center">
+        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange/10">
+          <div class="h-8 w-8 animate-spin rounded-full border-4 border-orange border-t-transparent" />
         </div>
+        <p class="text-xl font-bold text-navy">Checking your answer...</p>
       </section>
     </main>
   </div>
