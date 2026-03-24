@@ -62,20 +62,12 @@ export const usePracticeStore = defineStore("practice", {
     tasks: TASKS,
 
     currentQuestion: null,
+    questionContent: "",
     phase: "idle",
 
     transcript: "",
     audioBlob: null,
-
-    result: null,
-
-    raPassage:
-      "The Great Barrier Reef is the world's largest coral reef system, composed of over 2,900 individual reefs and 900 islands. It stretches for more than 2,300 kilometres and supports extraordinary biodiversity, including many vulnerable species.",
-    rsPrompt: "Listen carefully. Repeat the sentence immediately after playback ends.",
-    rsSentence:
-      "Sustainable urban planning requires cooperation between local governments, private investors, and community organizations.",
-    rlTemplate:
-      "The lecture mainly discusses [TOPIC]. The speaker first mentions [POINT 1], then explains [POINT 2], and finally concludes that [CONCLUSION]."
+    result: null
   }),
 
   getters: {
@@ -88,6 +80,7 @@ export const usePracticeStore = defineStore("practice", {
   actions: {
     setQuestion(question) {
       this.currentQuestion = question;
+      this.questionContent = question?.content || "";
       this.phase = "idle";
       this.transcript = "";
       this.audioBlob = null;
@@ -118,72 +111,117 @@ export const usePracticeStore = defineStore("practice", {
       this.phase = "idle";
     },
 
-    async mockScore(taskType, transcript, meta = {}) {
+    async submitScore(taskType, transcript, questionContent) {
       this.phase = "processing";
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      this.transcript = transcript || "";
+      this.questionContent = questionContent || this.questionContent || "";
 
-      const keywordHits = buildKeywordHits(meta.keywords || []);
-      const pronunciation = randomBetween(60, 85);
-      const fluency = randomBetween(58, 83);
-      const content = randomBetween(62, 88);
-      const coverageRate = keywordHits.length
-        ? Math.round((keywordHits.filter((item) => item.hit).length / keywordHits.length) * 100)
-        : randomBetween(50, 85);
-      const overall = taskType === "RS" ? coverageRate : Math.round((pronunciation + fluency + content) / 3);
+      try {
+        const response = await fetch("/api/score", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            taskType,
+            transcript,
+            questionContent: this.questionContent
+          })
+        });
 
-      const result = {
-        taskType,
-        transcript,
-        overall,
-        scores: {
-          pronunciation,
-          fluency,
-          content
-        },
-        feedback: getMockFeedback(taskType),
-        meta: {
-          ...meta,
-          keywordHits
+        const data = await safeReadJson(response);
+
+        if (!response.ok) {
+          if (data && typeof data === "object" && data.scores) {
+            this.result = normalizeScoreData(data);
+            this.phase = "done";
+            return this.result;
+          }
+          throw new Error(`Score API failed with status ${response.status}`);
         }
-      };
 
-      this.setResult(result);
-      return result;
+        this.result = normalizeScoreData(data || {});
+        this.phase = "done";
+        return this.result;
+      } catch (error) {
+        console.error("Score API failed:", error);
+        this.result = buildFallbackResult(taskType);
+        this.phase = "done";
+        return this.result;
+      }
     }
   }
 });
 
-function randomBetween(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+function normalizeScoreData(data) {
+  const pronunciation = clampScore(data?.scores?.pronunciation);
+  const fluency = clampScore(data?.scores?.fluency);
+  const content = clampScore(data?.scores?.content);
+  const overall = clampOverall(data?.overall, Math.round((pronunciation + fluency + content) / 3));
+  const feedback = typeof data?.feedback === "string" && data.feedback.trim() ? data.feedback.trim() : "这次练习已经完成，继续保持。";
+
+  return {
+    scores: {
+      pronunciation,
+      fluency,
+      content
+    },
+    keywords: normalizeKeywords(data?.keywords),
+    feedback,
+    overall
+  };
 }
 
-function getMockFeedback(taskType) {
-  const feedbacks = {
-    RA: [
-      "Good pace. Keep stressing key nouns and maintain sentence endings.",
-      "Strong fluency. Try a little more intonation contrast on longer clauses.",
-      "Pronunciation is clear. Keep linking short function words naturally."
-    ],
-    RS: [
-      "You captured key words well. Keep your response rhythm steady.",
-      "Memory strategy is improving. Anchor the first and last chunks first.",
-      "Nice confidence. Continue reducing pauses between phrase groups."
-    ],
-    RL: [
-      "Good structure. Cover one more key point and connect ideas with transitions.",
-      "Clear delivery. Mention topic, two details, and a short conclusion for higher content score."
-    ]
+function buildFallbackResult(taskType) {
+  const fallback = {
+    scores: {
+      pronunciation: 65,
+      fluency: 63,
+      content: 67
+    },
+    feedback: "网络暂时不稳定，这是估算分数。你已经完成了练习，继续保持。",
+    overall: 65
   };
 
-  const list = feedbacks[taskType] || feedbacks.RA;
-  return list[Math.floor(Math.random() * list.length)];
+  if (taskType === "RS") {
+    return {
+      ...fallback,
+      keywords: []
+    };
+  }
+
+  return {
+    ...fallback,
+    keywords: []
+  };
 }
 
-function buildKeywordHits(keywords) {
-  if (!keywords.length) return [];
+function clampScore(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.max(0, Math.min(90, Math.round(num)));
+}
 
-  return keywords.map((word) => ({
-    word,
-    hit: Math.random() > 0.35
-  }));
+function clampOverall(value, fallback) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(num)));
+}
+
+function normalizeKeywords(keywords) {
+  if (!Array.isArray(keywords)) return [];
+  return keywords
+    .map((item) => ({
+      word: typeof item?.word === "string" ? item.word : "",
+      hit: Boolean(item?.hit)
+    }))
+    .filter((item) => item.word);
+}
+
+async function safeReadJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }

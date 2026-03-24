@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { usePracticeStore } from "@/stores/practice";
 import NavBar from "@/components/NavBar.vue";
@@ -49,6 +49,12 @@ function scoreBarColor(score) {
   if (score >= 60) return "bg-orange";
   return "bg-gray-300";
 }
+
+onMounted(() => {
+  if (!store.result) {
+    router.replace("/ra");
+  }
+});
 </script>
 
 <template>

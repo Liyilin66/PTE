@@ -18,7 +18,7 @@ export function useRecorder() {
 
     if (!SpeechRecognition) {
       isSupported.value = false;
-      error.value = "Current browser does not support Speech Recognition. Please use Chrome.";
+      error.value = "当前浏览器不支持语音识别，建议使用最新版 Chrome。";
       return false;
     }
 
@@ -27,6 +27,10 @@ export function useRecorder() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      error.value = null;
+    };
 
     recognition.onresult = (event) => {
       let finalText = "";
@@ -41,9 +45,31 @@ export function useRecorder() {
     };
 
     recognition.onerror = (event) => {
-      if (event.error !== "no-speech" && event.error !== "aborted") {
-        error.value = `Speech recognition error: ${event.error}`;
+      if (event.error === "aborted") {
+        return;
       }
+
+      if (event.error === "no-speech") {
+        error.value = "没有识别到语音，请靠近麦克风并清晰说话。";
+        return;
+      }
+
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        error.value = "语音识别权限被拒绝，请在浏览器中允许麦克风权限。";
+        return;
+      }
+
+      if (event.error === "audio-capture") {
+        error.value = "未检测到可用麦克风，请检查设备连接。";
+        return;
+      }
+
+      if (event.error === "network") {
+        error.value = "语音识别网络不稳定，请稍后重试。";
+        return;
+      }
+
+      error.value = `语音识别出现问题（${event.error}），请重试。`;
     };
 
     recognition.onend = () => {
@@ -62,7 +88,7 @@ export function useRecorder() {
 
   async function initMediaRecorder() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
-      error.value = "Current browser does not support microphone recording.";
+      error.value = "当前浏览器不支持麦克风录音。";
       return false;
     }
 
@@ -86,8 +112,18 @@ export function useRecorder() {
       };
 
       return true;
-    } catch {
-      error.value = "Unable to access microphone. Please allow microphone permission.";
+    } catch (err) {
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        error.value = "无法访问麦克风，请先允许麦克风权限。";
+        return false;
+      }
+
+      if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
+        error.value = "未检测到麦克风设备，请检查后重试。";
+        return false;
+      }
+
+      error.value = "麦克风初始化失败，请检查设备和浏览器设置。";
       return false;
     }
   }

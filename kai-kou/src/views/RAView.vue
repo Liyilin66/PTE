@@ -5,22 +5,27 @@ import NavBar from "@/components/NavBar.vue";
 import OrangeButton from "@/components/OrangeButton.vue";
 import RecordingWave from "@/components/RecordingWave.vue";
 import TimerBar from "@/components/TimerBar.vue";
+import { getRandomQuestion } from "@/data/questions";
 import { useRecorder } from "@/composables/useRecorder";
 import { useTimer } from "@/composables/useTimer";
 import { usePracticeStore } from "@/stores/practice";
+import { useUIStore } from "@/stores/ui";
 
 const router = useRouter();
 const practiceStore = usePracticeStore();
+const uiStore = useUIStore();
 const recorder = useRecorder();
 const timer = useTimer();
 
 const questionIndex = ref(1);
 const phase = computed(() => practiceStore.phase);
-const question = computed(() => ({
-  id: "RA_001",
-  content: practiceStore.raPassage
-}));
-const wordCount = computed(() => question.value.content.split(/\s+/).filter(Boolean).length);
+const question = ref(
+  getRandomQuestion("RA") || {
+    id: "RA_FALLBACK",
+    content: "Please read the passage aloud."
+  }
+);
+const wordCount = computed(() => (question.value?.content || "").split(/\s+/).filter(Boolean).length);
 
 const recordingSeconds = ref(0);
 const canSubmit = computed(() => phase.value === "recording" && recordingSeconds.value >= 3);
@@ -56,10 +61,13 @@ function stopRecordingTicker() {
 }
 
 function initializeQuestion() {
+  const picked = getRandomQuestion("RA");
+  question.value = picked || question.value;
   practiceStore.setQuestion({
-    id: "RA_001",
+    ...(question.value || {}),
+    id: question.value?.id || "RA_FALLBACK",
     taskType: "RA",
-    content: practiceStore.raPassage
+    content: question.value?.content || "Please read the passage aloud."
   });
 }
 
@@ -93,21 +101,32 @@ async function handleSubmit() {
   if (isSubmitting || phase.value !== "recording") return;
   isSubmitting = true;
 
-  stopRecordingTicker();
-  timer.stop();
-  recorder.stopRecording();
+  try {
+    stopRecordingTicker();
+    timer.stop();
+    recorder.stopRecording();
 
-  practiceStore.setTranscript(recorder.transcript.value);
-  practiceStore.setAudioBlob(recorder.audioBlob.value);
-  practiceStore.setPhase("processing");
+    await waitForSpeechFlush();
 
-  await practiceStore.mockScore("RA", recorder.transcript.value, {
-    questionId: question.value.id,
-    question: question.value.content
-  });
+    const transcript = recorder.transcript.value;
+    if (!transcript || transcript.trim().length < 3) {
+      uiStore.showToast("没有识别到语音，请检查麦克风后重试。", "warning");
+      if (!unmounted) {
+        await restartRecording();
+      }
+      return;
+    }
 
-  if (!unmounted) {
-    router.push("/ra/result");
+    practiceStore.setTranscript(transcript);
+    practiceStore.setAudioBlob(recorder.audioBlob.value);
+
+    await practiceStore.submitScore("RA", transcript, question.value?.content || "");
+
+    if (!unmounted) {
+      router.push("/ra/result");
+    }
+  } finally {
+    isSubmitting = false;
   }
 }
 
@@ -134,6 +153,15 @@ onUnmounted(() => {
   timer.stop();
   recorder.stopRecording();
 });
+
+function waitForSpeechFlush() {
+  return new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+async function restartRecording() {
+  practiceStore.setPhase("idle");
+  await startRecording();
+}
 </script>
 
 <template>

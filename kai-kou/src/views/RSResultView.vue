@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { usePracticeStore } from "@/stores/practice";
 import NavBar from "@/components/NavBar.vue";
@@ -12,13 +12,15 @@ const result = computed(() =>
   store.result || {
     overall: 0,
     feedback: "No feedback yet.",
-    meta: { keywordHits: [] }
+    scores: { pronunciation: 0, fluency: 0, content: 0 },
+    keywords: []
   }
 );
 
 const keywords = computed(() => {
-  const hits = result.value?.meta?.keywordHits || [];
-  if (hits.length) return hits;
+  if (store.result?.keywords?.length > 0) {
+    return store.result.keywords;
+  }
 
   return [
     { word: "quick", hit: true },
@@ -33,7 +35,7 @@ const keywords = computed(() => {
 });
 
 const originalSentence = computed(
-  () => store.currentQuestion?.content || store.rsSentence || "The quick brown fox jumps over the lazy dog near the river bank."
+  () => store.currentQuestion?.content || "The quick brown fox jumps over the lazy dog near the river bank."
 );
 
 const resultBadge = computed(() => {
@@ -48,6 +50,12 @@ const resultTitle = computed(() => {
   if (s >= 70) return "Strong listening and repetition";
   if (s >= 50) return "You captured most key words";
   return "Good effort. Practice builds memory speed";
+});
+
+onMounted(() => {
+  if (!store.result) {
+    router.replace("/rs");
+  }
 });
 </script>
 

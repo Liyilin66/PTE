@@ -4,17 +4,26 @@ import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import RecordingWave from "@/components/RecordingWave.vue";
 import TimerBar from "@/components/TimerBar.vue";
+import { getRandomQuestion } from "@/data/questions";
 import { useRecorder } from "@/composables/useRecorder";
 import { useTimer } from "@/composables/useTimer";
 import { usePracticeStore } from "@/stores/practice";
+import { useUIStore } from "@/stores/ui";
 
 const router = useRouter();
 const practiceStore = usePracticeStore();
+const uiStore = useUIStore();
 const recorder = useRecorder();
 const timer = useTimer();
 
 const phase = computed(() => practiceStore.phase);
 const showAnswer = ref(false);
+const question = ref(
+  getRandomQuestion("RS") || {
+    id: "RS_FALLBACK",
+    content: "Please repeat the sentence."
+  }
+);
 
 const recordingSeconds = ref(0);
 const canSubmit = computed(() => phase.value === "recording" && recordingSeconds.value >= 3);
@@ -55,10 +64,13 @@ function stopRecordingTicker() {
 }
 
 function initializeQuestion() {
+  const picked = getRandomQuestion("RS");
+  question.value = picked || question.value;
+
   practiceStore.setQuestion({
-    id: "RS_001",
+    id: question.value?.id || "RS_FALLBACK",
     taskType: "RS",
-    content: practiceStore.rsSentence
+    content: question.value?.content || "Please repeat the sentence."
   });
 }
 
@@ -93,23 +105,32 @@ async function handleSubmit() {
   if (isSubmitting || phase.value !== "recording") return;
   isSubmitting = true;
 
-  stopRecordingTicker();
-  timer.stop();
-  recorder.stopRecording();
+  try {
+    stopRecordingTicker();
+    timer.stop();
+    recorder.stopRecording();
 
-  practiceStore.setTranscript(recorder.transcript.value);
-  practiceStore.setAudioBlob(recorder.audioBlob.value);
-  practiceStore.setPhase("processing");
+    await waitForSpeechFlush();
 
-  const keywords = extractKeywords(practiceStore.rsSentence);
+    const transcript = recorder.transcript.value;
+    if (!transcript || transcript.trim().length < 3) {
+      uiStore.showToast("没有识别到语音，请检查麦克风后重试。", "warning");
+      if (!unmounted) {
+        await restartRecording();
+      }
+      return;
+    }
 
-  await practiceStore.mockScore("RS", recorder.transcript.value, {
-    sentence: practiceStore.rsSentence,
-    keywords
-  });
+    practiceStore.setTranscript(transcript);
+    practiceStore.setAudioBlob(recorder.audioBlob.value);
 
-  if (!unmounted) {
-    router.push("/rs/result");
+    await practiceStore.submitScore("RS", transcript, question.value?.content || "");
+
+    if (!unmounted) {
+      router.push("/rs/result");
+    }
+  } finally {
+    isSubmitting = false;
   }
 }
 
@@ -125,23 +146,6 @@ async function skipQuestion() {
   }
 }
 
-function extractKeywords(sentence) {
-  const raw = sentence
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, "")
-    .split(/\s+/)
-    .filter(Boolean);
-
-  const unique = [];
-  for (const word of raw) {
-    if (word.length >= 5 && !unique.includes(word)) {
-      unique.push(word);
-    }
-  }
-
-  return unique.slice(0, 8);
-}
-
 onMounted(() => {
   initializeQuestion();
   startPlaying();
@@ -153,6 +157,15 @@ onUnmounted(() => {
   timer.stop();
   recorder.stopRecording();
 });
+
+function waitForSpeechFlush() {
+  return new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+async function restartRecording() {
+  practiceStore.setPhase("idle");
+  await startRecording();
+}
 </script>
 
 <template>
@@ -210,7 +223,7 @@ onUnmounted(() => {
           </button>
           <div v-if="showAnswer" class="mt-2 rounded-xl border border-blue-100 bg-blue-50 p-4">
             <p class="mb-1 text-xs text-muted">Original Sentence</p>
-            <p class="leading-relaxed text-navy">{{ practiceStore.rsSentence }}</p>
+            <p class="leading-relaxed text-navy">{{ question?.content || "Please repeat the sentence." }}</p>
           </div>
         </section>
       </section>

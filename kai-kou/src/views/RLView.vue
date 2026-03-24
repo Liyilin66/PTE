@@ -4,18 +4,27 @@ import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import RecordingWave from "@/components/RecordingWave.vue";
 import TimerBar from "@/components/TimerBar.vue";
+import { getRandomQuestion } from "@/data/questions";
 import { useRecorder } from "@/composables/useRecorder";
 import { useTimer } from "@/composables/useTimer";
 import { usePracticeStore } from "@/stores/practice";
+import { useUIStore } from "@/stores/ui";
 
 const router = useRouter();
 const practiceStore = usePracticeStore();
+const uiStore = useUIStore();
 const timer = useTimer();
 const recorder = useRecorder();
 
 const phase = computed(() => practiceStore.phase);
 const showTemplate = ref(false);
 const notes = ref("");
+const question = ref(
+  getRandomQuestion("RL") || {
+    id: "RL_FALLBACK",
+    content: "Retell the lecture with key topic and supporting points."
+  }
+);
 
 const recordingSeconds = ref(0);
 const canSubmit = computed(() => phase.value === "recording" && recordingSeconds.value >= 3);
@@ -45,10 +54,13 @@ function stopRecordingTicker() {
 }
 
 function initializeQuestion() {
+  const picked = getRandomQuestion("RL");
+  question.value = picked || question.value;
+
   practiceStore.setQuestion({
-    id: "RL_001",
+    id: question.value?.id || "RL_FALLBACK",
     taskType: "RL",
-    content: "Retell the lecture with key topic and supporting points."
+    content: question.value?.content || "Retell the lecture with key topic and supporting points."
   });
 }
 
@@ -89,20 +101,32 @@ async function handleSubmit() {
   if (isSubmitting || phase.value !== "recording") return;
   isSubmitting = true;
 
-  stopRecordingTicker();
-  timer.stop();
-  recorder.stopRecording();
+  try {
+    stopRecordingTicker();
+    timer.stop();
+    recorder.stopRecording();
 
-  practiceStore.setTranscript(recorder.transcript.value);
-  practiceStore.setAudioBlob(recorder.audioBlob.value);
-  practiceStore.setPhase("processing");
+    await waitForSpeechFlush();
 
-  await practiceStore.mockScore("RL", recorder.transcript.value, {
-    notes: notes.value
-  });
+    const transcript = recorder.transcript.value;
+    if (!transcript || transcript.trim().length < 3) {
+      uiStore.showToast("没有识别到语音，请检查麦克风后重试。", "warning");
+      if (!unmounted) {
+        await restartRecording();
+      }
+      return;
+    }
 
-  if (!unmounted) {
-    router.push("/rl/result");
+    practiceStore.setTranscript(transcript);
+    practiceStore.setAudioBlob(recorder.audioBlob.value);
+
+    await practiceStore.submitScore("RL", transcript, question.value?.content || "");
+
+    if (!unmounted) {
+      router.push("/rl/result");
+    }
+  } finally {
+    isSubmitting = false;
   }
 }
 
@@ -129,6 +153,15 @@ onUnmounted(() => {
   timer.stop();
   recorder.stopRecording();
 });
+
+function waitForSpeechFlush() {
+  return new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+async function restartRecording() {
+  practiceStore.setPhase("idle");
+  await startRecording();
+}
 </script>
 
 <template>
@@ -141,6 +174,11 @@ onUnmounted(() => {
         <p v-else-if="phase === 'preparing'" class="text-base text-muted">Prepare your key points before speaking.</p>
         <p v-else-if="phase === 'recording'" class="text-base text-muted">Speak now using your summary structure.</p>
         <p v-else class="text-base text-muted">Ready after permission or device checks.</p>
+
+        <div class="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <p class="mb-1 text-xs text-muted">Lecture Topic Hint</p>
+          <p class="text-sm leading-relaxed text-[#1A1A2E]">{{ question?.content || "Retell the lecture with key topic and supporting points." }}</p>
+        </div>
 
         <div v-if="phase === 'playing' || phase === 'preparing' || phase === 'recording'" class="mt-4 flex items-start gap-3">
           <div class="flex-1">
