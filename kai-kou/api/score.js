@@ -1,8 +1,10 @@
-import { verifyToken } from "./_auth.js";
-import { getUsageForUser } from "./_quota.js";
-import { getDB } from "../db/init.js";
+import { createClient } from "@supabase/supabase-js";
 
 const modelName = "gemini-2.5-flash-lite";
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -12,12 +14,22 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const payload = verifyToken(req);
-  if (!payload) {
+  if (!supabase) {
+    return res.status(500).json({ error: "supabase_not_configured", message: "Supabase 环境变量未配置" });
+  }
+
+  const token = getBearerToken(req);
+  if (!token) {
     return res.status(401).json({ error: "请先登录" });
   }
 
-  const { taskType, transcript, questionContent, question_id } = req.body || {};
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  const user = authData?.user || null;
+  if (authError || !user) {
+    return res.status(401).json({ error: "登录已过期，请重新登录" });
+  }
+
+  const { taskType, transcript, questionContent } = req.body || {};
   if (!transcript || transcript.trim().length < 3) {
     return res.status(400).json({
       error: "transcript_too_short",
@@ -37,37 +49,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    const db = getDB();
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(payload.user_id);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
+    const authedSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    });
+
+    const isInTrial = getDaysSince(user.created_at) < 3;
+    const { data: profile, error: profileError } = await authedSupabase
+      .from("profiles")
+      .select("is_premium")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("load profile error:", profileError);
+      return res.status(500).json({ error: "profile_load_failed" });
     }
 
-    const usage = getUsageForUser(db, user);
-    if (!usage.canPractice) {
-      return res.status(429).json({
-        error: "daily_limit_reached",
-        message: "今日 3 次免费额度已用完，明天凌晨 12 点重置，或升级解锁无限练习。"
-      });
+    const isPremium = Boolean(profile?.is_premium);
+
+    if (!isPremium && !isInTrial) {
+      const { count, error: countError } = await authedSupabase
+        .from("practice_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", getChinaDayStartIsoString());
+
+      if (countError) {
+        console.error("load usage error:", countError);
+        return res.status(500).json({ error: "usage_load_failed" });
+      }
+
+      if ((count || 0) >= 3) {
+        return res.status(429).json({
+          error: "daily_limit_reached",
+          message: "今日 3 次免费额度已用完，明天凌晨 12 点重置，或升级解锁无限练习。"
+        });
+      }
     }
 
     const prompt = buildPrompt(taskType, transcript, questionContent);
     const text = await generateContentWithRest(prompt, process.env.GEMINI_API_KEY);
     const parsed = normalizeResult(parseModelJson(text));
-
-    db.prepare(
-      `
-      INSERT INTO practice_logs (user_id, task_type, question_id, transcript, score_json, feedback)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `
-    ).run(
-      user.id,
-      taskType || "RA",
-      question_id || "unknown",
-      transcript,
-      JSON.stringify(parsed.scores || {}),
-      parsed.feedback || ""
-    );
 
     return res.json(parsed);
   } catch (error) {
@@ -89,6 +115,30 @@ export default async function handler(req, res) {
       overall: 60
     });
   }
+}
+
+function getBearerToken(req) {
+  const header = req.headers?.authorization || req.headers?.Authorization || "";
+  if (!header || typeof header !== "string" || !header.startsWith("Bearer ")) {
+    return "";
+  }
+  return header.slice(7).trim();
+}
+
+function getDaysSince(createdAt) {
+  const created = new Date(createdAt);
+  const diff = Date.now() - created.getTime();
+  if (!Number.isFinite(diff) || diff < 0) return 0;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function getChinaDayStartIsoString() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+  const utc8Ms = utcMs + 8 * 60 * 60 * 1000;
+  const dayStartUTC8Ms = Math.floor(utc8Ms / 86400000) * 86400000;
+  const dayStartUtcMs = dayStartUTC8Ms - 8 * 60 * 60 * 1000;
+  return new Date(dayStartUtcMs).toISOString();
 }
 
 async function generateContentWithRest(prompt, key) {

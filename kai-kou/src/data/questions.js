@@ -1,146 +1,5 @@
 export const questions = {
-  RA: [
-    {
-      id: "RA_001",
-      content:
-        "The Great Barrier Reef is the world's largest coral reef system, composed of over 2,900 individual reefs and 900 islands. It stretches for more than 2,300 kilometres and supports extraordinary biodiversity, including many vulnerable species.",
-      difficulty: 2,
-      wordCount: 47
-    },
-    {
-      id: "RA_002",
-      content:
-        "Climate change refers to long-term shifts in global temperatures and weather patterns. While some changes are natural, scientific evidence shows that human activities have been the main driver of climate change since the 1800s, primarily due to the burning of fossil fuels.",
-      difficulty: 2,
-      wordCount: 52
-    },
-    {
-      id: "RA_003",
-      content:
-        "Australia is the world's sixth largest country by total area and the largest country in Oceania. The population is concentrated mainly in urban areas on the southeastern and eastern coasts, with Sydney and Melbourne being the two largest cities.",
-      difficulty: 1,
-      wordCount: 46
-    },
-    {
-      id: "RA_004",
-      content:
-        "The human brain contains approximately 86 billion neurons, each connected to thousands of others through synapses. This vast network processes information at remarkable speed, enabling complex functions such as memory, emotion, language, and creative thinking.",
-      difficulty: 3,
-      wordCount: 42
-    },
-    {
-      id: "RA_005",
-      content:
-        "Renewable energy sources such as solar, wind, and hydroelectric power are becoming increasingly important in the global effort to reduce carbon emissions. Many governments are now investing heavily in clean energy infrastructure.",
-      difficulty: 2,
-      wordCount: 40
-    },
-    {
-      id: "RA_006",
-      content:
-        "The industrial revolution, which began in Britain in the late eighteenth century, transformed manufacturing processes through the introduction of machinery and steam power. This period marked a fundamental shift from agrarian societies to industrialised urban economies.",
-      difficulty: 3,
-      wordCount: 44
-    },
-    {
-      id: "RA_007",
-      content:
-        "Biodiversity refers to the variety of life on Earth, encompassing all species of plants, animals, fungi, and microorganisms. Maintaining biodiversity is essential for ecosystem stability, as each species plays a unique role in its environment.",
-      difficulty: 2,
-      wordCount: 43
-    },
-    {
-      id: "RA_008",
-      content:
-        "Universities play a critical role in advancing knowledge through research and providing students with the skills needed for the modern workforce. They also contribute significantly to local economies through employment and innovation.",
-      difficulty: 2,
-      wordCount: 40
-    },
-    {
-      id: "RA_009",
-      content:
-        "Water covers approximately seventy one percent of the Earth's surface, yet only about three percent of it is fresh water. Most of this fresh water is locked in glaciers and ice caps, leaving less than one percent accessible for human use.",
-      difficulty: 2,
-      wordCount: 48
-    },
-    {
-      id: "RA_010",
-      content:
-        "Artificial intelligence is rapidly transforming industries ranging from healthcare to finance. Machine learning algorithms can now diagnose diseases, predict market trends, and generate creative content, raising important questions about the future of work.",
-      difficulty: 3,
-      wordCount: 43
-    },
-    {
-      id: "RA_011",
-      content:
-        "The Amazon rainforest covers over five and a half million square kilometres across nine South American countries. It is home to a vast number of species and plays an essential role in regulating global climate patterns.",
-      difficulty: 2,
-      wordCount: 39
-    },
-    {
-      id: "RA_012",
-      content:
-        "Migration has shaped human civilisation throughout history. People move for many reasons, including economic opportunity, political insecurity, and environmental pressures. Today, migration influences virtually every country as a source, transit, or destination.",
-      difficulty: 2,
-      wordCount: 39
-    },
-    {
-      id: "RA_013",
-      content:
-        "The discovery of penicillin by Alexander Fleming in nineteen twenty eight revolutionised modern medicine. Antibiotics saved millions of lives, although the growth of antibiotic resistant bacteria now presents one of the most serious threats to global health.",
-      difficulty: 2,
-      wordCount: 42
-    },
-    {
-      id: "RA_014",
-      content:
-        "Space exploration has produced many innovations that benefit everyday life, including satellite navigation, weather forecasting, and medical imaging. Investment in space science continues to inspire younger generations of scientists and engineers.",
-      difficulty: 2,
-      wordCount: 36
-    },
-    {
-      id: "RA_015",
-      content:
-        "Urban planning involves designing and managing the physical layout of cities to promote sustainable growth. Effective planning balances housing, transport, green spaces, and commercial development to create liveable and efficient communities.",
-      difficulty: 2,
-      wordCount: 35
-    },
-    {
-      id: "RA_016",
-      content:
-        "The global food system faces mounting pressures from population growth, climate change, and resource depletion. Sustainable farming practices, including crop rotation and water conservation, are essential to feeding future generations.",
-      difficulty: 3,
-      wordCount: 33
-    },
-    {
-      id: "RA_017",
-      content:
-        "Digital literacy has become as fundamental as reading and writing in the modern world. The ability to evaluate online information critically, communicate effectively through digital platforms, and protect personal data is now an essential life skill.",
-      difficulty: 2,
-      wordCount: 40
-    },
-    {
-      id: "RA_018",
-      content:
-        "Psychology is the scientific study of human behaviour and mental processes. It includes topics such as perception, emotion, memory, and personality, with applications in education, healthcare, and workplace performance.",
-      difficulty: 2,
-      wordCount: 33
-    },
-    {
-      id: "RA_019",
-      content:
-        "The global economy is increasingly interconnected, with trade and investment linking countries across the world. While globalisation has lifted many out of poverty, it has also created challenges related to inequality and sustainability.",
-      difficulty: 3,
-      wordCount: 36
-    },
-    {
-      id: "RA_020",
-      content:
-        "Public libraries have long served as democratic institutions, providing free access to information and education. In the digital age, they have expanded their role to include internet access, digital training, and community learning programmes.",
-      difficulty: 2,
-      wordCount: 37
-    }
-  ],
+  RA: [],
 
   RS: [
     { id: "RS_001", content: "The conference has been postponed until further notice due to unforeseen circumstances.", difficulty: 2 },
@@ -279,6 +138,51 @@ export const questions = {
       audioScript:
         "Fresh water scarcity is becoming a major global challenge. Population growth and climate variability are increasing pressure on limited water supplies, especially in dry regions. Agriculture uses most available fresh water, so improving irrigation efficiency is critical. The lecture also mentions desalination, wastewater recycling, and better governance as practical solutions. Without coordinated action, water insecurity may threaten food systems and economic stability.",
       keyPoints: ["increasing scarcity pressure", "agriculture water demand", "technology and policy solutions"],
+      difficulty: 3
+    }
+  ],
+
+  WE: [
+    {
+      id: "WE_001",
+      topic: "Online Education",
+      content:
+        "Do you think online education can replace traditional classroom learning? Discuss both advantages and disadvantages, and give your opinion.",
+      difficulty: 2
+    },
+    {
+      id: "WE_002",
+      topic: "Public Transport",
+      content:
+        "Some people believe governments should spend more money on public transport than on building new roads. To what extent do you agree?",
+      difficulty: 2
+    },
+    {
+      id: "WE_003",
+      topic: "Artificial Intelligence",
+      content:
+        "Artificial intelligence is changing many workplaces. Discuss the potential benefits and risks of AI for employees and businesses.",
+      difficulty: 3
+    },
+    {
+      id: "WE_004",
+      topic: "University Fees",
+      content:
+        "Should higher education be free for all students? Explain your view with reasons and examples.",
+      difficulty: 2
+    },
+    {
+      id: "WE_005",
+      topic: "Urban Living",
+      content:
+        "Many people are moving to large cities, but city life can be stressful. What are the main causes of this stress and how can it be reduced?",
+      difficulty: 2
+    },
+    {
+      id: "WE_006",
+      topic: "Climate Responsibility",
+      content:
+        "Who should take more responsibility for solving climate change: governments, companies, or individuals? Discuss and justify your answer.",
       difficulty: 3
     }
   ],

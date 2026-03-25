@@ -44,9 +44,9 @@ function goLogin() {
   router.push("/auth");
 }
 
-function handleLogout() {
-  authStore.logout();
-  router.push("/auth");
+async function handleLogout() {
+  await authStore.logout();
+  router.replace("/auth");
 }
 </script>
 

@@ -8,13 +8,14 @@ const authStore = useAuthStore();
 const router = useRouter();
 
 onMounted(async () => {
-  if (authStore.isLoggedIn) {
+  await authStore.init();
+
+  if (authStore.isLoggedIn && !authStore.loaded) {
     await authStore.loadStatus();
-    if (!authStore.isLoggedIn && router.currentRoute.value.path !== "/auth") {
-      router.replace("/auth");
-    }
-  } else {
-    authStore.loaded = true;
+  }
+
+  if (!authStore.isLoggedIn && router.currentRoute.value.meta?.requiresAuth) {
+    router.replace("/auth");
   }
 });
 </script>

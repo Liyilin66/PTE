@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import router from "@/router";
 import { useAuthStore } from "@/stores/auth";
+import { supabase } from "@/lib/supabase";
 
 const TASKS = [
   {
@@ -64,6 +65,7 @@ export const usePracticeStore = defineStore("practice", {
     tasks: TASKS,
 
     currentQuestion: null,
+    selectedQuestion: null,
     questionContent: "",
     phase: "idle",
 
@@ -87,6 +89,14 @@ export const usePracticeStore = defineStore("practice", {
       this.transcript = "";
       this.audioBlob = null;
       this.result = null;
+    },
+
+    setSelectedQuestion(question) {
+      this.selectedQuestion = question || null;
+    },
+
+    clearSelectedQuestion() {
+      this.selectedQuestion = null;
     },
 
     setPhase(phase) {
@@ -119,8 +129,16 @@ export const usePracticeStore = defineStore("practice", {
       this.questionContent = questionContent || this.questionContent || "";
 
       const authStore = useAuthStore();
-      if (!authStore.token) {
-        authStore.logout();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("getSession error:", sessionError);
+      }
+
+      const session = sessionData?.session || null;
+      const token = session?.access_token || "";
+
+      if (!token) {
+        await authStore.logout();
         router.push("/auth");
         return null;
       }
@@ -130,7 +148,7 @@ export const usePracticeStore = defineStore("practice", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${authStore.token}`
+            Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
             taskType,
@@ -154,7 +172,7 @@ export const usePracticeStore = defineStore("practice", {
         }
 
         if (response.status === 401) {
-          authStore.logout();
+          await authStore.logout();
           router.push("/auth");
           return null;
         }
@@ -170,7 +188,26 @@ export const usePracticeStore = defineStore("practice", {
 
         this.result = normalizeScoreData(data || {});
         this.phase = "done";
-        authStore.decrementRemaining();
+
+        if (session?.user?.id) {
+          const { error: insertError } = await supabase.from("practice_logs").insert({
+            user_id: session.user.id,
+            task_type: taskType,
+            question_id: questionId || this.currentQuestion?.id || "unknown",
+            transcript: this.transcript,
+            score_json: this.result.scores || {},
+            feedback: this.result.feedback || ""
+          });
+
+          if (insertError) {
+            console.warn("practice_logs insert error:", insertError);
+          } else {
+            authStore.decrementRemaining();
+          }
+        } else {
+          authStore.decrementRemaining();
+        }
+
         return this.result;
       } catch (error) {
         console.error("Score API failed:", error);

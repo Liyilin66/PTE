@@ -4,9 +4,8 @@ import express from "express";
 
 import questionsHandler from "./api/questions.js";
 import scoreHandler from "./api/score.js";
-import registerHandler from "./api/auth/register.js";
-import loginHandler from "./api/auth/login.js";
-import userStatusHandler from "./api/user/status.js";
+import paymentCreateHandler from "./api/payment-create.js";
+import paymentWebhookHandler from "./api/payment-webhook.js";
 
 dotenv.config();
 
@@ -17,13 +16,10 @@ app.use(express.json());
 
 app.options("/api/score", scoreHandler);
 app.post("/api/score", scoreHandler);
+app.get("/api/questions", questionsHandler);
 app.get("/api/questions/:type", questionsHandler);
-app.options("/api/auth/register", registerHandler);
-app.post("/api/auth/register", registerHandler);
-app.options("/api/auth/login", loginHandler);
-app.post("/api/auth/login", loginHandler);
-app.options("/api/user/status", userStatusHandler);
-app.get("/api/user/status", userStatusHandler);
+app.post("/api/payment/create", paymentCreateHandler);
+app.post("/api/payment/webhook", paymentWebhookHandler);
 
 const port = 3000;
 app.listen(port, () => {

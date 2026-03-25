@@ -10,6 +10,11 @@ const app = createApp(App);
 
 app.use(createPinia());
 app.use(router);
+
+if (typeof window !== "undefined") {
+  window.__vue_router__ = router;
+}
+
 app.mount("#app");
 
 function redirectToCanonicalHost() {
