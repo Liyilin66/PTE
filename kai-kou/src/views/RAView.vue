@@ -107,6 +107,9 @@ async function startRecording() {
   isStartingRecording = true;
 
   try {
+    if (phase.value === "preparing") {
+      timer.stop();
+    }
     practiceStore.setPhase("recording");
     const started = await recorder.startRecording();
 
@@ -204,7 +207,17 @@ function waitForSpeechFlush() {
 }
 
 async function restartRecording() {
+  if (questionLoading.value || isSubmitting || isStartingRecording || phase.value === "processing") return;
+  stopRecordingTicker();
+  timer.stop();
+  recorder.stopRecording();
   practiceStore.setPhase("idle");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await startRecording();
+}
+
+async function startRecordingNow() {
+  if (questionLoading.value || phase.value !== "preparing") return;
   await startRecording();
 }
 </script>
@@ -237,6 +250,14 @@ async function restartRecording() {
             </button>
           </div>
 
+          <button
+            type="button"
+            class="w-full rounded-xl border-2 border-orange/40 bg-white py-3 text-sm font-semibold text-orange transition-all hover:border-orange hover:bg-orange/5"
+            @click="startRecordingNow"
+          >
+            立即开始录音
+          </button>
+
           <section class="rounded-xl border bg-white p-6 shadow-card">
             <p class="text-lg leading-relaxed text-text">{{ question.content }}</p>
           </section>
@@ -252,6 +273,17 @@ async function restartRecording() {
             </button>
           </div>
 
+          <section class="rounded-xl border bg-white p-4 text-center shadow-card">
+            <div v-if="!recorder.isReady" class="flex items-center justify-center gap-2">
+              <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange border-t-transparent" />
+              <p class="text-sm text-muted">麦克风准备中...</p>
+            </div>
+            <div v-else class="flex items-center justify-center gap-2">
+              <div class="h-3 w-3 animate-pulse rounded-full bg-red-500" />
+              <p class="font-bold text-navy">请开始朗读</p>
+            </div>
+          </section>
+
           <section class="rounded-xl border bg-white p-6 shadow-card">
             <p class="text-lg leading-relaxed text-text">{{ question.content }}</p>
           </section>
@@ -259,15 +291,25 @@ async function restartRecording() {
           <section class="rounded-xl border bg-white p-4 shadow-card">
             <RecordingWave :is-recording="recorder.isRecording" />
 
-            <button
-              type="button"
-              class="mt-4 w-full rounded-xl py-4 text-lg font-bold transition-all"
-              :class="canSubmit ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400'"
-              :disabled="!canSubmit"
-              @click="handleSubmit"
-            >
-              {{ canSubmit ? "Submit Response" : "Recording..." }}
-            </button>
+            <div class="mt-4 flex gap-3">
+              <button
+                type="button"
+                class="flex-1 rounded-xl border-2 border-gray-200 py-4 text-sm font-semibold text-muted transition-all hover:border-orange hover:text-orange"
+                @click="restartRecording"
+              >
+                重新录音
+              </button>
+
+              <button
+                type="button"
+                class="flex-1 rounded-xl py-4 text-lg font-bold transition-all"
+                :class="canSubmit ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400'"
+                :disabled="!canSubmit"
+                @click="handleSubmit"
+              >
+                {{ canSubmit ? "Submit Response" : "Recording..." }}
+              </button>
+            </div>
           </section>
         </div>
 

@@ -208,7 +208,7 @@ async function handleSubmit() {
     if (!transcript || transcript.trim().length < 3) {
       uiStore.showToast("No speech detected. Please check your microphone and try again.", "warning");
       if (!unmounted) {
-        await startRecording();
+        await restartRecording();
       }
       return;
     }
@@ -236,6 +236,17 @@ async function skipQuestion() {
 
   await loadQuestion({ incrementIndex: true });
   startLecturePlayback(250);
+}
+
+async function restartRecording() {
+  if (questionLoading.value || isSubmitting || isStartingRecording || phase.value === "processing") return;
+
+  stopRecordingTicker();
+  timer.stop();
+  recorder.stopRecording();
+  phase.value = "idle";
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await startRecording();
 }
 
 function startRecordingTicker() {
@@ -368,17 +379,37 @@ onUnmounted(() => {
             <button type="button" class="pt-1 text-sm text-muted underline transition-colors hover:text-navy" @click="skipQuestion">Skip</button>
           </div>
 
+          <section class="rounded-xl border bg-white p-4 text-center shadow-card">
+            <div v-if="!recorder.isReady" class="flex items-center justify-center gap-2">
+              <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange border-t-transparent" />
+              <p class="text-sm text-muted">Microphone warming up...</p>
+            </div>
+            <div v-else class="flex items-center justify-center gap-2">
+              <div class="h-3 w-3 animate-pulse rounded-full bg-red-500" />
+              <p class="font-bold text-navy">Start re-telling now</p>
+            </div>
+          </section>
+
           <section class="rounded-xl border bg-white p-4 shadow-card">
             <RecordingWave :is-recording="recorder.isRecording" />
-            <button
-              type="button"
-              class="mt-4 w-full rounded-xl py-4 text-lg font-bold transition-all"
-              :class="canSubmit ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400'"
-              :disabled="!canSubmit"
-              @click="handleSubmit"
-            >
-              {{ canSubmit ? "Submit Response" : "Recording..." }}
-            </button>
+            <div class="mt-4 flex gap-3">
+              <button
+                type="button"
+                class="flex-1 rounded-xl border-2 border-gray-200 py-4 text-sm font-semibold text-muted transition-all hover:border-orange hover:text-orange"
+                @click="restartRecording"
+              >
+                Re-record
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded-xl py-4 text-lg font-bold transition-all"
+                :class="canSubmit ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400'"
+                :disabled="!canSubmit"
+                @click="handleSubmit"
+              >
+                {{ canSubmit ? "Submit Response" : "Recording..." }}
+              </button>
+            </div>
           </section>
 
           <section>

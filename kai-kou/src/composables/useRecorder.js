@@ -2,6 +2,7 @@ import { ref } from "vue";
 
 export function useRecorder() {
   const isRecording = ref(false);
+  const isReady = ref(false);
   const transcript = ref("");
   const audioBlob = ref(null);
   const error = ref(null);
@@ -12,6 +13,45 @@ export function useRecorder() {
   let mediaStream = null;
   let audioChunks = [];
   let stopRequested = false;
+  let restartCount = 0;
+  let waitReadyResolver = null;
+
+  const MAX_RESTARTS = 3;
+  const MIC_WARMUP_MS = 500;
+  const READY_TIMEOUT_MS = 2000;
+
+  function resolveReadyWait() {
+    if (waitReadyResolver) {
+      waitReadyResolver();
+      waitReadyResolver = null;
+    }
+  }
+
+  function cleanupMediaStream() {
+    if (!mediaStream) return;
+    mediaStream.getTracks().forEach((track) => track.stop());
+    mediaStream = null;
+  }
+
+  function restartRecognitionWithDelay(delay = 120) {
+    if (!recognition || stopRequested || !isRecording.value || restartCount >= MAX_RESTARTS) return;
+    restartCount += 1;
+
+    try {
+      recognition.stop();
+    } catch {
+      // Ignore stop failures and try to restart anyway.
+    }
+
+    setTimeout(() => {
+      if (!recognition || stopRequested || !isRecording.value) return;
+      try {
+        recognition.start();
+      } catch {
+        // Duplicate start or transient browser state; ignore.
+      }
+    }, delay);
+  }
 
   function initSpeechRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -30,6 +70,10 @@ export function useRecorder() {
 
     recognition.onstart = () => {
       error.value = null;
+      isReady.value = true;
+      isRecording.value = true;
+      restartCount = 0;
+      resolveReadyWait();
     };
 
     recognition.onresult = (event) => {
@@ -41,6 +85,7 @@ export function useRecorder() {
       }
       if (finalText) {
         transcript.value = `${transcript.value}${finalText}`.trim();
+        restartCount = 0;
       }
     };
 
@@ -50,12 +95,16 @@ export function useRecorder() {
       }
 
       if (event.error === "no-speech") {
-        error.value = "没有识别到语音，请靠近麦克风并清晰说话。";
+        if (!stopRequested) {
+          restartRecognitionWithDelay(120);
+        }
         return;
       }
 
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         error.value = "语音识别权限被拒绝，请在浏览器中允许麦克风权限。";
+        isRecording.value = false;
+        isReady.value = false;
         return;
       }
 
@@ -75,11 +124,7 @@ export function useRecorder() {
     recognition.onend = () => {
       // Keep recognition alive while recording, unless it was stopped intentionally.
       if (!stopRequested && isRecording.value) {
-        try {
-          recognition.start();
-        } catch {
-          // Ignore duplicate start errors.
-        }
+        restartRecognitionWithDelay(200);
       }
     };
 
@@ -105,10 +150,7 @@ export function useRecorder() {
 
       mediaRecorder.onstop = () => {
         audioBlob.value = new Blob(audioChunks, { type: "audio/webm" });
-        if (mediaStream) {
-          mediaStream.getTracks().forEach((track) => track.stop());
-          mediaStream = null;
-        }
+        cleanupMediaStream();
       };
 
       return true;
@@ -132,47 +174,90 @@ export function useRecorder() {
     transcript.value = "";
     audioBlob.value = null;
     error.value = null;
+    isReady.value = false;
+    isRecording.value = false;
     stopRequested = false;
+    restartCount = 0;
+    waitReadyResolver = null;
 
     const speechReady = initSpeechRecognition();
     const mediaReady = await initMediaRecorder();
     if (!speechReady || !mediaReady) {
+      recognition = null;
+      cleanupMediaStream();
+      return false;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, MIC_WARMUP_MS));
+
+    const readyPromise = new Promise((resolve) => {
+      waitReadyResolver = resolve;
+      setTimeout(() => {
+        resolveReadyWait();
+      }, READY_TIMEOUT_MS);
+    });
+
+    try {
+      isRecording.value = true;
+      recognition.start();
+    } catch (err) {
+      isRecording.value = false;
+      error.value = err?.message || "语音识别启动失败，请重试。";
+      recognition = null;
+      cleanupMediaStream();
       return false;
     }
 
     try {
-      recognition.start();
-    } catch {
-      // Recognition might already be running.
+      mediaRecorder.start(100);
+    } catch (err) {
+      error.value = err?.message || "录音启动失败，请重试。";
+      isRecording.value = false;
+      isReady.value = false;
+      stopRequested = true;
+      try {
+        recognition.stop();
+      } catch {
+        // no-op
+      }
+      recognition = null;
+      cleanupMediaStream();
+      return false;
     }
 
-    mediaRecorder.start(100);
-    isRecording.value = true;
+    await readyPromise;
+
     return true;
   }
 
   function stopRecording() {
     stopRequested = true;
+    resolveReadyWait();
+    isReady.value = false;
+    restartCount = 0;
+
     if (recognition) {
       try {
         recognition.stop();
       } catch {
         // no-op
       }
+      recognition = null;
     }
 
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     } else if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
-      mediaStream = null;
+      cleanupMediaStream();
     }
+    mediaRecorder = null;
 
     isRecording.value = false;
   }
 
   return {
     isRecording,
+    isReady,
     transcript,
     audioBlob,
     error,
