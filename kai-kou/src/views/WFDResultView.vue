@@ -1,144 +1,118 @@
+<template>
+  <div class="min-h-screen bg-bg">
+    <NavBar title="WFD 结果" back-to="/wfd" />
+
+    <div class="mx-auto max-w-2xl px-4 py-6">
+      <div v-if="!result" class="py-16 text-center">
+        <p class="text-sm text-muted">正在跳转...</p>
+      </div>
+
+      <div v-else>
+        <div class="mb-6 text-center">
+          <p class="mb-2 text-4xl">{{ resultEmoji }}</p>
+          <h1 class="mb-1 text-2xl font-bold text-navy">{{ resultTitle }}</h1>
+          <p class="text-muted">
+            得分
+            <span class="mx-1 text-2xl font-bold text-orange">{{ result.correct }}</span>
+            / {{ result.total }}
+            <span class="ml-1 text-sm text-muted">({{ result.score }}%)</span>
+          </p>
+        </div>
+
+        <div class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+          <p class="mb-3 text-sm font-semibold text-navy">逐词对比</p>
+          <div class="mb-3 flex flex-wrap gap-2">
+            <span
+              v-for="(word, i) in result.wordResults"
+              :key="i"
+              class="rounded-lg px-2.5 py-1 text-sm font-medium"
+              :class="word.status === 'correct' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-500'"
+            >
+              {{ word.text }}
+            </span>
+          </div>
+          <div class="flex gap-4 border-t pt-3 text-xs text-muted">
+            <span class="flex items-center gap-1">
+              <span class="inline-block h-3 w-3 rounded bg-green-100"></span>正确
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="inline-block h-3 w-3 rounded bg-red-100"></span>漏掉了
+            </span>
+          </div>
+        </div>
+
+        <div class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+          <p class="mb-2 text-sm font-semibold text-navy">标准答案</p>
+          <p class="leading-relaxed text-text">{{ result.correctAnswer }}</p>
+        </div>
+
+        <div class="mb-4 rounded-xl bg-white p-4 shadow-sm">
+          <p class="mb-2 text-sm font-semibold text-navy">你写的</p>
+          <p class="italic leading-relaxed text-muted">"{{ result.userInput }}"</p>
+        </div>
+
+        <div class="mb-6 rounded-xl bg-white p-4 shadow-sm">
+          <div class="flex items-start gap-3">
+            <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-navy text-white">AI</div>
+            <div>
+              <p class="mb-1 text-xs text-muted">教练反馈</p>
+              <p class="leading-relaxed text-text">{{ result.feedback }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <button
+            type="button"
+            class="w-full rounded-xl bg-orange py-4 text-lg font-bold text-white shadow-md hover:opacity-90"
+            @click="router.push('/wfd')"
+          >
+            再练一题 →
+          </button>
+          <button
+            type="button"
+            class="w-full rounded-xl border border-gray-200 py-3 text-muted transition-all hover:border-navy hover:text-navy"
+            @click="router.push('/home')"
+          >
+            返回首页
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
 <script setup>
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import NavBar from "@/components/NavBar.vue";
-import OrangeButton from "@/components/OrangeButton.vue";
 import { usePracticeStore } from "@/stores/practice";
+import NavBar from "@/components/NavBar.vue";
 
 const router = useRouter();
 const store = usePracticeStore();
-
-const correctSentence = computed(() => store.currentQuestion?.content || "");
-const userSentence = computed(() => store.transcript || "");
-
-const correctWords = computed(() => splitWords(correctSentence.value));
-const userWords = computed(() => splitWords(userSentence.value));
-
-const wordComparison = computed(() =>
-  correctWords.value.map((expected, idx) => {
-    const actual = userWords.value[idx] || "";
-    const match = normalizeWord(actual) === normalizeWord(expected);
-    return {
-      expected,
-      actual,
-      match,
-      missing: !actual
-    };
-  })
-);
-
-const extraWords = computed(() => userWords.value.slice(correctWords.value.length));
-
-const accuracy = computed(() => {
-  if (!correctWords.value.length) return 0;
-  const matched = wordComparison.value.filter((item) => item.match).length;
-  return Math.round((matched / correctWords.value.length) * 100);
-});
-
-const feedback = computed(() => {
-  if (accuracy.value >= 85) return "Excellent dictation. Keep this precision and maintain spelling consistency.";
-  if (accuracy.value >= 60) return "Good attempt. Focus on short function words and word endings for a higher score.";
-  return "Nice effort. Replay once more and capture every small word, including articles and prepositions.";
-});
-
-const resultTitle = computed(() => {
-  if (accuracy.value >= 85) return "Excellent dictation accuracy";
-  if (accuracy.value >= 60) return "Solid dictation attempt";
-  return "Keep building dictation precision";
-});
+const result = computed(() => store.wfdResult);
 
 onMounted(() => {
-  if (!store.currentQuestion || !store.transcript) {
-    router.replace("/wfd");
+  if (!result.value) {
+    setTimeout(() => {
+      router.replace("/wfd");
+    }, 1500);
   }
 });
 
-function splitWords(text) {
-  return String(text)
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-}
+const resultEmoji = computed(() => {
+  const score = Number(result.value?.score || 0);
+  if (score >= 90) return "🎉";
+  if (score >= 70) return "💪";
+  if (score >= 50) return "📝";
+  return "🌱";
+});
 
-function normalizeWord(word) {
-  return String(word)
-    .toLowerCase()
-    .replace(/[^a-z0-9']/g, "");
-}
+const resultTitle = computed(() => {
+  const score = Number(result.value?.score || 0);
+  if (score >= 90) return "太准了！";
+  if (score >= 70) return "答得不错！";
+  if (score >= 50) return "继续练，越来越好！";
+  return "很好的练习！";
+});
 </script>
-
-<template>
-  <div class="min-h-screen bg-bg">
-    <NavBar title="WFD Result" back-to="/wfd" />
-
-    <main class="mx-auto max-w-2xl px-4 py-6">
-      <section class="mb-6 text-center">
-        <p class="text-sm font-semibold uppercase tracking-wide text-orange">Result</p>
-        <h1 class="mt-1 text-2xl font-bold text-navy">{{ resultTitle }}</h1>
-        <p class="mt-1 text-muted">
-          Accuracy <span class="text-xl font-bold text-orange">{{ accuracy }}%</span>
-        </p>
-      </section>
-
-      <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
-        <p class="mb-2 text-sm font-semibold text-navy">Correct Sentence</p>
-        <p class="leading-relaxed text-text">{{ correctSentence }}</p>
-      </section>
-
-      <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
-        <p class="mb-2 text-sm font-semibold text-navy">Your Input</p>
-        <p class="leading-relaxed text-text">{{ userSentence }}</p>
-      </section>
-
-      <section class="mb-4 rounded-xl bg-white p-4 shadow-sm">
-        <p class="mb-3 text-sm font-semibold text-navy">Word-by-Word Comparison</p>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="(item, idx) in wordComparison"
-            :key="`${idx}-${item.expected}`"
-            class="rounded-full border px-3 py-1 text-xs font-semibold"
-            :class="item.match ? 'border-green-200 bg-green-100 text-green-700' : 'border-red-200 bg-red-50 text-red-600'"
-          >
-            <template v-if="item.match">
-              {{ item.expected }}
-            </template>
-            <template v-else-if="item.missing">
-              missed: {{ item.expected }}
-            </template>
-            <template v-else>
-              {{ item.actual }} -> {{ item.expected }}
-            </template>
-          </span>
-          <span
-            v-for="(word, idx) in extraWords"
-            :key="`extra-${idx}-${word}`"
-            class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700"
-          >
-            extra: {{ word }}
-          </span>
-        </div>
-      </section>
-
-      <section class="mb-6 rounded-xl bg-white p-4 shadow-sm">
-        <div class="flex items-start gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">AI</div>
-          <div>
-            <p class="mb-1 text-xs text-muted">Coach Feedback</p>
-            <p class="leading-relaxed text-text">{{ feedback }}</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="space-y-3">
-        <OrangeButton full @click="router.push('/wfd')">Practice Another WFD</OrangeButton>
-        <button
-          type="button"
-          class="w-full rounded-xl border border-gray-200 py-3 text-muted transition-all hover:border-navy hover:text-navy"
-          @click="router.push('/home')"
-        >
-          Back Home
-        </button>
-      </section>
-    </main>
-  </div>
-</template>

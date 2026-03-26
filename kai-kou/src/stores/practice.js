@@ -71,7 +71,8 @@ export const usePracticeStore = defineStore("practice", {
 
     transcript: "",
     audioBlob: null,
-    result: null
+    result: null,
+    wfdResult: null
   }),
 
   getters: {
@@ -89,6 +90,7 @@ export const usePracticeStore = defineStore("practice", {
       this.transcript = "";
       this.audioBlob = null;
       this.result = null;
+      this.wfdResult = null;
     },
 
     setSelectedQuestion(question) {
@@ -113,11 +115,18 @@ export const usePracticeStore = defineStore("practice", {
 
     setResult(result) {
       this.result = result;
+      this.wfdResult = null;
+      this.phase = "done";
+    },
+
+    setWFDResult(result) {
+      this.wfdResult = result || null;
       this.phase = "done";
     },
 
     resetResult() {
       this.result = null;
+      this.wfdResult = null;
       this.transcript = "";
       this.audioBlob = null;
       this.phase = "idle";

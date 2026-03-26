@@ -187,23 +187,7 @@ export const questions = {
     }
   ],
 
-  WFD: [
-    { id: "WFD_001", content: "The university library is closed on public holidays.", difficulty: 1 },
-    { id: "WFD_002", content: "Students should revise their notes after each lecture.", difficulty: 1 },
-    { id: "WFD_003", content: "International trade has increased rapidly in recent decades.", difficulty: 2 },
-    { id: "WFD_004", content: "The final exam will cover all topics discussed this semester.", difficulty: 2 },
-    { id: "WFD_005", content: "Public transportation reduces traffic congestion in major cities.", difficulty: 2 },
-    { id: "WFD_006", content: "Scientists are studying the long term effects of climate change.", difficulty: 2 },
-    { id: "WFD_007", content: "Many companies now offer flexible working arrangements to employees.", difficulty: 2 },
-    { id: "WFD_008", content: "Economic growth depends on innovation and workforce productivity.", difficulty: 3 },
-    { id: "WFD_009", content: "The professor encouraged students to think critically about the data.", difficulty: 2 },
-    { id: "WFD_010", content: "Renewable energy investment has risen significantly over the past decade.", difficulty: 3 },
-    { id: "WFD_011", content: "The conference keynote focused on artificial intelligence in healthcare.", difficulty: 2 },
-    { id: "WFD_012", content: "Effective communication skills are essential for academic success.", difficulty: 1 },
-    { id: "WFD_013", content: "The committee approved the proposal after extensive discussion.", difficulty: 2 },
-    { id: "WFD_014", content: "Urban planners must consider housing, transport, and sustainability.", difficulty: 3 },
-    { id: "WFD_015", content: "The new policy aims to improve access to higher education.", difficulty: 2 }
-  ]
+  WFD: []
 };
 
 const usedQuestionIdsByTask = new Map();

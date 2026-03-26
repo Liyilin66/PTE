@@ -11,7 +11,8 @@ const practiceStore = usePracticeStore();
 const { tasks, todayDone, todayTarget, progressPercent } = storeToRefs(practiceStore);
 
 const raTask = computed(() => tasks.value.find((item) => item.id === "ra") || null);
-const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra"));
+const wfdTask = computed(() => tasks.value.find((item) => item.id === "wfd") || null);
+const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" && item.id !== "wfd"));
 </script>
 
 <template>
@@ -76,6 +77,48 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra")
                 type="button"
                 class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
                 @click="router.push('/ra/list')"
+              >
+                选题练习
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <article v-if="wfdTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
+          <div class="flex items-center gap-4 p-4">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F3054E] text-white">
+              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
+                <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
+                <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <h3 class="text-base font-bold text-[#1A1A2E]">{{ wfdTask.title }}</h3>
+              <p class="text-sm font-medium text-orange">{{ wfdTask.subtitle }}</p>
+              <p class="mt-1 text-sm text-[#6B7280]">{{ wfdTask.description }}</p>
+            </div>
+          </div>
+
+          <div class="px-4 pb-4">
+            <div class="flex items-center justify-between pb-3">
+              <span class="text-xs text-[#6B7280]">今日: {{ wfdTask.todayCount }} 题</span>
+              <span class="text-sm font-medium text-orange">Write from Dictation</span>
+            </div>
+
+            <div class="flex gap-2">
+              <button
+                type="button"
+                class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                @click="router.push('/wfd')"
+              >
+                随机练习
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                @click="router.push('/wfd/list')"
               >
                 选题练习
               </button>

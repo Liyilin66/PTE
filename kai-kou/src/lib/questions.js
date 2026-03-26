@@ -25,11 +25,20 @@ function toArray(value) {
   return [];
 }
 
+// Build public audio URL for WFD items from question id.
+export function getWFDAudioUrl(questionId) {
+  const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").trim().replace(/\/$/, "");
+  const id = String(questionId || "").trim();
+  if (!supabaseUrl || !id) return "";
+  return `${supabaseUrl}/storage/v1/object/public/question-audio/WFD/${id}.mp3`;
+}
+
 function normalizeQuestion(row, taskType) {
   const normalizedTaskType = normalizeTaskType(taskType || row?.task_type || row?.taskType);
   const keyPoints = toArray(row?.key_points ?? row?.keyPoints);
   const audioScript = row?.audio_script ?? row?.audioScript ?? "";
-  const audioUrl = row?.audio_url ?? row?.audioUrl ?? "";
+  const rawAudioUrl = row?.audio_url ?? row?.audioUrl ?? "";
+  const audioUrl = rawAudioUrl || (normalizedTaskType === "WFD" ? getWFDAudioUrl(row?.id) : "");
   const imageUrl = row?.image_url ?? row?.imageUrl ?? "";
   const imageKeyword = row?.image_keyword ?? row?.imageKeyword ?? "";
   const wordCount = row?.word_count ?? row?.wordCount ?? null;
