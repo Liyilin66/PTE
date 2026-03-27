@@ -132,6 +132,7 @@ async function handleSubmit() {
   isSubmitting = true;
 
   try {
+    practiceStore.setPhase("processing");
     stopRecordingTicker();
     timer.stop();
     recorder.stopRecording();
@@ -141,6 +142,7 @@ async function handleSubmit() {
     const transcript = recorder.transcript.value;
     if (!transcript || transcript.trim().length < 3) {
       uiStore.showToast("No speech detected. Please check your microphone and try again.", "warning");
+      practiceStore.setPhase("idle");
       if (!unmounted) {
         await restartRecording();
       }
@@ -313,7 +315,7 @@ async function startRecordingNow() {
           </section>
         </div>
 
-        <section v-else-if="phase === 'processing'" class="py-10 text-center">
+        <section v-else-if="phase === 'processing' || phase === 'done'" class="py-10 text-center">
           <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange/10">
             <div class="h-8 w-8 animate-spin rounded-full border-4 border-orange border-t-transparent" />
           </div>
@@ -350,11 +352,11 @@ async function startRecordingNow() {
           </article>
         </section>
 
-        <section v-if="recorder.error" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+        <section v-if="recorder.error && phase !== 'processing' && phase !== 'done'" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
           <p class="text-sm text-red-600">{{ recorder.error }}</p>
         </section>
 
-        <section class="mb-8 mt-3 flex items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm">
+        <section v-if="phase !== 'processing' && phase !== 'done'" class="mb-8 mt-3 flex items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm">
           <div>
             <p class="text-xs text-muted">My Best</p>
             <p class="mt-0.5 text-2xl font-bold text-navy">

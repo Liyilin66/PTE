@@ -16,8 +16,8 @@ export function useRecorder() {
   let restartCount = 0;
   let waitReadyResolver = null;
 
-  const MAX_RESTARTS = 3;
-  const MIC_WARMUP_MS = 500;
+  const MAX_RESTARTS = 5;
+  const MIC_WARMUP_MS = 300;
   const READY_TIMEOUT_MS = 2000;
 
   function resolveReadyWait() {
@@ -31,6 +31,39 @@ export function useRecorder() {
     if (!mediaStream) return;
     mediaStream.getTracks().forEach((track) => track.stop());
     mediaStream = null;
+  }
+
+  function waitForAudioSignal(stream, timeoutMs = 2000) {
+    return new Promise((resolve) => {
+      let ctx;
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch {
+        resolve();
+        return;
+      }
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      const deadline = Date.now() + timeoutMs;
+
+      function check() {
+        if (Date.now() >= deadline) { cleanup(); resolve(); return; }
+        analyser.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+        if (Math.sqrt(sum / buf.length) > 0.01) { cleanup(); resolve(); return; }
+        setTimeout(check, 80);
+      }
+
+      function cleanup() {
+        try { source.disconnect(); ctx.close(); } catch { /* no-op */ }
+      }
+
+      check();
+    });
   }
 
   function restartRecognitionWithDelay(delay = 120) {
@@ -180,15 +213,24 @@ export function useRecorder() {
     restartCount = 0;
     waitReadyResolver = null;
 
-    const speechReady = initSpeechRecognition();
     const mediaReady = await initMediaRecorder();
-    if (!speechReady || !mediaReady) {
-      recognition = null;
+    if (!mediaReady) {
       cleanupMediaStream();
       return false;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, MIC_WARMUP_MS));
+    // Wait for mic hardware to be active, then init speech recognition
+    await Promise.race([
+      waitForAudioSignal(mediaStream),
+      new Promise((resolve) => setTimeout(resolve, MIC_WARMUP_MS))
+    ]);
+
+    const speechReady = initSpeechRecognition();
+    if (!speechReady) {
+      recognition = null;
+      cleanupMediaStream();
+      return false;
+    }
 
     const readyPromise = new Promise((resolve) => {
       waitReadyResolver = resolve;

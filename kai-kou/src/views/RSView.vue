@@ -179,6 +179,7 @@ async function handleSubmit() {
   isSubmitting = true;
 
   try {
+    phase.value = "processing";
     stopRecordingTicker();
     timer.stop();
     recorder.stopRecording();
@@ -187,13 +188,13 @@ async function handleSubmit() {
     const transcript = recorder.transcript.value;
     if (!transcript || transcript.trim().length < 3) {
       uiStore.showToast("No speech detected. Please check your microphone and try again.", "warning");
+      phase.value = "idle";
       if (!unmounted) {
         await restartRecording();
       }
       return;
     }
 
-    phase.value = "processing";
     const scoreResult = await practiceStore.submitScore("RS", transcript, getQuestionContent(), question.value?.id || "unknown");
 
     if (!unmounted && practiceStore.phase === "done" && scoreResult && !scoreResult.error) {
@@ -391,7 +392,7 @@ onUnmounted(() => {
           </ul>
         </section>
 
-        <section v-if="recorder.error" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+        <section v-if="recorder.error && phase !== 'processing'" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
           <p class="text-sm text-red-600">{{ recorder.error }}</p>
         </section>
       </template>
