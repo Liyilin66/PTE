@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 defineProps({
   task: {
     type: Object,
@@ -45,8 +45,7 @@ defineProps({
         <p class="text-sm font-medium text-orange">{{ task.subtitle }}</p>
         <p class="mt-1 text-sm text-[#6B7280]">{{ task.description }}</p>
 
-        <div class="mt-3 flex items-center justify-between">
-          <span class="text-xs text-[#6B7280]">今日: {{ task.todayCount }} 题</span>
+        <div class="mt-3 flex justify-end">
           <span class="flex items-center gap-1 text-sm font-medium text-orange transition-all group-hover:gap-2">
             开始练习
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.4">

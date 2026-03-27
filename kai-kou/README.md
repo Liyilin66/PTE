@@ -36,6 +36,8 @@ CREATE TABLE profiles (
   email TEXT,
   is_premium BOOLEAN DEFAULT FALSE,
   premium_since TIMESTAMPTZ,
+  trial_days INTEGER DEFAULT 0,
+  trial_granted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -74,6 +76,14 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+```
+
+If `profiles` already exists, run:
+
+```sql
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS trial_days INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS trial_granted_at TIMESTAMPTZ;
 ```
 
 ## Deploy to Vercel

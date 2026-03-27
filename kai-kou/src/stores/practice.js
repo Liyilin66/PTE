@@ -9,7 +9,6 @@ const TASKS = [
     title: "RA - Read Aloud",
     subtitle: "Pacing trainer",
     description: "Follow the text with stable pace and fluent delivery.",
-    todayCount: 0,
     icon: "ra",
     iconBg: "bg-[#1E4A86]",
     to: "/ra"
@@ -19,7 +18,6 @@ const TASKS = [
     title: "RS - Repeat Sentence",
     subtitle: "Keyword catcher",
     description: "Catch key words first, then repeat fluently.",
-    todayCount: 1,
     icon: "rs",
     iconBg: "bg-[#2E5EA8]",
     to: "/rs"
@@ -29,7 +27,6 @@ const TASKS = [
     title: "RL - Re-tell Lecture",
     subtitle: "Template builder",
     description: "Use a stable framework to structure your summary.",
-    todayCount: 0,
     icon: "rl",
     iconBg: "bg-gradient-to-br from-[#7A1DE6] to-[#BC1CFB]",
     to: "/rl"
@@ -39,7 +36,6 @@ const TASKS = [
     title: "WE - Write Essay",
     subtitle: "Structure first",
     description: "Write with clear intro, body, and conclusion.",
-    todayCount: 0,
     icon: "we",
     iconBg: "bg-[#00AA45]",
     to: "/we"
@@ -49,7 +45,6 @@ const TASKS = [
     title: "WFD - Write From Dictation",
     subtitle: "Accuracy drill",
     description: "Listen carefully and type complete sentences.",
-    todayCount: 0,
     icon: "wfd",
     iconBg: "bg-[#F3054E]",
     to: "/wfd"
@@ -58,10 +53,6 @@ const TASKS = [
 
 export const usePracticeStore = defineStore("practice", {
   state: () => ({
-    day: 1,
-    totalDays: 14,
-    todayDone: 0,
-    todayTarget: 3,
     tasks: TASKS,
 
     currentQuestion: null,
@@ -74,13 +65,6 @@ export const usePracticeStore = defineStore("practice", {
     result: null,
     wfdResult: null
   }),
-
-  getters: {
-    progressPercent(state) {
-      if (!state.todayTarget) return 0;
-      return Math.round((state.todayDone / state.todayTarget) * 100);
-    }
-  },
 
   actions: {
     setQuestion(question) {
@@ -169,10 +153,13 @@ export const usePracticeStore = defineStore("practice", {
 
         const data = await safeReadJson(response);
 
-        if (response.status === 429 && data?.error === "daily_limit_reached") {
+        if (
+          (response.status === 403 || response.status === 429) &&
+          (data?.error === "access_expired" || data?.error === "daily_limit_reached")
+        ) {
           this.result = {
-            error: "daily_limit_reached",
-            message: data.message || "今日免费额度已用完。"
+            error: "access_expired",
+            message: data.message || "当前账号未开通 AI 评分，请开通 VIP 或使用赠送试用权限。"
           };
           this.phase = "limited";
           await authStore.loadStatus();

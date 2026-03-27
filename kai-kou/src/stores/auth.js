@@ -1,8 +1,12 @@
 import { defineStore } from "pinia";
 import { supabase } from "@/lib/supabase";
 
-const TRIAL_DAYS = 3;
-const DAILY_LIMIT = 3;
+const ACCESS_STATUS = {
+  VIP: "vip",
+  TRIAL: "trial",
+  TRIAL_EXPIRED: "trial_expired",
+  NOT_OPENED: "not_opened"
+};
 
 let initPromise = null;
 let authSubscription = null;
@@ -14,9 +18,9 @@ export const useAuthStore = defineStore("auth", {
     isPremium: false,
     isInTrial: false,
     trialDaysLeft: 0,
-    remainingToday: DAILY_LIMIT,
-    dailyLimit: DAILY_LIMIT,
-    canPractice: true,
+    accessStatus: ACCESS_STATUS.NOT_OPENED,
+    canPractice: false,
+    canUseAiScoring: false,
     loaded: false,
     initialized: false
   }),
@@ -24,12 +28,13 @@ export const useAuthStore = defineStore("auth", {
   getters: {
     isLoggedIn: (state) => Boolean(state.session && state.user),
     statusText(state) {
-      if (state.isPremium) return "已解锁 · 无限练习";
-      if (state.isInTrial) return `试用期 · 还剩 ${state.trialDaysLeft} 天`;
-      return `今日剩余 ${state.remainingToday} / ${state.dailyLimit} 次`;
+      if (state.accessStatus === ACCESS_STATUS.VIP) return "✨ VIP · 无限练习";
+      if (state.accessStatus === ACCESS_STATUS.TRIAL) return `试用期 · 还剩 ${state.trialDaysLeft} 天`;
+      if (state.accessStatus === ACCESS_STATUS.TRIAL_EXPIRED) return "试用已结束";
+      return "未开通";
     },
     isLimited(state) {
-      return !state.isPremium && !state.isInTrial && state.remainingToday <= 0;
+      return !state.canUseAiScoring;
     }
   },
 
@@ -63,7 +68,6 @@ export const useAuthStore = defineStore("auth", {
             this.user = session?.user || null;
 
             if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-              // Avoid async-await directly inside onAuthStateChange callback to prevent auth lock contention.
               setTimeout(() => {
                 this.loadStatus();
               }, 0);
@@ -98,9 +102,9 @@ export const useAuthStore = defineStore("auth", {
       this.isPremium = false;
       this.isInTrial = false;
       this.trialDaysLeft = 0;
-      this.remainingToday = DAILY_LIMIT;
-      this.dailyLimit = DAILY_LIMIT;
-      this.canPractice = true;
+      this.accessStatus = ACCESS_STATUS.NOT_OPENED;
+      this.canUseAiScoring = false;
+      this.canPractice = false;
     },
 
     async register(email, password) {
@@ -182,7 +186,7 @@ export const useAuthStore = defineStore("auth", {
       try {
         let { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("*")
+          .select("is_premium, trial_days, trial_granted_at")
           .eq("id", this.user.id)
           .single();
 
@@ -191,7 +195,7 @@ export const useAuthStore = defineStore("auth", {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           const retry = await supabase
             .from("profiles")
-            .select("*")
+            .select("is_premium, trial_days, trial_granted_at")
             .eq("id", this.user.id)
             .single();
           profile = retry.data;
@@ -200,60 +204,71 @@ export const useAuthStore = defineStore("auth", {
 
         if (profileError && profileError.code !== "PGRST116") throw profileError;
 
-        if (!profile) {
-          this.canPractice = true;
-          this.loaded = true;
-          return;
-        }
-
-        this.isPremium = Boolean(profile?.is_premium);
-
-        const daysSince = getDaysSince(this.user.created_at);
-        this.isInTrial = daysSince < TRIAL_DAYS;
-        this.trialDaysLeft = Math.max(0, TRIAL_DAYS - daysSince);
-
-        const { count, error: countError } = await supabase
-          .from("practice_logs")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", this.user.id)
-          .gte("created_at", getChinaDayStartIsoString());
-
-        if (countError) throw countError;
-
-        const usedToday = Number(count || 0);
-        this.remainingToday = Math.max(0, this.dailyLimit - usedToday);
-        this.canPractice = this.isPremium || this.isInTrial || this.remainingToday > 0;
+        const access = getAccessStatus(this.user, profile);
+        applyAccessState(this, access);
         this.loaded = true;
       } catch (error) {
         console.error("loadStatus error:", error);
-        this.canPractice = true;
+        this.resetUsageState();
         this.loaded = true;
       }
     },
 
     decrementRemaining() {
-      if (!this.isPremium && !this.isInTrial) {
-        this.remainingToday = Math.max(0, this.remainingToday - 1);
-        this.canPractice = this.remainingToday > 0;
-      }
+      // Compatibility no-op: permission is no longer based on daily counters.
+      this.canPractice = this.canUseAiScoring;
     }
   }
 });
 
-function getDaysSince(createdAt) {
-  const created = new Date(createdAt);
-  const diff = Date.now() - created.getTime();
+function applyAccessState(store, access) {
+  store.isPremium = access.isPremium;
+  store.isInTrial = access.isInTrial;
+  store.trialDaysLeft = access.trialDaysLeft;
+  store.accessStatus = access.accessStatus;
+  store.canUseAiScoring = access.canUseAiScoring;
+  store.canPractice = access.canUseAiScoring;
+}
+
+function getAccessStatus(user, profile) {
+  const now = new Date();
+  const isPremium = Boolean(profile?.is_premium);
+  const trialDays = toNonNegativeInteger(profile?.trial_days);
+  const registeredAt = parseDateOrFallback(user?.created_at, now);
+  const trialStartAt = parseDateOrFallback(profile?.trial_granted_at, registeredAt);
+  const trialDaysLeft = trialDays > 0 ? Math.max(0, trialDays - getDaysSince(trialStartAt, now)) : 0;
+  const isInTrial = !isPremium && trialDaysLeft > 0;
+
+  let accessStatus = ACCESS_STATUS.NOT_OPENED;
+  if (isPremium) accessStatus = ACCESS_STATUS.VIP;
+  else if (isInTrial) accessStatus = ACCESS_STATUS.TRIAL;
+  else if (trialDays > 0) accessStatus = ACCESS_STATUS.TRIAL_EXPIRED;
+
+  return {
+    isPremium,
+    isInTrial,
+    trialDaysLeft,
+    canUseAiScoring: isPremium || isInTrial,
+    accessStatus
+  };
+}
+
+function getDaysSince(fromDate, now = new Date()) {
+  const diff = now.getTime() - fromDate.getTime();
   if (!Number.isFinite(diff) || diff < 0) return 0;
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
-function getChinaDayStartIsoString() {
-  const now = new Date();
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-  const utc8Ms = utcMs + 8 * 60 * 60 * 1000;
-  const dayStartUTC8Ms = Math.floor(utc8Ms / 86400000) * 86400000;
-  const dayStartUtcMs = dayStartUTC8Ms - 8 * 60 * 60 * 1000;
-  return new Date(dayStartUtcMs).toISOString();
+function parseDateOrFallback(value, fallbackDate) {
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return fallbackDate;
+  return parsed;
+}
+
+function toNonNegativeInteger(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.floor(number));
 }
 
 function isAuthLockRaceError(error) {

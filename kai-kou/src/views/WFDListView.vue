@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
@@ -15,9 +15,9 @@ const selectedDifficulty = ref("all");
 
 const difficultyOptions = [
   { value: "all", label: "全部" },
-  { value: 1, label: "⭐ 简单" },
-  { value: 2, label: "⭐⭐ 中等" },
-  { value: 3, label: "⭐⭐⭐ 难" }
+  { value: 1, label: "简单" },
+  { value: 2, label: "中等" },
+  { value: 3, label: "困难" }
 ];
 
 const filteredQuestions = computed(() => {
@@ -45,11 +45,15 @@ const filteredQuestions = computed(() => {
 
 function difficultyLabel(level) {
   if (Number(level) <= 1) return "简单";
-  if (Number(level) >= 3) return "难";
+  if (Number(level) >= 3) return "困难";
   return "中等";
 }
 
-async function startPractice(question) {
+function goListenMode() {
+  router.push("/wfd/listen");
+}
+
+function startPractice(question) {
   practiceStore.setSelectedQuestion(question);
   router.push("/wfd");
 }
@@ -65,14 +69,26 @@ onMounted(async () => {
 
 <template>
   <div class="min-h-screen bg-bg">
-    <NavBar title="Write from Dictation 题库" back-to="/home" />
+    <NavBar title="WFD 题库" back-to="/home" />
 
     <main class="mx-auto max-w-2xl px-4 py-6">
+      <button
+        type="button"
+        class="mb-4 flex w-full items-center justify-between rounded-xl bg-navy p-4 text-left transition-opacity hover:opacity-90"
+        @click="goListenMode"
+      >
+        <div>
+          <p class="font-bold text-white">🎧 磨耳朵模式</p>
+          <p class="mt-0.5 text-xs text-white/70">一键顺序播放全部音频，通勤时也能持续练听力。</p>
+        </div>
+        <span class="text-xl text-white">→</span>
+      </button>
+
       <div class="relative mb-4">
         <input
           v-model="searchText"
           type="text"
-          placeholder="搜索题目内容..."
+          placeholder="搜索题目内容或编号..."
           class="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm focus:border-orange focus:outline-none"
         />
         <span class="absolute left-3 top-3.5 text-sm text-muted">Q</span>
@@ -99,7 +115,7 @@ onMounted(async () => {
 
       <div v-if="loading" class="py-16 text-center">
         <div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-orange border-t-transparent" />
-        <p class="mt-3 text-sm text-muted">加载题库中...</p>
+        <p class="mt-3 text-sm text-muted">正在加载题库...</p>
       </div>
 
       <div v-else-if="filteredQuestions.length > 0" class="space-y-3">
@@ -124,7 +140,7 @@ onMounted(async () => {
                 >
                   {{ difficultyLabel(question.difficulty) }}
                 </span>
-                <span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">🎵 音频</span>
+                <span class="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-600">音频</span>
               </div>
 
               <p class="text-sm leading-relaxed text-text">

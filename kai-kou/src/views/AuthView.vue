@@ -89,7 +89,7 @@
           </button>
         </div>
 
-        <p v-if="mode === 'register'" class="mt-4 text-center text-xs text-muted">注册即开始 3 天无限试用</p>
+        <p v-if="mode === 'register'" class="mt-4 text-center text-xs text-muted">注册后可由管理员赠送试用，或开通 VIP 使用 AI 评分</p>
       </div>
     </div>
   </div>

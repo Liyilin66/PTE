@@ -17,6 +17,7 @@ const routes = [
   { path: "/we", name: "we", component: () => import("@/views/WEView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd", name: "wfd", component: () => import("@/views/WFDView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd/list", name: "wfd-list", component: () => import("@/views/WFDListView.vue"), meta: { requiresAuth: true } },
+  { path: "/wfd/listen", name: "wfd-listen", component: () => import("@/views/WFDListenView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd/result", name: "wfd-result", component: () => import("@/views/WFDResultView.vue"), meta: { requiresAuth: true } },
   { path: "/limit", name: "limit", component: () => import("@/views/LimitReachedView.vue"), meta: { requiresAuth: true } },
   { path: "/upgrade", name: "upgrade", component: () => import("@/views/UpgradeView.vue"), meta: { requiresAuth: true } }

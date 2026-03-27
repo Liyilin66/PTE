@@ -57,10 +57,9 @@ export default async function handler(req, res) {
       }
     });
 
-    const isInTrial = getDaysSince(user.created_at) < 3;
     const { data: profile, error: profileError } = await authedSupabase
       .from("profiles")
-      .select("is_premium")
+      .select("is_premium, trial_days, trial_granted_at")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -69,26 +68,13 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "profile_load_failed" });
     }
 
-    const isPremium = Boolean(profile?.is_premium);
-
-    if (!isPremium && !isInTrial) {
-      const { count, error: countError } = await authedSupabase
-        .from("practice_logs")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .gte("created_at", getChinaDayStartIsoString());
-
-      if (countError) {
-        console.error("load usage error:", countError);
-        return res.status(500).json({ error: "usage_load_failed" });
-      }
-
-      if ((count || 0) >= 3) {
-        return res.status(429).json({
-          error: "daily_limit_reached",
-          message: "今日 3 次免费额度已用完，明天凌晨 12 点重置，或升级解锁无限练习。"
-        });
-      }
+    const access = getAccessStatus(user, profile);
+    if (!access.canUseAiScoring) {
+      return res.status(403).json({
+        error: "access_expired",
+        message: "当前账号未开通 AI 评分，请开通 VIP 或使用赠送试用权限。",
+        access
+      });
     }
 
     const prompt = buildPrompt(taskType, transcript, questionContent);
@@ -125,20 +111,53 @@ function getBearerToken(req) {
   return header.slice(7).trim();
 }
 
-function getDaysSince(createdAt) {
-  const created = new Date(createdAt);
-  const diff = Date.now() - created.getTime();
+function getDaysSince(fromDate, now = new Date()) {
+  const diff = now.getTime() - fromDate.getTime();
   if (!Number.isFinite(diff) || diff < 0) return 0;
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
-function getChinaDayStartIsoString() {
+function parseDateOrFallback(value, fallbackDate) {
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return fallbackDate;
+  return parsed;
+}
+
+function toNonNegativeInteger(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.floor(number));
+}
+
+function getAccessStatus(user, profile) {
   const now = new Date();
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-  const utc8Ms = utcMs + 8 * 60 * 60 * 1000;
-  const dayStartUTC8Ms = Math.floor(utc8Ms / 86400000) * 86400000;
-  const dayStartUtcMs = dayStartUTC8Ms - 8 * 60 * 60 * 1000;
-  return new Date(dayStartUtcMs).toISOString();
+  const isPremium = Boolean(profile?.is_premium);
+  const trialDays = toNonNegativeInteger(profile?.trial_days);
+  const registeredAt = parseDateOrFallback(user?.created_at, now);
+  const trialStartAt = parseDateOrFallback(profile?.trial_granted_at, registeredAt);
+  const trialDaysLeft = trialDays > 0 ? Math.max(0, trialDays - getDaysSince(trialStartAt, now)) : 0;
+  const isInTrial = !isPremium && trialDaysLeft > 0;
+
+  let accessStatus = "not_opened";
+  if (isPremium) accessStatus = "vip";
+  else if (isInTrial) accessStatus = "trial";
+  else if (trialDays > 0) accessStatus = "trial_expired";
+
+  return {
+    isPremium,
+    isInTrial,
+    trialDaysLeft,
+    canUseAiScoring: isPremium || isInTrial,
+    accessStatus,
+    statusText: buildStatusText(accessStatus, trialDaysLeft)
+  };
+}
+
+function buildStatusText(accessStatus, trialDaysLeft) {
+  if (accessStatus === "vip") return "✨ VIP · 无限练习";
+  if (accessStatus === "trial") return `试用期 · 还剩 ${trialDaysLeft} 天`;
+  if (accessStatus === "trial_expired") return "试用已结束";
+  return "未开通";
 }
 
 async function generateContentWithRest(prompt, key) {

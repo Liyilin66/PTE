@@ -1,14 +1,16 @@
-<script setup>
+﻿<script setup>
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import PracticeCard from "@/components/PracticeCard.vue";
+import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 
 const router = useRouter();
+const authStore = useAuthStore();
 const practiceStore = usePracticeStore();
-const { tasks, todayDone, todayTarget, progressPercent } = storeToRefs(practiceStore);
+const { tasks } = storeToRefs(practiceStore);
 
 const raTask = computed(() => tasks.value.find((item) => item.id === "ra") || null);
 const wfdTask = computed(() => tasks.value.find((item) => item.id === "wfd") || null);
@@ -17,7 +19,7 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
 
 <template>
   <div class="min-h-screen bg-bg">
-    <NavBar title="PTE 50+ 速通训练" home show-login />
+    <NavBar title="PTE 50+ 速通训练营" home show-login />
 
     <div class="py-4 text-center text-[#1A1A2E]">
       <p class="text-lg">放弃完美，拥抱流利</p>
@@ -25,18 +27,17 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
 
     <div class="mx-auto max-w-6xl px-4 pb-8">
       <section class="mb-6 rounded-xl border bg-card p-6 shadow-card">
-        <div class="mb-4 flex items-center justify-between gap-4">
+        <div class="flex items-center justify-between gap-4">
           <div>
-            <h2 class="text-lg font-bold text-[#1A1A2E]">14天冲刺进度</h2>
-            <p class="text-sm text-[#6B7280]">完成第一题后开始计时</p>
+            <h2 class="text-lg font-bold text-[#1A1A2E]">账号权限状态</h2>
+            <p class="text-sm text-[#6B7280]">权限统一由 VIP 或管理员赠送试用控制</p>
           </div>
-          <div class="text-right">
-            <p class="text-sm text-[#6B7280]">今日练习</p>
-            <p class="text-2xl font-bold leading-none text-orange">{{ todayDone }} / {{ todayTarget }}</p>
-          </div>
-        </div>
-        <div class="h-3 rounded-full bg-[#D5D9E0]">
-          <div class="h-full rounded-full bg-[#C5CCD6]" :style="{ width: `${progressPercent}%` }" />
+          <span
+            class="rounded-full px-3 py-1 text-sm font-medium"
+            :class="authStore.isPremium ? 'bg-green-100 text-green-700' : authStore.isInTrial ? 'bg-orange/10 text-orange' : 'bg-gray-100 text-gray-500'"
+          >
+            {{ authStore.statusText }}
+          </span>
         </div>
       </section>
 
@@ -60,8 +61,7 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
           </div>
 
           <div class="px-4 pb-4">
-            <div class="flex items-center justify-between pb-3">
-              <span class="text-xs text-[#6B7280]">今日: {{ raTask.todayCount }} 题</span>
+            <div class="pb-3 text-right">
               <span class="text-sm font-medium text-orange">Read Aloud</span>
             </div>
 
@@ -102,25 +102,33 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
           </div>
 
           <div class="px-4 pb-4">
-            <div class="flex items-center justify-between pb-3">
-              <span class="text-xs text-[#6B7280]">今日: {{ wfdTask.todayCount }} 题</span>
+            <div class="pb-3 text-right">
               <span class="text-sm font-medium text-orange">Write from Dictation</span>
             </div>
 
-            <div class="flex gap-2">
+            <div class="mt-1 flex flex-col gap-2">
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  @click="router.push('/wfd')"
+                >
+                  随机练习
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  @click="router.push('/wfd/list')"
+                >
+                  选题练习
+                </button>
+              </div>
               <button
                 type="button"
-                class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                @click="router.push('/wfd')"
+                class="w-full rounded-lg bg-navy py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                @click="router.push('/wfd/listen')"
               >
-                随机练习
-              </button>
-              <button
-                type="button"
-                class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
-                @click="router.push('/wfd/list')"
-              >
-                选题练习
+                🎧 磨耳朵模式
               </button>
             </div>
           </div>
@@ -139,10 +147,10 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
             </svg>
           </div>
           <div>
-            <h3 class="mb-3 text-lg font-bold">开发者的14天逆袭故事</h3>
+            <h3 class="mb-3 text-lg font-bold">开发者的 14 天逆袭故事</h3>
             <p class="mb-4 leading-relaxed text-white/90">
-              作为一名英语基础薄弱的留学生，我曾在 PTE 考试里屡战屡败。后来我发现，PTE 的核心不在于完美，而在于
-              <span class="font-bold text-[#FF8A4D]">流利度</span>。于是我把练习方式改成高频、稳定、可复盘，14 天把分数从 40+ 提升到 58。
+              我曾经在 PTE 里反复卡分，后来发现提分关键不是追求完美，而是把输出练到稳定、流利、可复盘。
+              当训练节奏正确之后，分数自然会上去。
             </p>
             <p class="text-base font-medium text-[#E8845A]">如果我可以，你也可以。</p>
           </div>
