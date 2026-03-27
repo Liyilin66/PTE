@@ -42,6 +42,8 @@ let recordingTicker = null;
 let unmounted = false;
 let playbackDelayTimer = null;
 let audioPlayer = null;
+let hasFinalizedRecording = false;
+let submitCallCount = 0;
 
 function getQuestionContent() {
   return question.value?.content || defaultQuestion.content;
@@ -140,12 +142,13 @@ function startQuestionPlayback(delay = 700) {
   stopAudioPlayer();
   stopRecordingTicker();
   timer.stop();
-  recorder.stopRecording();
+  void recorder.stopRecorderAndGetBlob({ reason: "playback_reset" });
   tts.stop();
 
   recordingSeconds.value = 0;
   showAnswer.value = false;
   phase.value = "playing";
+  hasFinalizedRecording = false;
 
   playbackDelayTimer = setTimeout(() => {
     if (unmounted || questionLoading.value) return;
@@ -166,6 +169,8 @@ async function startRecording() {
       return;
     }
 
+    hasFinalizedRecording = false;
+    submitCallCount = 0;
     startRecordingTicker();
     timer.start(15, handleSubmit);
   } finally {
@@ -175,19 +180,20 @@ async function startRecording() {
 
 async function handleSubmit() {
   if (questionLoading.value) return;
-  if (isSubmitting || phase.value !== "recording") return;
+  if (isSubmitting || hasFinalizedRecording || phase.value !== "recording") return;
   isSubmitting = true;
+  hasFinalizedRecording = true;
+  submitCallCount += 1;
 
   try {
     phase.value = "processing";
     stopRecordingTicker();
     timer.stop();
-    recorder.stopRecording();
-    await waitForSpeechFlush();
+    const stopResult = await recorder.stopRecorderAndGetBlob({ reason: "submit" });
+    debugSubmit("stop_result", stopResult);
 
-    const transcript = recorder.transcript.value;
-    if (!transcript || transcript.trim().length < 3) {
-      uiStore.showToast("No speech detected. Please check your microphone and try again.", "warning");
+    const transcript = `${stopResult?.transcript || recorder.transcript.value || ""}`.trim();
+    if (shouldRetryWithToast(stopResult, transcript)) {
       phase.value = "idle";
       if (!unmounted) {
         await restartRecording();
@@ -212,26 +218,52 @@ async function skipQuestion() {
   stopAudioPlayer();
   stopRecordingTicker();
   timer.stop();
-  recorder.stopRecording();
+  await recorder.stopRecorderAndGetBlob({ reason: "skip" });
   tts.stop();
+  hasFinalizedRecording = false;
 
   await loadQuestion({ incrementIndex: true });
   startQuestionPlayback(250);
 }
 
 async function restartRecording() {
-  if (questionLoading.value || isSubmitting || isStartingRecording || phase.value === "processing") return;
+  if (questionLoading.value || isStartingRecording || phase.value === "processing") return;
 
   stopRecordingTicker();
   timer.stop();
-  recorder.stopRecording();
+  await recorder.stopRecorderAndGetBlob({ reason: "restart" });
   phase.value = "idle";
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  hasFinalizedRecording = false;
   await startRecording();
 }
 
-function waitForSpeechFlush() {
-  return new Promise((resolve) => setTimeout(resolve, 300));
+function debugSubmit(event, payload) {
+  if (!import.meta.env.DEV) return;
+  console.info(`[rs-submit:${submitCallCount}] ${event}`, payload);
+}
+
+function shouldRetryWithToast(stopResult, transcript) {
+  if (stopResult?.blobTooLarge) {
+    uiStore.showToast("Recording is too long. Please try a shorter response.", "warning");
+    return true;
+  }
+
+  if (stopResult?.recorderStopTimedOut || stopResult?.recognitionStopTimedOut) {
+    uiStore.showToast("Processing took too long. Please try again.", "warning");
+    return true;
+  }
+
+  if (!stopResult?.hasAudio) {
+    uiStore.showToast("Recording failed. Please try again.", "warning");
+    return true;
+  }
+
+  if (!transcript || transcript.length < 3) {
+    uiStore.showToast("No speech detected. Please try again.", "warning");
+    return true;
+  }
+
+  return false;
 }
 
 function startRecordingTicker() {

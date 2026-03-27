@@ -3,6 +3,9 @@ import router from "@/router";
 import { useAuthStore } from "@/stores/auth";
 import { supabase } from "@/lib/supabase";
 
+const RA_MIN_SCORE = 10;
+const RA_MAX_SCORE = 90;
+
 const TASKS = [
   {
     id: "ra",
@@ -175,14 +178,14 @@ export const usePracticeStore = defineStore("practice", {
 
         if (!response.ok) {
           if (data && typeof data === "object" && data.scores) {
-            this.result = normalizeScoreData(data);
+            this.result = normalizeScoreData(data, taskType);
             this.phase = "done";
             return this.result;
           }
           throw new Error(`Score API failed with status ${response.status}`);
         }
 
-        this.result = normalizeScoreData(data || {});
+        this.result = normalizeScoreData(data || {}, taskType);
         this.phase = "done";
 
         if (session?.user?.id) {
@@ -215,11 +218,16 @@ export const usePracticeStore = defineStore("practice", {
   }
 });
 
-function normalizeScoreData(data) {
-  const pronunciation = clampScore(data?.scores?.pronunciation);
-  const fluency = clampScore(data?.scores?.fluency);
-  const content = clampScore(data?.scores?.content);
-  const overall = clampOverall(data?.overall, Math.round((pronunciation + fluency + content) / 3));
+function normalizeScoreData(data, taskType) {
+  const normalizedTaskType = normalizeTaskType(taskType);
+  const pronunciation =
+    normalizedTaskType === "RA" ? clampRAScore(data?.scores?.pronunciation) : clampScore(data?.scores?.pronunciation);
+  const fluency = normalizedTaskType === "RA" ? clampRAScore(data?.scores?.fluency) : clampScore(data?.scores?.fluency);
+  const content = normalizedTaskType === "RA" ? clampRAScore(data?.scores?.content) : clampScore(data?.scores?.content);
+  const overall =
+    normalizedTaskType === "RA"
+      ? clampRAOverall(data?.overall)
+      : clampOverall(data?.overall, Math.round((pronunciation + fluency + content) / 3));
   const feedback = typeof data?.feedback === "string" && data.feedback.trim() ? data.feedback.trim() : "这次练习已经完成，继续保持。";
 
   return {
@@ -232,6 +240,11 @@ function normalizeScoreData(data) {
     feedback,
     overall
   };
+}
+
+function normalizeTaskType(taskType) {
+  if (typeof taskType !== "string") return "";
+  return taskType.trim().toUpperCase();
 }
 
 function buildFallbackResult(taskType) {
@@ -262,6 +275,18 @@ function clampScore(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return 0;
   return Math.max(0, Math.min(90, Math.round(num)));
+}
+
+function clampRAScore(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return RA_MIN_SCORE;
+  return Math.max(RA_MIN_SCORE, Math.min(RA_MAX_SCORE, Math.round(num)));
+}
+
+function clampRAOverall(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return RA_MIN_SCORE;
+  return Math.max(RA_MIN_SCORE, Math.min(RA_MAX_SCORE, Math.round(num)));
 }
 
 function clampOverall(value, fallback) {

@@ -5,6 +5,16 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 
 const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const RA_MIN_SCORE = 10;
+const RA_MAX_SCORE = 90;
+const RA_WEIGHTS = {
+  content: 0.2,
+  fluency: 0.45,
+  pronunciation: 0.35
+};
+const RA_FORCE_BASELINE_RESPONSE_TYPES = new Set(["silence", "noise_only"]);
+const RA_CONTENT_MATCH_FLOOR_SCORE = 45;
+const RA_CONTENT_MATCH_WORD_THRESHOLD = 10;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -30,7 +40,32 @@ export default async function handler(req, res) {
   }
 
   const { taskType, transcript, questionContent } = req.body || {};
-  if (!transcript || transcript.trim().length < 3) {
+  const normalizedTaskType = normalizeTaskType(taskType);
+  const safeTranscript = typeof transcript === "string" ? transcript : "";
+  const trimmedTranscript = safeTranscript.trim();
+
+  if (!trimmedTranscript) {
+    if (normalizedTaskType === "RA") {
+      return res.status(200).json(
+        finalizeRAScore(
+          { responseType: "silence" },
+          {
+            transcript: safeTranscript,
+            questionContent
+          }
+        )
+      );
+    }
+
+    return res.status(400).json({
+      error: "transcript_too_short",
+      scores: { pronunciation: 0, fluency: 0, content: 0 },
+      feedback: "没有识别到你的语音，请检查麦克风后重试。",
+      overall: 0
+    });
+  }
+
+  if (normalizedTaskType !== "RA" && trimmedTranscript.length < 3) {
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
@@ -77,9 +112,14 @@ export default async function handler(req, res) {
       });
     }
 
-    const prompt = buildPrompt(taskType, transcript, questionContent);
+    const prompt = buildPrompt(normalizedTaskType, safeTranscript, questionContent);
     const text = await generateContentWithRest(prompt, process.env.GEMINI_API_KEY);
-    const parsed = normalizeResult(parseModelJson(text));
+    const parsedPayload = parseModelJson(text, { taskType: normalizedTaskType });
+    const parsed = normalizeResult(parsedPayload, {
+      taskType: normalizedTaskType,
+      transcript: safeTranscript,
+      questionContent
+    });
 
     return res.json(parsed);
   } catch (error) {
@@ -214,22 +254,89 @@ function isQuotaError(error) {
   return message.includes("quota") || message.includes("too many requests") || statusText.includes("too many requests");
 }
 
-function parseModelJson(rawText) {
-  const cleanText = rawText.replace(/```json|```/g, "").trim();
+function normalizeTaskType(taskType) {
+  if (typeof taskType !== "string") return "RA";
+  const normalized = taskType.trim().toUpperCase();
+  return normalized || "RA";
+}
+
+function parseModelJson(rawText, options = {}) {
+  const cleanText = `${rawText || ""}`.replace(/```json|```/gi, "").trim();
+  const strictPayload = tryParseJsonObject(cleanText);
+  if (strictPayload) return strictPayload;
+
+  if (options?.taskType !== "RA") {
+    throw new Error("Invalid JSON from model");
+  }
+
+  return parseRALoosePayload(cleanText);
+}
+
+function tryParseJsonObject(text) {
+  if (!text) return null;
 
   try {
-    return JSON.parse(cleanText);
+    return JSON.parse(text);
   } catch {
-    const start = cleanText.indexOf("{");
-    const end = cleanText.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) {
-      throw new Error("Invalid JSON from model");
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) return null;
+
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      return null;
     }
-    return JSON.parse(cleanText.slice(start, end + 1));
   }
 }
 
-function normalizeResult(payload) {
+function parseRALoosePayload(text) {
+  const pronunciation = extractNumberByKeys(text, ["pronunciation"]);
+  const fluency = extractNumberByKeys(text, ["fluency"]);
+  const content = extractNumberByKeys(text, ["content"]);
+  const responseType = normalizeRAResponseType(extractStringByKeys(text, ["responseType", "response_type", "type"]));
+  const feedback = extractStringByKeys(text, ["feedback", "comment"]);
+
+  return {
+    responseType: responseType || "invalid_response",
+    scores: {
+      pronunciation,
+      fluency,
+      content
+    },
+    feedback: feedback || ""
+  };
+}
+
+function extractNumberByKeys(text, keys) {
+  for (const key of keys) {
+    const withQuotes = new RegExp(`"${key}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`, "i");
+    const plain = new RegExp(`${key}\\s*[:=]\\s*(-?\\d+(?:\\.\\d+)?)`, "i");
+    const quotedMatch = text.match(withQuotes);
+    if (quotedMatch?.[1]) return Number(quotedMatch[1]);
+    const plainMatch = text.match(plain);
+    if (plainMatch?.[1]) return Number(plainMatch[1]);
+  }
+  return undefined;
+}
+
+function extractStringByKeys(text, keys) {
+  for (const key of keys) {
+    const quotedPattern = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, "i");
+    const plainPattern = new RegExp(`${key}\\s*[:=]\\s*([a-zA-Z_\\-]+)`, "i");
+    const quotedMatch = text.match(quotedPattern);
+    if (quotedMatch?.[1]) return quotedMatch[1].trim();
+    const plainMatch = text.match(plainPattern);
+    if (plainMatch?.[1]) return plainMatch[1].trim();
+  }
+  return "";
+}
+
+function normalizeResult(payload, options = {}) {
+  if (options?.taskType === "RA") {
+    return finalizeRAScore(payload, options);
+  }
+
   const pronunciation = clampScore(payload?.scores?.pronunciation);
   const fluency = clampScore(payload?.scores?.fluency);
   const content = clampScore(payload?.scores?.content);
@@ -259,6 +366,138 @@ function normalizeResult(payload) {
   };
 }
 
+function finalizeRAScore(payload, context = {}) {
+  const responseType = normalizeRAResponseType(
+    payload?.responseType || payload?.response_type || payload?.transcriptQuality || payload?.resultType
+  );
+  const rawPronunciation = pickRAScore(payload, "pronunciation");
+  const rawFluency = pickRAScore(payload, "fluency");
+  const rawContent = pickRAScore(payload, "content");
+  const invalidCheck = checkInvalidRAResponse({
+    responseType
+  });
+
+  if (invalidCheck.isInvalid) {
+    return buildRAInvalidResult(payload, invalidCheck.responseType);
+  }
+
+  const overlap = calculateWordOverlap(context?.transcript, context?.questionContent);
+  const pronunciation = clampRASubScore(rawPronunciation);
+  const fluency = clampRASubScore(rawFluency);
+  let content = clampRASubScore(rawContent);
+  if (overlap.uniqueMatchedCount >= RA_CONTENT_MATCH_WORD_THRESHOLD) {
+    content = Math.max(content, RA_CONTENT_MATCH_FLOOR_SCORE);
+  }
+  const weightedOverall =
+    pronunciation * RA_WEIGHTS.pronunciation + fluency * RA_WEIGHTS.fluency + content * RA_WEIGHTS.content;
+  const overall = clampRAOverall(weightedOverall);
+  const feedback = normalizeFeedback(payload?.feedback, "继续练习朗读节奏和重音，你会越来越稳。");
+
+  return {
+    scores: {
+      pronunciation,
+      fluency,
+      content
+    },
+    keywords: [],
+    feedback,
+    overall,
+    responseType: responseType || "valid_reading"
+  };
+}
+
+function pickRAScore(payload, key) {
+  const score = payload?.scores?.[key] ?? payload?.[key];
+  return Number(score);
+}
+
+function checkInvalidRAResponse({ responseType }) {
+  if (RA_FORCE_BASELINE_RESPONSE_TYPES.has(responseType)) {
+    return { isInvalid: true, responseType };
+  }
+
+  return { isInvalid: false, responseType: responseType || "valid_reading" };
+}
+
+function calculateWordOverlap(transcript, referenceText) {
+  const transcriptTokens = tokenizeForOverlap(transcript);
+  const referenceTokens = tokenizeForOverlap(referenceText);
+
+  if (!referenceTokens.length) {
+    return { hasReference: false, matchedCount: 0, uniqueMatchedCount: 0 };
+  }
+
+  const referenceSet = new Set(referenceTokens);
+  const matchedWords = new Set();
+  let matchedCount = 0;
+  for (const token of transcriptTokens) {
+    if (referenceSet.has(token)) {
+      matchedCount += 1;
+      matchedWords.add(token);
+    }
+  }
+
+  return {
+    hasReference: true,
+    matchedCount,
+    uniqueMatchedCount: matchedWords.size
+  };
+}
+
+function tokenizeForOverlap(text) {
+  return `${text || ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9\s']/g, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+}
+
+function buildRAInvalidResult(payload, responseType) {
+  const feedback = normalizeFeedback(payload?.feedback, "这次没有形成有效朗读，系统已按基础分记录。");
+
+  return {
+    scores: {
+      pronunciation: RA_MIN_SCORE,
+      fluency: RA_MIN_SCORE,
+      content: RA_MIN_SCORE
+    },
+    keywords: [],
+    feedback,
+    overall: RA_MIN_SCORE,
+    responseType: responseType || "invalid_response"
+  };
+}
+
+function normalizeRAResponseType(value) {
+  const normalized = `${value || ""}`.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return "";
+  if (normalized.includes("silence") || normalized.includes("no_speech")) return "silence";
+  if (normalized.includes("too_short") || normalized.includes("short")) return "too_short";
+  if (normalized.includes("gibber")) return "gibberish";
+  if (normalized.includes("off") && normalized.includes("topic")) return "off_topic";
+  if (normalized.includes("noise")) return "noise_only";
+  if (normalized.includes("valid")) return "valid_reading";
+  if (normalized === "random" || normalized === "invalid") return "invalid_response";
+  return normalized;
+}
+
+function clampRASubScore(value) {
+  if (!Number.isFinite(value)) return RA_MIN_SCORE;
+  return Math.max(RA_MIN_SCORE, Math.min(RA_MAX_SCORE, Math.round(value)));
+}
+
+function clampRAOverall(value) {
+  if (!Number.isFinite(value)) return RA_MIN_SCORE;
+  return Math.max(RA_MIN_SCORE, Math.min(RA_MAX_SCORE, Math.round(value)));
+}
+
+function normalizeFeedback(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  const normalized = value.trim();
+  return normalized || fallback;
+}
+
 function clampScore(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return 0;
@@ -270,7 +509,7 @@ function buildPrompt(taskType, transcript, questionContent) {
 
   const prompts = {
     RA: `
-You are a PTE Academic examiner evaluating a Read Aloud response.
+You are a PTE Academic examiner evaluating ONLY a Read Aloud response.
 
 Original passage:
 "${question}"
@@ -278,27 +517,38 @@ Original passage:
 Student's spoken response (transcribed):
 "${transcript}"
 
-Score the student on these 3 criteria (0-90 scale, PTE scoring style):
+Task:
+1) First classify responseType as one of:
+- valid_reading
+- silence
+- too_short
+- gibberish
+- off_topic
+- noise_only
+
+2) Then score ONLY these 3 dimensions (10-90 scale):
 - pronunciation: clarity and accuracy of individual sounds
-- fluency: natural pace, rhythm, and smooth delivery without hesitation
-- content: how much of the original passage was covered correctly
+- fluency: pace, rhythm, and smooth delivery
+- content: coverage and correctness of the original passage
 
 Rules:
-- Be encouraging but honest
-- Target band: 47-58 (intermediate learners)
-- Feedback must be in Chinese, warm coach tone, NOT examiner tone
-- Never use words like "错误", "失败", "很差"
-- Give ONE specific actionable tip
+- If responseType is silence / noise_only, set all 3 scores to 10.
+- For too_short / gibberish / off_topic, keep normal scoring based on recognized useful content.
+- If 10 or more valid words clearly match the original passage, set content to at least 45.
+- Even for valid_reading, do not return any score below 10.
+- Feedback must be in Chinese, warm coach tone, 2-3 sentences, with one actionable tip.
+- Output JSON only, no markdown, no extra text.
 
-Respond ONLY with this JSON, no other text:
+Respond ONLY with this JSON shape:
 {
+  "responseType": "<valid_reading|silence|too_short|gibberish|off_topic|noise_only>",
   "scores": {
-    "pronunciation": <number 0-90>,
-    "fluency": <number 0-90>,
-    "content": <number 0-90>
+    "pronunciation": <number 10-90>,
+    "fluency": <number 10-90>,
+    "content": <number 10-90>
   },
-  "feedback": "<Chinese feedback, 2-3 sentences, warm and specific>",
-  "overall": <average of three scores, rounded to integer>
+  "feedback": "<Chinese feedback>",
+  "overall": <number 10-90>
 }`,
 
     RS: `
