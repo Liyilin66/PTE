@@ -12,7 +12,9 @@
     "wfd:tts:test:rest": "node scripts/test-google-tts-rest.js",
     "wfd:tts:generate": "node scripts/generate-wfd-tts.js",
     "wfd:audio:upload": "node scripts/upload-wfd-audio-to-supabase.js",
-    "wfd:questions:upsert": "node scripts/upsert-wfd-questions.js"
+    "wfd:questions:upsert": "node scripts/upsert-wfd-questions.js",
+    "wfd:storage:scan": "node scripts/scan-supabase-storage-wfd.js",
+    "wfd:storage:cleanup": "node scripts/cleanup-legacy-wfd-storage.js"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.0",

@@ -1,0 +1,78 @@
+{
+  "generatedAt": "2026-03-28T13:21:38.160Z",
+  "bucket": "question-audio",
+  "config": {
+    "dryRun": false,
+    "listPageSize": 100,
+    "deleteBatchSize": 100,
+    "legacyPrefixesToDelete": [
+      "WFD",
+      "true/wfd"
+    ],
+    "protectedPrefixes": [
+      "wfd"
+    ]
+  },
+  "matched": {
+    "total": 254,
+    "byPrefix": {
+      "WFD": 173,
+      "true/wfd": 81
+    },
+    "samplesByPrefix": {
+      "WFD": [
+        "WFD/WFD_001.mp3",
+        "WFD/WFD_002.mp3",
+        "WFD/WFD_003.mp3",
+        "WFD/WFD_004.mp3",
+        "WFD/WFD_005.mp3",
+        "WFD/WFD_006.mp3",
+        "WFD/WFD_007.mp3",
+        "WFD/WFD_008.mp3",
+        "WFD/WFD_009.mp3",
+        "WFD/WFD_010.mp3",
+        "WFD/WFD_011.mp3",
+        "WFD/WFD_012.mp3",
+        "WFD/WFD_013.mp3",
+        "WFD/WFD_014.mp3",
+        "WFD/WFD_015.mp3",
+        "WFD/WFD_016.mp3",
+        "WFD/WFD_017.mp3",
+        "WFD/WFD_018.mp3",
+        "WFD/WFD_019.mp3",
+        "WFD/WFD_020.mp3"
+      ],
+      "true/wfd": [
+        "true/wfd/WFD_001.mp3",
+        "true/wfd/WFD_002.mp3",
+        "true/wfd/WFD_003.mp3",
+        "true/wfd/WFD_004.mp3",
+        "true/wfd/WFD_005.mp3",
+        "true/wfd/WFD_006.mp3",
+        "true/wfd/WFD_007.mp3",
+        "true/wfd/WFD_008.mp3",
+        "true/wfd/WFD_009.mp3",
+        "true/wfd/WFD_010.mp3",
+        "true/wfd/WFD_011.mp3",
+        "true/wfd/WFD_012.mp3",
+        "true/wfd/WFD_013.mp3",
+        "true/wfd/WFD_014.mp3",
+        "true/wfd/WFD_015.mp3",
+        "true/wfd/WFD_016.mp3",
+        "true/wfd/WFD_017.mp3",
+        "true/wfd/WFD_018.mp3",
+        "true/wfd/WFD_019.mp3",
+        "true/wfd/WFD_020.mp3"
+      ]
+    }
+  },
+  "execution": {
+    "dryRun": false,
+    "totalMatched": 254,
+    "batchSize": 100,
+    "attemptedBatches": 3,
+    "successfulBatches": 3,
+    "deletedCount": 181,
+    "failedBatches": []
+  }
+}
