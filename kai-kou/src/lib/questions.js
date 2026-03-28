@@ -8,6 +8,12 @@ const hasSupabaseConfig =
   Boolean(import.meta.env.VITE_SUPABASE_URL) &&
   Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
+function getSupabaseBaseUrl() {
+  return String(import.meta.env.VITE_SUPABASE_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+}
+
 function normalizeTaskType(taskType) {
   return String(taskType || "")
     .trim()
@@ -25,20 +31,55 @@ function toArray(value) {
   return [];
 }
 
+export function getPublicAudioUrlByPath(audioPath) {
+  const supabaseUrl = getSupabaseBaseUrl();
+  const normalizedPath = String(audioPath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "");
+
+  if (!normalizedPath) return "";
+  if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
+  if (!supabaseUrl) return "";
+
+  return `${supabaseUrl}/storage/v1/object/public/question-audio/${normalizedPath}`;
+}
+
 // Build public audio URL for WFD items from question id.
 export function getWFDAudioUrl(questionId) {
-  const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").trim().replace(/\/$/, "");
   const id = String(questionId || "").trim();
-  if (!supabaseUrl || !id) return "";
-  return `${supabaseUrl}/storage/v1/object/public/question-audio/WFD/${id}.mp3`;
+  if (!id) return "";
+  return getPublicAudioUrlByPath(`wfd/${id}.mp3`);
+}
+
+export function getQuestionAudioUrl(row, taskType) {
+  const normalizedTaskType = normalizeTaskType(taskType || row?.task_type || row?.taskType);
+  const rawAudioPath = row?.audio_path ?? row?.audioPath ?? "";
+  const rawAudioUrl = String(row?.audio_url ?? row?.audioUrl ?? "").trim();
+  const audioPath = String(rawAudioPath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "");
+  const audioUrlFromPath = getPublicAudioUrlByPath(audioPath);
+
+  // WFD should always prefer audio_path so new storage objects are used first.
+  if (normalizedTaskType === "WFD") {
+    return audioUrlFromPath || rawAudioUrl || getWFDAudioUrl(row?.id) || "";
+  }
+
+  return rawAudioUrl || audioUrlFromPath || "";
 }
 
 function normalizeQuestion(row, taskType) {
   const normalizedTaskType = normalizeTaskType(taskType || row?.task_type || row?.taskType);
   const keyPoints = toArray(row?.key_points ?? row?.keyPoints);
   const audioScript = row?.audio_script ?? row?.audioScript ?? "";
-  const rawAudioUrl = row?.audio_url ?? row?.audioUrl ?? "";
-  const audioUrl = rawAudioUrl || (normalizedTaskType === "WFD" ? getWFDAudioUrl(row?.id) : "");
+  const rawAudioPath = row?.audio_path ?? row?.audioPath ?? "";
+  const audioPath = String(rawAudioPath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "");
+  const audioUrl = getQuestionAudioUrl({ ...(row || {}), audio_path: audioPath }, normalizedTaskType);
   const imageUrl = row?.image_url ?? row?.imageUrl ?? "";
   const imageKeyword = row?.image_keyword ?? row?.imageKeyword ?? "";
   const wordCount = row?.word_count ?? row?.wordCount ?? null;
@@ -49,6 +90,8 @@ function normalizeQuestion(row, taskType) {
     task_type: normalizedTaskType,
     audioScript,
     audio_script: audioScript,
+    audioPath,
+    audio_path: audioPath,
     audioUrl,
     audio_url: audioUrl,
     imageUrl,

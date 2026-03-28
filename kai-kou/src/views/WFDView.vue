@@ -103,7 +103,7 @@ import { onMounted, onUnmounted, ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import { supabase } from "@/lib/supabase";
-import { getRandomQuestion, getWFDAudioUrl } from "@/lib/questions";
+import { getRandomQuestion, getQuestionAudioUrl } from "@/lib/questions";
 import { usePracticeStore } from "@/stores/practice";
 import { useAuthStore } from "@/stores/auth";
 
@@ -138,7 +138,7 @@ function syncQuestionToStore() {
 
 function getAudioUrl(item) {
   if (!item) return "";
-  return String(item.audio_url || item.audioUrl || getWFDAudioUrl(item.id) || "").trim();
+  return String(getQuestionAudioUrl(item, "WFD") || "").trim();
 }
 
 function clearPlayTimer() {

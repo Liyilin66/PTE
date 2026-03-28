@@ -1,7 +1,7 @@
 ﻿<script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import NavBar from "@/components/NavBar.vue";
-import { fetchQuestions, getWFDAudioUrl } from "@/lib/questions";
+import { fetchQuestions, getQuestionAudioUrl } from "@/lib/questions";
 
 const questions = ref([]);
 const loading = ref(true);
@@ -27,7 +27,7 @@ const progressPercent = computed(() => {
 
 function getAudioUrl(question) {
   if (!question) return "";
-  return String(question.audio_url || question.audioUrl || getWFDAudioUrl(question.id) || "").trim();
+  return String(getQuestionAudioUrl(question, "WFD") || "").trim();
 }
 
 function clearQueueTimer() {

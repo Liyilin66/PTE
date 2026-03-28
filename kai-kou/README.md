@@ -26,6 +26,84 @@ VITE_APP_URL=http://localhost:5173
 
 You can use `.env.example` as a template.
 
+## WFD Audio De-risk Workflow (Google TTS)
+
+### Runtime Mapping (Current Frontend Behavior)
+
+WFD audio URL now resolves in this order:
+
+1. `audio_path` mapped to public storage URL:
+   `https://<supabase-url>/storage/v1/object/public/question-audio/<audio_path>`
+2. fallback `audio_url` only when `audio_path` is missing
+3. fallback by id:
+   `https://<supabase-url>/storage/v1/object/public/question-audio/wfd/<id>.mp3`
+
+This means you can keep `audio_path` like `wfd/WFD_001.mp3` if your uploaded file uses the same path.
+
+### Prerequisites
+
+1. Enable Google Cloud billing.
+2. Enable `Cloud Text-to-Speech API`.
+3. Create a service account with TTS permission and download JSON key.
+4. Set local credential env:
+   `GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\gcp-service-account.json`
+5. Prepare your source workbook:
+   `WFD_cleaned_with_wordcount_difficulty.xlsx` (sheet: `WFD`).
+
+### Install Dependencies
+
+```bash
+npm install
+```
+
+### Generate WFD MP3 Locally (Offline Batch)
+
+Default command:
+
+```bash
+npm run wfd:tts:generate
+```
+
+Recommended explicit command:
+
+```bash
+npm run wfd:tts:generate -- --inputFile "d:\Desktop\WFD_cleaned_with_wordcount_difficulty.xlsx" --sheetName WFD --outputDir "d:\PTE\wfd\audio" --outputQuestionFile "d:\PTE\wfd\WFD_with_generated_audio.xlsx" --reportFile "d:\PTE\wfd\tts_generation_report.json" --skipExisting true
+```
+
+Outputs:
+
+1. MP3 files under `outputDir` (preserving `audio_path` when present).
+2. New workbook (`WFD_with_generated_audio.xlsx` by default), never overwriting original.
+3. `tts_generation_report.json` with success/failure summary and failed ids.
+
+### Optional: Upload Generated Audio to Supabase Storage
+
+Required env:
+
+1. `SUPABASE_URL`
+2. `SUPABASE_SERVICE_ROLE_KEY`
+
+Run upload:
+
+```bash
+npm run wfd:audio:upload -- --inputFile "d:\PTE\wfd\WFD_with_generated_audio.xlsx" --audioDir "d:\PTE\wfd\audio" --bucket question-audio --storagePrefix "" --outputQuestionFile "d:\PTE\wfd\WFD_with_uploaded_audio.xlsx" --reportFile "d:\PTE\wfd\tts_upload_report.json"
+```
+
+Upload script will:
+
+1. Upload local MP3 files to Supabase Storage.
+2. Fill `audio_url` in exported workbook using public URL.
+3. Keep `audio_path` by default (set `WFD_UPLOAD_UPDATE_AUDIO_PATH=true` to rewrite).
+4. Generate `tts_upload_report.json`.
+
+### Verification Checklist
+
+1. Confirm report JSON has `failedCount = 0` (or inspect failed ids).
+2. Confirm exported workbook has:
+   `audio_path`, `audio_file_size_bytes`, `audio_duration_seconds`.
+3. Confirm uploaded objects are visible in bucket `question-audio`.
+4. Confirm WFD pages can play new audio by question id/path.
+
 ## Supabase Setup
 
 Run these SQL statements in Supabase SQL Editor:

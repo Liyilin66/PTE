@@ -7,16 +7,26 @@
     "dev": "vite",
     "dev:api": "node server.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "wfd:tts:test": "node scripts/test-google-tts.js",
+    "wfd:tts:test:rest": "node scripts/test-google-tts-rest.js",
+    "wfd:tts:generate": "node scripts/generate-wfd-tts.js",
+    "wfd:audio:upload": "node scripts/upload-wfd-audio-to-supabase.js",
+    "wfd:questions:upsert": "node scripts/upsert-wfd-questions.js"
   },
   "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.0",
     "@supabase/supabase-js": "^2.100.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "google-auth-library": "^10.5.0",
+    "music-metadata": "^11.12.3",
     "pinia": "^2.3.1",
+    "undici": "^7.16.0",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

@@ -1,0 +1,66 @@
+{
+  "generatedAt": "2026-03-28T09:24:15.578Z",
+  "config": {
+    "preferredInputFile": "D:\\PTE\\wfd\\WFD_cleaned_with_wordcount_difficulty.xlsx",
+    "fallbackInputFile": "D:\\Desktop\\WFD_cleaned_with_wordcount_difficulty.csv",
+    "selectedInputFile": "D:\\Desktop\\WFD_cleaned_with_wordcount_difficulty.csv",
+    "selectedInputSource": "fallback",
+    "sheetName": "Sheet1",
+    "dryRun": false,
+    "clearAudioUrl": true,
+    "strictAudioPathPrefix": true,
+    "chunkSize": 200,
+    "verifyAfterWrite": true,
+    "reportFile": "D:\\PTE\\wfd\\wfd_upsert_report.json"
+  },
+  "environment": {
+    "hasSupabaseUrl": true,
+    "keyType": "service_role"
+  },
+  "sourceStats": {
+    "totalRows": 173,
+    "sourceWfdRows": 173,
+    "skippedNonWfdCount": 0,
+    "skippedMissingIdCount": 0,
+    "skippedMissingContentCount": 0,
+    "duplicateIdCount": 0
+  },
+  "preparedStats": {
+    "preparedRowCount": 173,
+    "duplicateIds": [],
+    "writableColumns": [
+      "id",
+      "task_type",
+      "content",
+      "audio_path",
+      "audio_url",
+      "difficulty",
+      "word_count",
+      "is_active",
+      "audio_duration_seconds",
+      "audio_file_size_bytes"
+    ],
+    "expectedUpdateCount": 100,
+    "expectedInsertCount": 73
+  },
+  "execution": {
+    "attempted": true,
+    "batchCount": 1,
+    "upsertedCount": 173,
+    "failedBatchCount": 0,
+    "failedBatches": []
+  },
+  "verification": {
+    "attempted": true,
+    "totalWfdRows": 173,
+    "emptyAudioPathCount": 0,
+    "nonWfdPrefixAudioPathCount": 0,
+    "nonEmptyAudioUrlCount": 0,
+    "sampleProblemIds": [],
+    "error": ""
+  },
+  "errors": {
+    "existingRowsFetchError": "",
+    "schemaProbeError": ""
+  }
+}
