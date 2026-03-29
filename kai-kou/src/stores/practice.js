@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 const RA_MIN_SCORE = 10;
 const RA_MAX_SCORE = 90;
+const SCORE_API_TIMEOUT_MS = 15000;
 
 const TASKS = [
   {
@@ -125,6 +126,8 @@ export const usePracticeStore = defineStore("practice", {
       this.questionContent = questionContent || this.questionContent || "";
 
       const authStore = useAuthStore();
+      const normalizedTaskType = normalizeTaskType(taskType);
+      const normalizedQuestionId = questionId || this.currentQuestion?.id || "unknown";
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) {
         console.error("getSession error:", sessionError);
@@ -132,6 +135,15 @@ export const usePracticeStore = defineStore("practice", {
 
       const session = sessionData?.session || null;
       const token = session?.access_token || "";
+      const scoreApiStartedAt = getNowMs();
+      let scoreApiStatus = 0;
+      let remainingDeducted = false;
+
+      function decrementRemainingOnce() {
+        if (remainingDeducted) return;
+        authStore.decrementRemaining();
+        remainingDeducted = true;
+      }
 
       if (!token) {
         await authStore.logout();
@@ -140,21 +152,43 @@ export const usePracticeStore = defineStore("practice", {
       }
 
       try {
-        const response = await fetch("/api/score", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            taskType,
-            transcript,
-            questionContent: this.questionContent,
-            question_id: questionId || this.currentQuestion?.id || "unknown"
-          })
-        });
+        const scoreAbortController = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timeoutId = scoreAbortController
+          ? setTimeout(() => {
+              scoreAbortController.abort();
+            }, SCORE_API_TIMEOUT_MS)
+          : null;
 
+        let response;
+        try {
+          response = await fetch("/api/score", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              taskType,
+              transcript,
+              questionContent: this.questionContent,
+              question_id: normalizedQuestionId
+            }),
+            signal: scoreAbortController?.signal
+          });
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+
+        scoreApiStatus = Number(response?.status || 0);
+        const scoreApiMs = getElapsedMs(scoreApiStartedAt);
         const data = await safeReadJson(response);
+        console.info("[practice:score] score_api_done", {
+          taskType: normalizedTaskType,
+          questionId: normalizedQuestionId,
+          scoreApiMs,
+          scoreErrorCode: "",
+          status: scoreApiStatus
+        });
 
         if (
           (response.status === 403 || response.status === 429) &&
@@ -176,41 +210,89 @@ export const usePracticeStore = defineStore("practice", {
           return null;
         }
 
+        let normalizedResult = null;
         if (!response.ok) {
           if (data && typeof data === "object" && data.scores) {
-            this.result = normalizeScoreData(data, taskType);
-            this.phase = "done";
-            return this.result;
+            normalizedResult = normalizeScoreData(data, taskType);
+          } else {
+            const responseError = new Error(`Score API failed with status ${response.status}`);
+            responseError.code = "SCORE_API_HTTP_ERROR";
+            throw responseError;
           }
-          throw new Error(`Score API failed with status ${response.status}`);
         }
 
-        this.result = normalizeScoreData(data || {}, taskType);
+        if (!normalizedResult) {
+          normalizedResult = normalizeScoreData(data || {}, taskType);
+        }
+
+        this.result = {
+          ...normalizedResult,
+          meta: {
+            scoreApiMs,
+            scoreErrorCode: "",
+            status: scoreApiStatus
+          }
+        };
         this.phase = "done";
+        decrementRemainingOnce();
 
         if (session?.user?.id) {
-          const { error: insertError } = await supabase.from("practice_logs").insert({
+          const payload = {
             user_id: session.user.id,
             task_type: taskType,
-            question_id: questionId || this.currentQuestion?.id || "unknown",
+            question_id: normalizedQuestionId,
             transcript: this.transcript,
             score_json: this.result.scores || {},
             feedback: this.result.feedback || ""
-          });
+          };
 
-          if (insertError) {
-            console.warn("practice_logs insert error:", insertError);
-          } else {
-            authStore.decrementRemaining();
-          }
-        } else {
-          authStore.decrementRemaining();
+          void (async () => {
+            const logStartedAt = getNowMs();
+            const { error: insertError } = await supabase.from("practice_logs").insert(payload);
+            const practiceLogMs = getElapsedMs(logStartedAt);
+
+            if (insertError) {
+              console.warn("practice_logs insert error:", insertError, {
+                taskType: normalizedTaskType,
+                questionId: normalizedQuestionId,
+                practiceLogMs
+              });
+              return;
+            }
+
+            console.info("[practice:score] practice_logs_insert_done", {
+              taskType: normalizedTaskType,
+              questionId: normalizedQuestionId,
+              practiceLogMs
+            });
+          })();
         }
 
         return this.result;
       } catch (error) {
-        console.error("Score API failed:", error);
-        this.result = buildFallbackResult(taskType);
+        const scoreApiMs = getElapsedMs(scoreApiStartedAt);
+        const scoreErrorCode =
+          error?.name === "AbortError"
+            ? "SCORE_API_TIMEOUT"
+            : error?.code === "SCORE_API_HTTP_ERROR"
+              ? "SCORE_API_HTTP_ERROR"
+              : "SCORE_API_FAILED";
+        console.error("Score API failed:", {
+          error,
+          taskType: normalizedTaskType,
+          questionId: normalizedQuestionId,
+          scoreApiMs,
+          scoreErrorCode,
+          status: scoreApiStatus
+        });
+        this.result = {
+          ...buildFallbackResult(taskType),
+          meta: {
+            scoreApiMs,
+            scoreErrorCode,
+            status: scoreApiStatus
+          }
+        };
         this.phase = "done";
         return this.result;
       }
@@ -303,6 +385,17 @@ function normalizeKeywords(keywords) {
       hit: Boolean(item?.hit)
     }))
     .filter((item) => item.word);
+}
+
+function getNowMs() {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function getElapsedMs(startAt) {
+  return Math.max(0, Math.round(getNowMs() - startAt));
 }
 
 async function safeReadJson(response) {
