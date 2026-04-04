@@ -27,3 +27,4 @@ db/*.db-*
 *.sln
 *.sw?
 .vercel
+.omx/
