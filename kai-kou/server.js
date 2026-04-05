@@ -6,6 +6,7 @@ import questionsHandler from "./api/questions.js";
 import scoreHandler from "./api/score.js";
 import paymentCreateHandler from "./api/payment-create.js";
 import paymentWebhookHandler from "./api/payment-webhook.js";
+import llmHealthHandler from "./api/debug/llm-health.js";
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(express.json());
 
 app.options("/api/score", scoreHandler);
 app.post("/api/score", scoreHandler);
+app.get("/api/debug/llm-health", llmHealthHandler);
 app.get("/api/questions", questionsHandler);
 app.get("/api/questions/:type", questionsHandler);
 app.post("/api/payment/create", paymentCreateHandler);

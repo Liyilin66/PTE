@@ -1,0 +1,5 @@
+{
+  "last_turn_at": "2026-04-05T13:03:06.872Z",
+  "turn_count": 7,
+  "last_agent_output": "测试已完成，结果如下（基于后端 `api/score` handler 的自动化调用与可控 mock，验证 fallback 逻辑与日志字段）。\n\n1. `normal_gemini`：通过  \n- "
+}

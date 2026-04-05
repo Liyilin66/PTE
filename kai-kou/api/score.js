@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { generateScoreTextWithFallback } from "../backend/llm/score-llm-service.js";
 
-const modelName = "gemini-2.5-flash-lite";
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 
@@ -43,18 +43,22 @@ export default async function handler(req, res) {
   const normalizedTaskType = normalizeTaskType(taskType);
   const safeTranscript = typeof transcript === "string" ? transcript : "";
   const trimmedTranscript = safeTranscript.trim();
+  const requestId = createRequestId(req);
 
   if (!trimmedTranscript) {
     if (normalizedTaskType === "RA") {
-      return res.status(200).json(
-        finalizeRAScore(
-          { responseType: "silence" },
-          {
-            transcript: safeTranscript,
-            questionContent
-          }
-        )
+      const raSilenceResult = finalizeRAScore(
+        { responseType: "silence" },
+        {
+          transcript: safeTranscript,
+          questionContent
+        }
       );
+      return res.status(200).json({
+        ...raSilenceResult,
+        provider_used: "none",
+        fallback_reason: null
+      });
     }
 
     return res.status(400).json({
@@ -113,32 +117,80 @@ export default async function handler(req, res) {
     }
 
     const prompt = buildPrompt(normalizedTaskType, safeTranscript, questionContent);
-    const text = await generateContentWithRest(prompt, process.env.GEMINI_API_KEY);
-    const parsedPayload = parseModelJson(text, { taskType: normalizedTaskType });
-    const parsed = normalizeResult(parsedPayload, {
-      taskType: normalizedTaskType,
-      transcript: safeTranscript,
-      questionContent
+    const llmResult = await generateScoreTextWithFallback({ prompt });
+    const latency = normalizeLatency(llmResult?.latency);
+
+    let parsedPayload;
+    try {
+      parsedPayload = parseModelJson(llmResult?.raw_text, { taskType: normalizedTaskType });
+    } catch (error) {
+      error.error_stage = "response_parse";
+      error.provider_used = llmResult?.provider_used || "gemini";
+      error.fallback_reason = llmResult?.fallback_reason ?? null;
+      error.raw_error_type = error?.raw_error_type || "model_json_parse_failed";
+      error.latency = latency;
+      throw error;
+    }
+
+    let parsed;
+    try {
+      parsed = normalizeResult(parsedPayload, {
+        taskType: normalizedTaskType,
+        transcript: safeTranscript,
+        questionContent
+      });
+    } catch (error) {
+      error.error_stage = "response_normalize";
+      error.provider_used = llmResult?.provider_used || "gemini";
+      error.fallback_reason = llmResult?.fallback_reason ?? null;
+      error.raw_error_type = error?.raw_error_type || "score_normalize_failed";
+      error.latency = latency;
+      throw error;
+    }
+
+    const responsePayload = {
+      ...parsed,
+      provider_used: llmResult?.provider_used || "gemini",
+      fallback_reason: llmResult?.fallback_reason ?? null
+    };
+
+    logScoreEvent("score_success", {
+      request_id: requestId,
+      provider_used: responsePayload.provider_used,
+      fallback_reason: responsePayload.fallback_reason,
+      raw_error_type: llmResult?.raw_error_type || null,
+      error_stage: "",
+      latency_total_ms: latency.total_ms,
+      latency_primary_ms: latency.primary_ms,
+      latency_fallback_ms: latency.fallback_ms
     });
 
-    return res.json(parsed);
+    return res.json(responsePayload);
   } catch (error) {
-    console.error("Gemini error:", error);
+    const latency = normalizeLatency(error?.latency);
+    const providerUsed = `${error?.provider_used || error?.provider || "gemini"}`;
+    const fallbackReason = error?.fallback_reason ?? null;
+    const rawErrorType = error?.raw_error_type || "ai_error_unknown";
+    const errorStage = error?.error_stage || "provider_call";
 
-    if (isQuotaError(error)) {
-      return res.status(429).json({
-        error: "ai_quota_exceeded",
-        scores: { pronunciation: 60, fluency: 60, content: 60 },
-        feedback: "AI 配额暂时已用完，当前先给你估算分数。稍后再试，结果会更准确。",
-        overall: 60
-      });
-    }
+    logScoreEvent("score_failed", {
+      request_id: requestId,
+      provider_used: providerUsed,
+      fallback_reason: fallbackReason,
+      raw_error_type: rawErrorType,
+      error_stage: errorStage,
+      latency_total_ms: latency.total_ms,
+      latency_primary_ms: latency.primary_ms,
+      latency_fallback_ms: latency.fallback_ms
+    });
 
     return res.status(500).json({
       error: "ai_error",
       scores: { pronunciation: 60, fluency: 60, content: 60 },
       feedback: "AI 分析暂时遇到问题，这是估算分数，请稍后重试。",
-      overall: 60
+      overall: 60,
+      provider_used: providerUsed,
+      fallback_reason: fallbackReason
     });
   }
 }
@@ -200,58 +252,30 @@ function buildStatusText(accessStatus, trialDaysLeft) {
   return "未开通";
 }
 
-async function generateContentWithRest(prompt, key) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(key)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    }
-  );
-
-  const data = await safeReadJson(response);
-  if (!response.ok) {
-    const error = new Error(extractGeminiErrorMessage(data) || `Gemini request failed with status ${response.status}`);
-    error.status = response.status;
-    error.statusText = response.statusText;
-    error.details = data;
-    throw error;
-  }
-
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== "string" || !text.trim()) {
-    const error = new Error("Gemini returned empty content");
-    error.status = 502;
-    error.details = data;
-    throw error;
-  }
-
-  return text;
+function createRequestId(req) {
+  const existingId = `${req.headers?.["x-request-id"] || ""}`.trim();
+  if (existingId) return existingId;
+  return `score_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function safeReadJson(response) {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
+function normalizeLatency(latency) {
+  return {
+    total_ms: Math.max(0, Math.round(Number(latency?.total_ms || 0))),
+    primary_ms: Math.max(0, Math.round(Number(latency?.primary_ms || 0))),
+    fallback_ms: Math.max(0, Math.round(Number(latency?.fallback_ms || 0)))
+  };
 }
 
-function extractGeminiErrorMessage(data) {
-  if (typeof data?.error?.message === "string" && data.error.message.trim()) {
-    return data.error.message.trim();
+function logScoreEvent(event, payload) {
+  const entry = {
+    event,
+    ...payload
+  };
+  if (event === "score_failed") {
+    console.error("[score:llm]", entry);
+    return;
   }
-  return "";
-}
-
-function isQuotaError(error) {
-  if (Number(error?.status) === 429) return true;
-  const message = `${error?.message || ""}`.toLowerCase();
-  const statusText = `${error?.statusText || ""}`.toLowerCase();
-  return message.includes("quota") || message.includes("too many requests") || statusText.includes("too many requests");
+  console.info("[score:llm]", entry);
 }
 
 function normalizeTaskType(taskType) {
@@ -649,3 +673,4 @@ Respond ONLY with this JSON:
 
   return prompts[taskType] || prompts.RA;
 }
+
