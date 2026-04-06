@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-05T13:03:06.872Z",
-  "turn_count": 7,
-  "last_agent_output": "测试已完成，结果如下（基于后端 `api/score` handler 的自动化调用与可控 mock，验证 fallback 逻辑与日志字段）。\n\n1. `normal_gemini`：通过  \n- "
+  "last_turn_at": "2026-04-06T11:31:28.246Z",
+  "turn_count": 29,
+  "last_agent_output": "**必改问题**\n1. 未发现必改问题。  \n竞态修复已覆盖关键路径：  \n- 战绩摘要双校验： [RAView.vue:312](d:/PTE/kai-kou/src/views/RAView.vu"
 }

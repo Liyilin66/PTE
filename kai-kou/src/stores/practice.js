@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 const RA_MIN_SCORE = 10;
 const RA_MAX_SCORE = 90;
 const SCORE_API_TIMEOUT_MS = 15000;
+const PRACTICE_AUDIO_BUCKET = "practice-audio";
 
 const TASKS = [
   {
@@ -237,17 +238,36 @@ export const usePracticeStore = defineStore("practice", {
         decrementRemainingOnce();
 
         if (session?.user?.id) {
-          const payload = {
-            user_id: session.user.id,
-            task_type: taskType,
-            question_id: normalizedQuestionId,
-            transcript: this.transcript,
-            score_json: this.result.scores || {},
-            feedback: this.result.feedback || ""
-          };
+          const currentTranscript = this.transcript;
+          const currentQuestionContent = this.questionContent;
+          const currentResult = this.result;
+          const currentAudioBlob = this.audioBlob;
+          const currentTaskType = normalizedTaskType;
+          const currentUserId = session.user.id;
 
           void (async () => {
             const logStartedAt = getNowMs();
+            const audioMeta = await uploadPracticeAudioForRA({
+              taskType: currentTaskType,
+              userId: currentUserId,
+              questionId: normalizedQuestionId,
+              blob: currentAudioBlob
+            });
+            const scoreJson = buildPracticeLogScoreJson({
+              taskType: currentTaskType,
+              result: currentResult,
+              questionId: normalizedQuestionId,
+              questionContent: currentQuestionContent,
+              audioMeta
+            });
+            const payload = {
+              user_id: currentUserId,
+              task_type: currentTaskType,
+              question_id: normalizedQuestionId,
+              transcript: currentTranscript,
+              score_json: scoreJson,
+              feedback: currentResult?.feedback || ""
+            };
             const { error: insertError } = await supabase.from("practice_logs").insert(payload);
             const practiceLogMs = getElapsedMs(logStartedAt);
 
@@ -263,7 +283,8 @@ export const usePracticeStore = defineStore("practice", {
             console.info("[practice:score] practice_logs_insert_done", {
               taskType: normalizedTaskType,
               questionId: normalizedQuestionId,
-              practiceLogMs
+              practiceLogMs,
+              hasAudio: Boolean(audioMeta?.path)
             });
           })();
         }
@@ -396,6 +417,103 @@ function getNowMs() {
 
 function getElapsedMs(startAt) {
   return Math.max(0, Math.round(getNowMs() - startAt));
+}
+
+function buildPracticeLogScoreJson({ taskType, result, questionId, questionContent, audioMeta }) {
+  const normalizedTaskType = normalizeTaskType(taskType);
+  if (normalizedTaskType !== "RA") {
+    return result?.scores || {};
+  }
+
+  const pronunciation = clampRAScore(result?.scores?.pronunciation);
+  const fluency = clampRAScore(result?.scores?.fluency);
+  const content = clampRAScore(result?.scores?.content);
+  const overall = clampRAOverall(result?.overall);
+  const snapshotContent = `${questionContent || ""}`.trim();
+
+  return {
+    scores: {
+      pronunciation,
+      fluency,
+      content,
+      overall
+    },
+    audio: audioMeta || null,
+    questionSnapshot: {
+      id: `${questionId || "unknown"}`.trim() || "unknown",
+      content: snapshotContent,
+      taskType: "RA"
+    }
+  };
+}
+
+async function uploadPracticeAudioForRA({ taskType, userId, questionId, blob }) {
+  const normalizedTaskType = normalizeTaskType(taskType);
+  if (normalizedTaskType !== "RA") return null;
+  if (!userId) return null;
+  if (!blob || Number(blob?.size || 0) <= 0) return null;
+
+  const mimeType = normalizeMimeType(blob?.type);
+  const ext = getAudioExtByMimeType(mimeType);
+  const safeQuestionId = sanitizePathSegment(questionId || "unknown");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const randomSuffix = Math.random().toString(36).slice(2, 8);
+  const path = `ra/${userId}/${timestamp}-${safeQuestionId}-${randomSuffix}.${ext}`;
+
+  try {
+    const { error } = await supabase.storage.from(PRACTICE_AUDIO_BUCKET).upload(path, blob, {
+      contentType: mimeType || "application/octet-stream",
+      upsert: false
+    });
+
+    if (error) {
+      console.warn("RA audio upload failed:", error, {
+        path,
+        mimeType,
+        size: Number(blob?.size || 0)
+      });
+      return null;
+    }
+
+    return {
+      bucket: PRACTICE_AUDIO_BUCKET,
+      path,
+      mimeType: mimeType || "",
+      size: Number(blob?.size || 0),
+      uploadedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.warn("RA audio upload error:", error, {
+      path,
+      mimeType,
+      size: Number(blob?.size || 0)
+    });
+    return null;
+  }
+}
+
+function sanitizePathSegment(value) {
+  const cleaned = `${value || ""}`
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+
+  return cleaned || "unknown";
+}
+
+function normalizeMimeType(value) {
+  return `${value || ""}`.trim().toLowerCase();
+}
+
+function getAudioExtByMimeType(mimeType) {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  if (mimeType.includes("aac")) return "aac";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
 }
 
 async function safeReadJson(response) {

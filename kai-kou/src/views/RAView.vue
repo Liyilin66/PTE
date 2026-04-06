@@ -1,11 +1,17 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import OrangeButton from "@/components/OrangeButton.vue";
 import RecordingWave from "@/components/RecordingWave.vue";
 import TimerBar from "@/components/TimerBar.vue";
 import { getRandomQuestion } from "@/lib/questions";
+import {
+  fetchRAHistoryByQuestion,
+  fetchRAQuestionPerformance,
+  getRAPlaybackUrl,
+  hasRAAudio
+} from "@/lib/ra-history";
 import { useRecorder } from "@/composables/useRecorder";
 import { useTimer } from "@/composables/useTimer";
 import { useAuthStore } from "@/stores/auth";
@@ -30,12 +36,24 @@ const phase = computed(() => practiceStore.phase);
 const questionLoading = ref(true);
 const question = ref({ ...defaultQuestion });
 
-const wordCount = computed(() => (question.value?.content || "").split(/\s+/).filter(Boolean).length);
+const wordCount = computed(() => getQuestionWordCountValue(question.value));
+const estimatedDurationSeconds = computed(() => clampNumber(Math.round(wordCount.value / 2.6), 18, 45));
 const difficultyLabel = computed(() => {
   const difficulty = Number(question.value?.difficulty || 2);
   if (difficulty <= 1) return "简单";
   if (difficulty >= 3) return "困难";
   return "中等";
+});
+const difficultyPillClass = computed(() => {
+  const difficulty = Number(question.value?.difficulty || 2);
+  if (difficulty <= 1) return "bg-green-100 text-green-700";
+  if (difficulty >= 3) return "bg-red-100 text-red-600";
+  return "bg-orange/15 text-orange";
+});
+const readingRhythmHint = computed(() => {
+  if (wordCount.value <= 25) return "句子较短，开口果断，结尾稍收稳。";
+  if (wordCount.value <= 45) return "中等长度，按意群停顿，保持稳定语速。";
+  return "句子偏长，前半句放慢，逗号处短停后再推进。";
 });
 
 const recordingSeconds = ref(0);
@@ -94,11 +112,6 @@ const tips = [
   "保持稳定语速，不要因为紧张突然加快。"
 ];
 
-const historicalStats = {
-  bestScore: 79,
-  totalAttempts: 12
-};
-
 let unmounted = false;
 const isSubmitting = ref(false);
 const isStartingRecording = ref(false);
@@ -115,6 +128,28 @@ const canSubmitEvaluation = computed(() => (
   && !isSubmitting.value
 ));
 const startFailureMessage = ref("");
+const showQuestionHistoryPanel = ref(false);
+const questionHistoryLoading = ref(false);
+const questionHistoryError = ref("");
+const questionHistoryRecords = ref([]);
+const questionPerformanceLoading = ref(false);
+const questionPerformanceError = ref("");
+const questionPerformance = ref(createEmptyQuestionPerformance());
+const historyPlaybackByRecordId = reactive({});
+let questionPerformanceRequestSeq = 0;
+let questionHistoryRequestSeq = 0;
+
+const practiceRecommendation = computed(() => getPracticeRecommendationCopy(questionPerformance.value));
+const performanceLevelClass = computed(() => {
+  const levelTag = `${questionPerformance.value?.levelTag || ""}`;
+  if (levelTag === "优秀") return "bg-green-100 text-green-700";
+  if (levelTag === "良好") return "bg-orange/15 text-orange";
+  return "bg-slate-100 text-slate-600";
+});
+const lastScoreText = computed(() => {
+  if (!questionPerformance.value?.hasHistory) return "暂无";
+  return `${Number(questionPerformance.value?.lastScore || 0)} 分`;
+});
 const ERROR_TEXT = {
   SPEECH_RECOGNITION_DISABLED_HUAWEI: "检测到华为设备，已自动切换到兼容录音模式；实时字幕可能不可用，但可正常录音和提交评测。",
   MIC_PERMISSION_DENIED: "麦克风权限未开启，请允许浏览器使用麦克风后重试。",
@@ -158,6 +193,222 @@ function getTranscriptWordCount(text) {
 function canScoreWithTranscript(text) {
   const normalized = `${text || ""}`.trim();
   return getTranscriptWordCount(normalized) >= MIN_TRANSCRIPT_WORDS_FOR_SCORE && normalized.length >= MIN_TRANSCRIPT_CHARS_FOR_SCORE;
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, Number(value || 0)));
+}
+
+function getQuestionWordCountValue(currentQuestion) {
+  const fromQuestion = Number(currentQuestion?.word_count ?? currentQuestion?.wordCount);
+  if (Number.isFinite(fromQuestion) && fromQuestion > 0) return Math.round(fromQuestion);
+  return `${currentQuestion?.content || ""}`.split(/\s+/).filter(Boolean).length;
+}
+
+function createEmptyQuestionPerformance() {
+  return {
+    hasHistory: false,
+    bestScore: 0,
+    lastScore: null,
+    totalAttempts: 0,
+    levelTag: "待提升"
+  };
+}
+
+function normalizeQuestionPerformance(payload) {
+  const next = payload && typeof payload === "object" ? payload : {};
+  const hasHistory = Boolean(next.hasHistory);
+  const bestScore = Number.isFinite(Number(next.bestScore))
+    ? clampNumber(Math.round(Number(next.bestScore)), 0, 100)
+    : 0;
+  const lastScore = Number.isFinite(Number(next.lastScore))
+    ? clampNumber(Math.round(Number(next.lastScore)), 0, 100)
+    : null;
+  const totalAttempts = Number.isFinite(Number(next.totalAttempts))
+    ? Math.max(0, Math.floor(Number(next.totalAttempts)))
+    : 0;
+
+  let levelTag = `${next.levelTag || ""}`.trim();
+  if (!levelTag) {
+    if (bestScore >= 75) levelTag = "优秀";
+    else if (bestScore >= 60) levelTag = "良好";
+    else levelTag = "待提升";
+  }
+
+  return {
+    hasHistory,
+    bestScore,
+    lastScore,
+    totalAttempts,
+    levelTag
+  };
+}
+
+function getPracticeRecommendationCopy(stats) {
+  const hasHistory = Boolean(stats?.hasHistory);
+  const bestScore = Number(stats?.bestScore || 0);
+  const lastScore = Number(stats?.lastScore || 0);
+  const totalAttempts = Number(stats?.totalAttempts || 0);
+
+  if (!hasHistory) return "首次练习，先打基准分。";
+  if (totalAttempts < 3) return "建议再刷 1-2 次看稳定性。";
+  if (bestScore < 60) return "建议继续刷本题。";
+  if (bestScore < 75) return "建议冲到 75+。";
+  if (lastScore >= 75) return "可换新题。";
+  return "建议再刷 1 次巩固。";
+}
+
+function normalizeHistoryRecordId(value) {
+  const id = `${value || ""}`.trim();
+  return id || "unknown";
+}
+
+function getHistoryPlaybackState(recordId) {
+  const id = normalizeHistoryRecordId(recordId);
+  if (!historyPlaybackByRecordId[id]) {
+    historyPlaybackByRecordId[id] = {
+      url: "",
+      loading: false,
+      error: ""
+    };
+  }
+  return historyPlaybackByRecordId[id];
+}
+
+function clearHistoryPlaybackState() {
+  for (const key of Object.keys(historyPlaybackByRecordId)) {
+    delete historyPlaybackByRecordId[key];
+  }
+}
+
+function resetQuestionHistoryState() {
+  questionHistoryRequestSeq += 1;
+  showQuestionHistoryPanel.value = false;
+  questionHistoryLoading.value = false;
+  questionHistoryError.value = "";
+  questionHistoryRecords.value = [];
+  clearHistoryPlaybackState();
+}
+
+function resetQuestionPerformanceState() {
+  questionPerformanceRequestSeq += 1;
+  questionPerformanceLoading.value = false;
+  questionPerformanceError.value = "";
+  questionPerformance.value = createEmptyQuestionPerformance();
+}
+
+function formatHistoryDateTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "-";
+  return date.toLocaleString();
+}
+
+function getHistoryQuestionText(record) {
+  const fromRecord = `${record?.questionContent || ""}`.trim();
+  if (fromRecord) return fromRecord;
+  return `${question.value?.content || ""}`.trim();
+}
+
+async function loadCurrentQuestionPerformance() {
+  const currentQuestionId = `${question.value?.id || ""}`.trim();
+  const requestId = ++questionPerformanceRequestSeq;
+  questionPerformanceLoading.value = true;
+  questionPerformanceError.value = "";
+  questionPerformance.value = createEmptyQuestionPerformance();
+
+  if (!currentQuestionId) {
+    if (requestId === questionPerformanceRequestSeq) {
+      questionPerformanceLoading.value = false;
+    }
+    return;
+  }
+
+  try {
+    const payload = await fetchRAQuestionPerformance(currentQuestionId);
+    if (requestId !== questionPerformanceRequestSeq) return;
+    if (`${question.value?.id || ""}`.trim() !== currentQuestionId) return;
+    questionPerformance.value = normalizeQuestionPerformance(payload);
+  } catch (error) {
+    if (requestId !== questionPerformanceRequestSeq) return;
+    if (`${question.value?.id || ""}`.trim() !== currentQuestionId) return;
+    console.warn("RA per-question performance load failed:", error, {
+      questionId: currentQuestionId
+    });
+    questionPerformanceError.value = "战绩加载失败，已展示默认状态。";
+    questionPerformance.value = createEmptyQuestionPerformance();
+  } finally {
+    if (requestId === questionPerformanceRequestSeq) {
+      questionPerformanceLoading.value = false;
+    }
+  }
+}
+
+async function loadCurrentQuestionHistory() {
+  const currentQuestionId = `${question.value?.id || ""}`.trim();
+  const requestId = ++questionHistoryRequestSeq;
+  if (!currentQuestionId) {
+    if (requestId === questionHistoryRequestSeq) {
+      questionHistoryRecords.value = [];
+      questionHistoryError.value = "Current question is not ready yet.";
+      questionHistoryLoading.value = false;
+    }
+    return;
+  }
+
+  questionHistoryLoading.value = true;
+  questionHistoryError.value = "";
+  clearHistoryPlaybackState();
+
+  try {
+    const records = await fetchRAHistoryByQuestion(currentQuestionId);
+    if (requestId !== questionHistoryRequestSeq) return;
+    if (`${question.value?.id || ""}`.trim() !== currentQuestionId) return;
+    questionHistoryRecords.value = records;
+  } catch (error) {
+    if (requestId !== questionHistoryRequestSeq) return;
+    if (`${question.value?.id || ""}`.trim() !== currentQuestionId) return;
+    console.warn("RA per-question history load failed:", error, {
+      questionId: currentQuestionId
+    });
+    questionHistoryRecords.value = [];
+    questionHistoryError.value = "Failed to load history. Please retry.";
+  } finally {
+    if (requestId === questionHistoryRequestSeq) {
+      questionHistoryLoading.value = false;
+    }
+  }
+}
+
+async function toggleQuestionHistoryPanel() {
+  showQuestionHistoryPanel.value = !showQuestionHistoryPanel.value;
+  if (!showQuestionHistoryPanel.value) return;
+  await loadCurrentQuestionHistory();
+}
+
+async function refreshQuestionHistory() {
+  if (!showQuestionHistoryPanel.value) {
+    showQuestionHistoryPanel.value = true;
+  }
+  await loadCurrentQuestionHistory();
+}
+
+async function loadHistoryPlayback(record) {
+  if (!hasRAAudio(record)) return;
+
+  const state = getHistoryPlaybackState(record?.id);
+  if (state.loading) return;
+  state.loading = true;
+  state.error = "";
+  const signedUrl = await getRAPlaybackUrl(record, 60 * 20);
+
+  if (!signedUrl) {
+    state.loading = false;
+    state.error = "Failed to get recording link. Please retry.";
+    return;
+  }
+
+  state.url = signedUrl;
+  state.loading = false;
 }
 
 function normalizeAttemptId(value) {
@@ -368,6 +619,21 @@ watch(
       previewAudio.load();
     } catch {
       // no-op
+    }
+  }
+);
+
+watch(
+  () => `${question.value?.id || ""}`.trim(),
+  (nextQuestionId, prevQuestionId) => {
+    if (nextQuestionId === prevQuestionId) return;
+    const reopenPanel = showQuestionHistoryPanel.value;
+    resetQuestionHistoryState();
+    resetQuestionPerformanceState();
+    void loadCurrentQuestionPerformance();
+    if (reopenPanel) {
+      showQuestionHistoryPanel.value = true;
+      void loadCurrentQuestionHistory();
     }
   }
 );
@@ -1011,6 +1277,88 @@ async function startRecordingNow() {
           <p class="text-sm text-amber-700">{{ speechOptionalNotice }}</p>
         </section>
 
+        <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-4 rounded-xl border bg-white p-4 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm font-semibold text-navy">This Question History</p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800"
+                @click="toggleQuestionHistoryPanel"
+              >
+                {{ showQuestionHistoryPanel ? "Hide History" : "Show History" }}
+              </button>
+              <button
+                v-if="showQuestionHistoryPanel"
+                type="button"
+                class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800"
+                @click="refreshQuestionHistory"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div v-if="showQuestionHistoryPanel" class="mt-3 space-y-3">
+            <p v-if="questionHistoryLoading" class="text-xs text-slate-500">Loading latest 10 records...</p>
+            <p v-else-if="questionHistoryError" class="text-xs text-red-600">{{ questionHistoryError }}</p>
+            <p v-else-if="!questionHistoryRecords.length" class="text-xs text-slate-500">No history records for this question yet.</p>
+
+            <article
+              v-for="record in questionHistoryRecords"
+              v-else
+              :key="record.id"
+              class="rounded-lg border border-slate-200 bg-slate-50 p-3"
+            >
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs text-slate-500">{{ formatHistoryDateTime(record.createdAt) }}</p>
+                <p class="text-sm font-semibold text-navy">Overall {{ Number(record.overall || 0) }}</p>
+              </div>
+
+              <p class="mb-2 text-xs leading-relaxed text-slate-600 break-words">
+                {{ getHistoryQuestionText(record) || "(No question snapshot available.)" }}
+              </p>
+
+              <div class="mb-2 grid grid-cols-3 gap-2 text-xs text-slate-700">
+                <p>P {{ Number(record.scores?.pronunciation || 0) }}</p>
+                <p>F {{ Number(record.scores?.fluency || 0) }}</p>
+                <p>C {{ Number(record.scores?.content || 0) }}</p>
+              </div>
+
+              <p class="mb-2 text-xs leading-relaxed text-slate-700 break-words">
+                {{ record.feedback || "-" }}
+              </p>
+
+              <p class="mb-2 text-xs italic leading-relaxed text-slate-600 break-words">
+                "{{ record.transcript || "(No transcript available.)" }}"
+              </p>
+
+              <div v-if="hasRAAudio(record)" class="space-y-2">
+                <audio
+                  v-if="getHistoryPlaybackState(record.id).url"
+                  class="w-full"
+                  controls
+                  preload="none"
+                  :src="getHistoryPlaybackState(record.id).url"
+                />
+
+                <button
+                  type="button"
+                  class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800"
+                  :disabled="getHistoryPlaybackState(record.id).loading"
+                  @click="loadHistoryPlayback(record)"
+                >
+                  {{ getHistoryPlaybackState(record.id).url ? "Refresh Recording Link" : "Load Recording" }}
+                </button>
+
+                <p v-if="getHistoryPlaybackState(record.id).loading" class="text-xs text-slate-500">Loading playback link...</p>
+                <p v-if="getHistoryPlaybackState(record.id).error" class="text-xs text-red-600">{{ getHistoryPlaybackState(record.id).error }}</p>
+              </div>
+              <p v-else class="text-xs text-slate-500">No recording available for this attempt.</p>
+            </article>
+          </div>
+        </section>
+
         <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-4 rounded-xl border-l-4 border-orange bg-white p-4 shadow-sm">
           <p class="mb-2 text-sm font-semibold text-navy">朗读提示</p>
           <ul class="space-y-1 text-sm text-muted">
@@ -1018,18 +1366,95 @@ async function startRecordingNow() {
           </ul>
         </section>
 
-        <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <article class="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p class="text-xs text-muted">难度</p>
-            <p class="mt-1 font-bold text-navy">{{ difficultyLabel }}</p>
+        <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.8fr]">
+          <article class="rounded-2xl border border-orange/20 bg-gradient-to-br from-orange/10 via-white to-white p-4 shadow-sm">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-orange">题目情报</p>
+                <p class="mt-1 text-base font-semibold text-navy">先看清难度、词数和节奏</p>
+              </div>
+              <span class="rounded-full px-3 py-1 text-xs font-semibold" :class="difficultyPillClass">
+                {{ difficultyLabel }}
+              </span>
+            </div>
+
+            <div class="mt-4 grid grid-cols-3 gap-2">
+              <div class="rounded-xl bg-white/90 p-3">
+                <p class="text-[11px] text-muted">难度</p>
+                <p class="mt-1 text-sm font-semibold text-navy">{{ difficultyLabel }}</p>
+              </div>
+              <div class="rounded-xl bg-white/90 p-3">
+                <p class="text-[11px] text-muted">词数</p>
+                <p class="mt-1 text-sm font-semibold text-navy">{{ wordCount }} 词</p>
+              </div>
+              <div class="rounded-xl bg-white/90 p-3">
+                <p class="text-[11px] text-muted">预计用时</p>
+                <p class="mt-1 text-sm font-semibold text-navy">约 {{ estimatedDurationSeconds }} 秒</p>
+              </div>
+            </div>
+
+            <p class="mt-3 rounded-xl bg-white/90 px-3 py-2 text-xs text-slate-600">
+              阅读节奏：{{ readingRhythmHint }}
+            </p>
           </article>
-          <article class="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p class="text-xs text-muted">预计用时</p>
-            <p class="mt-1 font-bold text-navy">约 25 秒</p>
-          </article>
-          <article class="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p class="text-xs text-muted">词数</p>
-            <p class="mt-1 font-bold text-navy">{{ wordCount }} 词</p>
+
+          <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">我的战绩</p>
+                <p class="mt-1 text-base font-semibold text-navy">这题值不值得继续刷</p>
+              </div>
+              <span
+                v-if="questionPerformance.hasHistory"
+                class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                :class="performanceLevelClass"
+              >
+                {{ questionPerformance.levelTag }}
+              </span>
+              <span v-else class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">首练</span>
+            </div>
+
+            <div v-if="questionPerformanceLoading" class="mt-4 space-y-2">
+              <div class="h-8 w-24 animate-pulse rounded bg-slate-200" />
+              <div class="h-4 w-full animate-pulse rounded bg-slate-100" />
+              <div class="h-4 w-4/5 animate-pulse rounded bg-slate-100" />
+            </div>
+
+            <div v-else-if="questionPerformance.hasHistory" class="mt-3">
+              <p class="text-xs text-muted">最高分</p>
+              <p class="mt-1 text-3xl font-bold text-navy">
+                {{ questionPerformance.bestScore }} <span class="text-sm font-normal text-muted">分</span>
+              </p>
+
+              <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+                <div class="rounded-lg bg-slate-50 p-2">
+                  <p class="text-[11px] text-muted">最近一次</p>
+                  <p class="mt-0.5 font-semibold text-navy">{{ lastScoreText }}</p>
+                </div>
+                <div class="rounded-lg bg-slate-50 p-2 text-right">
+                  <p class="text-[11px] text-muted">练习次数</p>
+                  <p class="mt-0.5 font-semibold text-navy">{{ questionPerformance.totalAttempts }} 次</p>
+                </div>
+              </div>
+
+              <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {{ practiceRecommendation }}
+              </p>
+            </div>
+
+            <div v-else class="mt-3 space-y-2">
+              <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+                <p class="text-sm font-semibold text-navy">暂无历史战绩</p>
+                <p class="mt-1 text-xs text-slate-600">首次练习，先打基准分。</p>
+              </div>
+              <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                {{ practiceRecommendation }}
+              </p>
+            </div>
+
+            <p v-if="questionPerformanceError" class="mt-2 text-xs text-amber-700">
+              {{ questionPerformanceError }}
+            </p>
           </article>
         </section>
 
@@ -1053,21 +1478,6 @@ async function startRecordingNow() {
           <p>DEV: mediaAttempts={{ Array.isArray(startMeta?.mediaRecorderAttempts) ? startMeta.mediaRecorderAttempts.length : 0 }} / startAttempts={{ Array.isArray(startMeta?.startAttempts) ? startMeta.startAttempts.length : 0 }}</p>
         </section>
 
-        <section v-if="phase !== 'processing' && phase !== 'done'" class="mb-8 mt-3 flex items-center justify-between gap-4 rounded-xl bg-white p-4 shadow-sm">
-          <div>
-            <p class="text-xs text-muted">最高分</p>
-            <p class="mt-0.5 text-2xl font-bold text-navy">
-              {{ historicalStats.bestScore }} <span class="text-sm font-normal text-muted">分</span>
-            </p>
-          </div>
-          <div class="text-right">
-            <p class="text-xs text-muted">练习次数</p>
-            <p class="mt-0.5 text-2xl font-bold text-navy">
-              {{ historicalStats.totalAttempts }} <span class="text-sm font-normal text-muted">次</span>
-            </p>
-          </div>
-          <div class="text-3xl text-orange">优秀</div>
-        </section>
       </template>
     </main>
   </div>
