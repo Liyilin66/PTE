@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { questions as fallbackQuestions } from "@/data/questions";
+import { getWEQuestionCatalog } from "@/lib/we-data";
 
 const cache = {};
 const usedQuestionIdsByTask = new Map();
@@ -107,6 +108,27 @@ function normalizeQuestion(row, taskType) {
 
 function getFallbackList(taskType) {
   const normalizedTaskType = normalizeTaskType(taskType);
+  if (normalizedTaskType === "WE") {
+    return getWEQuestionCatalog().map((item) =>
+      normalizeQuestion(
+        {
+          id: item.id,
+          topic: item.displayTitle,
+          content: item.promptText,
+          difficulty: item.difficulty,
+          source_number_label: item.sourceNumberLabel,
+          source_ref_id: item.sourceRefId,
+          prompt_type: item.promptType,
+          primary_topic: item.primaryTopic,
+          secondary_topics: item.secondaryTopics,
+          related_question_ids: item.relatedQuestionIds,
+          variants: item.variants
+        },
+        normalizedTaskType
+      )
+    );
+  }
+
   const list = fallbackQuestions[normalizedTaskType] || [];
   return list.map((item) => normalizeQuestion(item, normalizedTaskType));
 }

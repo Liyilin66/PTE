@@ -13,8 +13,9 @@ const practiceStore = usePracticeStore();
 const { tasks } = storeToRefs(practiceStore);
 
 const raTask = computed(() => tasks.value.find((item) => item.id === "ra") || null);
+const weTask = computed(() => tasks.value.find((item) => item.id === "we") || null);
 const wfdTask = computed(() => tasks.value.find((item) => item.id === "wfd") || null);
-const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" && item.id !== "wfd"));
+const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" && item.id !== "we" && item.id !== "wfd"));
 </script>
 
 <template>
@@ -129,6 +130,52 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
                 @click="router.push('/wfd/listen')"
               >
                 🎧 磨耳朵模式
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <article v-if="weTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
+          <div class="flex items-center gap-4 p-4">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#00AA45] text-white">
+              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M7 3h8l4 4v14H7z" />
+                <path d="M15 3v5h5" />
+                <path d="M10 12h6M10 16h6" />
+              </svg>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <h3 class="text-base font-bold text-[#1A1A2E]">{{ weTask.title }}</h3>
+              <p class="text-sm font-medium text-orange">{{ weTask.subtitle }}</p>
+              <p class="mt-1 text-sm text-[#6B7280]">{{ weTask.description }}</p>
+            </div>
+          </div>
+
+          <div class="px-4 pb-4">
+            <div class="flex flex-col gap-2">
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  @click="router.push('/we')"
+                >
+                  随机练习
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  @click="router.push('/we/select')"
+                >
+                  选题练习
+                </button>
+              </div>
+              <button
+                type="button"
+                class="w-full rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                @click="router.push('/we/templates')"
+              >
+                看模板
               </button>
             </div>
           </div>

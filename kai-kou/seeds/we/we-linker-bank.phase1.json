@@ -1,0 +1,44 @@
+{
+  "version": "phase1",
+  "taskType": "WE",
+  "styleGuide": {
+    "targetLevel": "junior_senior_high",
+    "preferShortPhrases": true
+  },
+  "groups": [
+    {
+      "id": "intro",
+      "label": "Opening Linkers",
+      "phrases": ["Nowadays,", "In recent years,", "This topic is important because", "Many people believe that"]
+    },
+    {
+      "id": "add_point",
+      "label": "Adding Points",
+      "phrases": ["First,", "Second,", "In addition,", "Also,", "Another key point is that"]
+    },
+    {
+      "id": "contrast",
+      "label": "Contrast Linkers",
+      "phrases": ["However,", "On the other hand,", "In contrast,", "Even so,"]
+    },
+    {
+      "id": "example",
+      "label": "Example Linkers",
+      "phrases": ["For example,", "For instance,", "A clear example is", "This can be seen in"]
+    },
+    {
+      "id": "result",
+      "label": "Result Linkers",
+      "phrases": ["As a result,", "Therefore,", "Because of this,", "This means that"]
+    },
+    {
+      "id": "conclusion",
+      "label": "Conclusion Linkers",
+      "phrases": ["In conclusion,", "To sum up,", "Overall,", "In short,"]
+    }
+  ],
+  "futureHooks": {
+    "positionAwareLinkers": true,
+    "topicAwareLinkers": true
+  }
+}

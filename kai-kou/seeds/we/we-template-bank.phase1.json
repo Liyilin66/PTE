@@ -1,0 +1,168 @@
+﻿{
+    "version":  "phase1",
+    "taskType":  "WE",
+    "templateMode":  "universal_10",
+    "styleGuide":  {
+                       "targetLevel":  "junior_senior_high",
+                       "sentenceStyle":  "short_clear_sentences",
+                       "tone":  "stable_and_easy_to_edit",
+                       "defaultParagraphCount":  4
+                   },
+    "templates":  [
+                      {
+                          "id":  "WE_TPL_001",
+                          "title":  "通用模版 1：聚焦社会现象（Social Phenomenon）",
+                          "shortLabel":  "聚焦社会现象",
+                          "content":  "Nowadays, the issue of [填入题目核心话题] has become very popular in our society. People hold different views on this. Personally, I think it brings us a lot to think about. I will explain my ideas below.\n\nOn the one hand, the first important point is that [填入第一点看法]. For example, [填入具体例子]. This clearly shows how it deeply influences our daily lives and our choices.\n\nOn the other hand, another key factor is that [填入第二点看法]. A good example to show this is [填入第二个例子]. Therefore, we can easily understand its deeper meaning in modern times.\n\nIn conclusion, based on the above discussion, [重新抄写核心话题] is an essential part of our world. We should pay more attention to it and make good use of it in the future.",
+                          "sections":  {
+                                           "intro":  "Nowadays, the issue of [填入题目核心话题] has become very popular in our society. People hold different views on this. Personally, I think it brings us a lot to think about. I will explain my ideas below.",
+                                           "body1":  "On the one hand, the first important point is that [填入第一点看法]. For example, [填入具体例子]. This clearly shows how it deeply influences our daily lives and our choices.",
+                                           "body2":  "On the other hand, another key factor is that [填入第二点看法]. A good example to show this is [填入第二个例子]. Therefore, we can easily understand its deeper meaning in modern times.",
+                                           "conclusion":  "In conclusion, based on the above discussion, [重新抄写核心话题] is an essential part of our world. We should pay more attention to it and make good use of it in the future."
+                                       },
+                          "difficulty":  1,
+                          "sortOrder":  1,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_002",
+                          "title":  "通用模版 2：聚焦时代变迁（Constant Change）",
+                          "shortLabel":  "聚焦时代变迁",
+                          "content":  "With the rapid development of modern society, [填入题目核心话题] is constantly changing our world. Many people are talking about its true value. In my opinion, this is a topic we absolutely cannot ignore.\n\nTo begin with, one obvious aspect is that [填入第一点看法]. To be more specific, [用简单的话解释一下第一点]. As a result, it makes a big difference for everyone living in the city.\n\nFurthermore, we must also consider the fact that [填入第二点看法]. For instance, [填入一个简单的例子]. This is actually a very common situation in many different countries today.\n\nTo sum up, looking at all the points, we can safely say that [重新抄写核心话题] plays a huge role. We need to face it with an open mind and learn more.",
+                          "sections":  {
+                                           "intro":  "With the rapid development of modern society, [填入题目核心话题] is constantly changing our world. Many people are talking about its true value. In my opinion, this is a topic we absolutely cannot ignore.",
+                                           "body1":  "To begin with, one obvious aspect is that [填入第一点看法]. To be more specific, [用简单的话解释一下第一点]. As a result, it makes a big difference for everyone living in the city.",
+                                           "body2":  "Furthermore, we must also consider the fact that [填入第二点看法]. For instance, [填入一个简单的例子]. This is actually a very common situation in many different countries today.",
+                                           "conclusion":  "To sum up, looking at all the points, we can safely say that [重新抄写核心话题] plays a huge role. We need to face it with an open mind and learn more."
+                                       },
+                          "difficulty":  1,
+                          "sortOrder":  2,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_003",
+                          "title":  "通用模版 3：聚焦公众讨论（Public Debate）",
+                          "shortLabel":  "聚焦公众讨论",
+                          "content":  "Recently, there is a heated debate regarding [填入题目核心话题]. Some individuals totally support it, while others still have strong doubts. From my perspective, I believe we need to look at both sides carefully.\n\nFirst of all, a major reason to focus on this is [填入第一点看法]. Actually, [填入一个简单例子或解释]. This easily brings direct and useful results to our personal growth.\n\nSecondly, another significant point is [填入第二点看法]. It is very easy to see that [用一句话补充说明第二点]. Because of this, the whole situation becomes much clearer to the public.\n\nIn summary, after discussing the details above, my final thought is that [重新抄写核心话题] requires our careful thinking. Society as a whole will greatly benefit if we handle it well.",
+                          "sections":  {
+                                           "intro":  "Recently, there is a heated debate regarding [填入题目核心话题]. Some individuals totally support it, while others still have strong doubts. From my perspective, I believe we need to look at both sides carefully.",
+                                           "body1":  "First of all, a major reason to focus on this is [填入第一点看法]. Actually, [填入一个简单例子或解释]. This easily brings direct and useful results to our personal growth.",
+                                           "body2":  "Secondly, another significant point is [填入第二点看法]. It is very easy to see that [用一句话补充说明第二点]. Because of this, the whole situation becomes much clearer to the public.",
+                                           "conclusion":  "In summary, after discussing the details above, my final thought is that [重新抄写核心话题] requires our careful thinking. Society as a whole will greatly benefit if we handle it well."
+                                       },
+                          "difficulty":  1,
+                          "sortOrder":  3,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_004",
+                          "title":  "通用模版 4：聚焦生活影响（Impact on Life）",
+                          "shortLabel":  "聚焦生活影响",
+                          "content":  "In our daily lives, [填入题目核心话题] is something we often meet and discuss. It has a deep impact on the way we live and work. I would like to share my personal views on this important matter.\n\nThe most important thing to mention here is that [填入第一点看法]. For example, [填入具体例子]. This is exactly why so many ordinary people care about it so much today.\n\nIn addition, another interesting part we should notice is that [填入第二点看法]. To put it simply, [简单解释一下第二点]. This simple fact gives us a lot of useful information to think about.\n\nAll in all, [重新抄写核心话题] is not just a simple topic, but a real challenge or chance. We should prepare ourselves well to deal with it properly in the future.",
+                          "sections":  {
+                                           "intro":  "In our daily lives, [填入题目核心话题] is something we often meet and discuss. It has a deep impact on the way we live and work. I would like to share my personal views on this important matter.",
+                                           "body1":  "The most important thing to mention here is that [填入第一点看法]. For example, [填入具体例子]. This is exactly why so many ordinary people care about it so much today.",
+                                           "body2":  "In addition, another interesting part we should notice is that [填入第二点看法]. To put it simply, [简单解释一下第二点]. This simple fact gives us a lot of useful information to think about.",
+                                           "conclusion":  "All in all, [重新抄写核心话题] is not just a simple topic, but a real challenge or chance. We should prepare ourselves well to deal with it properly in the future."
+                                       },
+                          "difficulty":  1,
+                          "sortOrder":  4,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_005",
+                          "title":  "通用模版 5：聚焦重要性（General Importance）",
+                          "shortLabel":  "聚焦重要性",
+                          "content":  "The topic of [填入题目核心话题] has drawn a lot of public attention lately. People from different backgrounds naturally have different ideas. I strongly feel that it is worth our time to discuss it deeply.\n\nFirstly, one main point we should know is that [填入第一点看法]. For instance, [填入具体例子]. This easily proves that it is very closely related to our society\u0027s development.\n\nSecondly, another vital aspect is that [填入第二点看法]. It is a well-known fact that [补充说明第二点一句话]. Thus, its influence is almost everywhere around us, whether we like it or not.\n\nTo conclude, taking everything into consideration, [重新抄写核心话题] is an issue of great importance. We must take it seriously step by step so that we can find the best answer.",
+                          "sections":  {
+                                           "intro":  "The topic of [填入题目核心话题] has drawn a lot of public attention lately. People from different backgrounds naturally have different ideas. I strongly feel that it is worth our time to discuss it deeply.",
+                                           "body1":  "Firstly, one main point we should know is that [填入第一点看法]. For instance, [填入具体例子]. This easily proves that it is very closely related to our society\u0027s development.",
+                                           "body2":  "Secondly, another vital aspect is that [填入第二点看法]. It is a well-known fact that [补充说明第二点一句话]. Thus, its influence is almost everywhere around us, whether we like it or not.",
+                                           "conclusion":  "To conclude, taking everything into consideration, [重新抄写核心话题] is an issue of great importance. We must take it seriously step by step so that we can find the best answer."
+                                       },
+                          "difficulty":  2,
+                          "sortOrder":  5,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_006",
+                          "title":  "通用模版 6：聚焦多面性（Two Perspectives）",
+                          "shortLabel":  "聚焦多面性",
+                          "content":  "People never stop discussing the popular topic of [填入题目核心话题]. Every coin has two sides, and this complex issue is definitely no exception. In this essay, I will carefully explore different parts of this topic.\n\nLooking at the first side, we can find that [填入第一点看法]. A clear example of this is [填入例子]. This strongly shows the power of it in our modern and busy world.\n\nTurning to the other side, we also need to admit that [填入第二点看法]. As a matter of fact, [补充一句解释]. This always reminds us to be careful and think twice before taking action.\n\nIn short, whether we like it or not, [重新抄写核心话题] is here to stay with us. We should find a smart balance and make the absolute best choice for ourselves.",
+                          "sections":  {
+                                           "intro":  "People never stop discussing the popular topic of [填入题目核心话题]. Every coin has two sides, and this complex issue is definitely no exception. In this essay, I will carefully explore different parts of this topic.",
+                                           "body1":  "Looking at the first side, we can find that [填入第一点看法]. A clear example of this is [填入例子]. This strongly shows the power of it in our modern and busy world.",
+                                           "body2":  "Turning to the other side, we also need to admit that [填入第二点看法]. As a matter of fact, [补充一句解释]. This always reminds us to be careful and think twice before taking action.",
+                                           "conclusion":  "In short, whether we like it or not, [重新抄写核心话题] is here to stay with us. We should find a smart balance and make the absolute best choice for ourselves."
+                                       },
+                          "difficulty":  2,
+                          "sortOrder":  6,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_007",
+                          "title":  "通用模版 7：聚焦个人见解（Personal Viewpoint）",
+                          "shortLabel":  "聚焦个人见解",
+                          "content":  "When it comes to [填入题目核心话题], everyone seems to have a totally different opinion. It has successfully become a key issue today. I will explain my main thoughts and reasons in the following paragraphs.\n\nThe first reason that quickly comes to my mind is [填入第一点看法]. For example, [填入简单的例子]. This clearly and completely supports my understanding of the current situation.\n\nAnother reason that cannot be ignored is [填入第二点看法]. This is mainly because [简单解释原因]. Therefore, it makes perfect sense to most people who are facing the same situation.\n\nIn conclusion, my firm belief is that [重新抄写核心话题] has a long-lasting effect on all of us. We should continue to learn more about it to keep up with the fast times.",
+                          "sections":  {
+                                           "intro":  "When it comes to [填入题目核心话题], everyone seems to have a totally different opinion. It has successfully become a key issue today. I will explain my main thoughts and reasons in the following paragraphs.",
+                                           "body1":  "The first reason that quickly comes to my mind is [填入第一点看法]. For example, [填入简单的例子]. This clearly and completely supports my understanding of the current situation.",
+                                           "body2":  "Another reason that cannot be ignored is [填入第二点看法]. This is mainly because [简单解释原因]. Therefore, it makes perfect sense to most people who are facing the same situation.",
+                                           "conclusion":  "In conclusion, my firm belief is that [重新抄写核心话题] has a long-lasting effect on all of us. We should continue to learn more about it to keep up with the fast times."
+                                       },
+                          "difficulty":  2,
+                          "sortOrder":  7,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_008",
+                          "title":  "通用模版 8：聚焦观察与分析（Observation \u0026 Analysis）",
+                          "shortLabel":  "聚焦观察与分析",
+                          "content":  "It is a very common phenomenon today that [填入题目核心话题] is discussed almost everywhere. It raises many interesting questions for us to answer. I think it is highly necessary to look into the details.\n\nOne of the biggest points we can see is that [填入第一点看法]. For example, [填入一个简单的例子]. This directly changes our traditional way of thinking and doing things.\n\nBesides that important point, we also need to clearly notice [填入第二点看法]. To explain this further, [用简单英语解释]. As a result, new changes happen every single day in our lives.\n\nTo wrap up, through the simple analysis above, we can see that [重新抄写核心话题] is a serious matter. We need to work together as a team to find the right direction.",
+                          "sections":  {
+                                           "intro":  "It is a very common phenomenon today that [填入题目核心话题] is discussed almost everywhere. It raises many interesting questions for us to answer. I think it is highly necessary to look into the details.",
+                                           "body1":  "One of the biggest points we can see is that [填入第一点看法]. For example, [填入一个简单的例子]. This directly changes our traditional way of thinking and doing things.",
+                                           "body2":  "Besides that important point, we also need to clearly notice [填入第二点看法]. To explain this further, [用简单英语解释]. As a result, new changes happen every single day in our lives.",
+                                           "conclusion":  "To wrap up, through the simple analysis above, we can see that [重新抄写核心话题] is a serious matter. We need to work together as a team to find the right direction."
+                                       },
+                          "difficulty":  2,
+                          "sortOrder":  8,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_009",
+                          "title":  "通用模版 9：聚焦未来展望（Future Outlook）",
+                          "shortLabel":  "聚焦未来展望",
+                          "content":  "The issue of [填入题目核心话题] is not only a hot topic right now, but also extremely important for our future. People are trying hard to find the best answer to it. I will share my ideas below.\n\nPrimarily, we should focus on the basic fact that [填入第一点看法]. Take [填入一个具体事物作为例子] as a good example. This teaches us a very useful and practical lesson in life.\n\nAdditionally, another valuable point is [填入第二点看法]. It is very clear that [补充一句解释]. This definitely gives us a brand new way to solve difficult problems quickly.\n\nUltimately, [重新抄写核心话题] will certainly continue to influence our next generation. We must lay a very solid foundation starting from today, so tomorrow will be better.",
+                          "sections":  {
+                                           "intro":  "The issue of [填入题目核心话题] is not only a hot topic right now, but also extremely important for our future. People are trying hard to find the best answer to it. I will share my ideas below.",
+                                           "body1":  "Primarily, we should focus on the basic fact that [填入第一点看法]. Take [填入一个具体事物作为例子] as a good example. This teaches us a very useful and practical lesson in life.",
+                                           "body2":  "Additionally, another valuable point is [填入第二点看法]. It is very clear that [补充一句解释]. This definitely gives us a brand new way to solve difficult problems quickly.",
+                                           "conclusion":  "Ultimately, [重新抄写核心话题] will certainly continue to influence our next generation. We must lay a very solid foundation starting from today, so tomorrow will be better."
+                                       },
+                          "difficulty":  3,
+                          "sortOrder":  9,
+                          "isUniversal":  true
+                      },
+                      {
+                          "id":  "WE_TPL_010",
+                          "title":  "通用模版 10：终极无脑套用款（The Ultimate Blank Canvas）",
+                          "shortLabel":  "终极无脑套用款",
+                          "content":  "Today, the broad subject of [填入题目核心话题] has caused wide public concern globally. It is a very complex but super interesting topic. In my essay, I am going to express my honest views on it.\n\nThe first key factor we need to carefully talk about is [填入第一点看法]. A very good example in real life is [填入例子]. This gives us a very clear and real picture of the reality we live in.\n\nThe second important factor is [填入第二点看法]. Actually, [用另外一句话重复一下第二点]. This wonderful point helps us understand the whole story much better and deeper.\n\nIn summary, after discussing all the points above, my safe conclusion is that [重新抄写核心话题] is completely unforgettable. We should always keep an eye on its future development and changes.",
+                          "sections":  {
+                                           "intro":  "Today, the broad subject of [填入题目核心话题] has caused wide public concern globally. It is a very complex but super interesting topic. In my essay, I am going to express my honest views on it.",
+                                           "body1":  "The first key factor we need to carefully talk about is [填入第一点看法]. A very good example in real life is [填入例子]. This gives us a very clear and real picture of the reality we live in.",
+                                           "body2":  "The second important factor is [填入第二点看法]. Actually, [用另外一句话重复一下第二点]. This wonderful point helps us understand the whole story much better and deeper.",
+                                           "conclusion":  "In summary, after discussing all the points above, my safe conclusion is that [重新抄写核心话题] is completely unforgettable. We should always keep an eye on its future development and changes."
+                                       },
+                          "difficulty":  3,
+                          "sortOrder":  10,
+                          "isUniversal":  true
+                      }
+                  ],
+    "futureHooks":  {
+                        "topicSpecificTemplates":  false,
+                        "difficultySpecificTemplates":  true,
+                        "autoTemplateMatch":  false
+                    }
+}

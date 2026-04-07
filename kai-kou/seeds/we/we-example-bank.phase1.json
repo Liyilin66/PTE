@@ -1,0 +1,117 @@
+{
+  "version": "phase1",
+  "taskType": "WE",
+  "styleGuide": {
+    "targetLevel": "junior_senior_high",
+    "exampleLength": "1-2 sentences"
+  },
+  "groups": [
+    {
+      "primaryTopic": "education_learning",
+      "examples": [
+        {
+          "id": "EX_EDU_001",
+          "title": "Part-time Student",
+          "exampleText": "A student works ten hours a week and still gets good grades by making a clear study plan.",
+          "useForPromptTypes": ["agree_disagree", "cause_problem_solution", "policy_rule_with_example"]
+        },
+        {
+          "id": "EX_EDU_002",
+          "title": "School Language Program",
+          "exampleText": "A school adds simple speaking practice every day, and students become more confident in English.",
+          "useForPromptTypes": ["agree_disagree", "choice_preference_with_reasons"]
+        }
+      ]
+    },
+    {
+      "primaryTopic": "technology_media",
+      "examples": [
+        {
+          "id": "EX_TECH_001",
+          "title": "Phone News Habit",
+          "exampleText": "Many teenagers get news from short videos, so they know events quickly but may miss deep details.",
+          "useForPromptTypes": ["agree_disagree", "advantages_disadvantages_opinion"]
+        },
+        {
+          "id": "EX_TECH_002",
+          "title": "Translation App",
+          "exampleText": "Travelers use translation apps for fast help, but they still need basic language skills in real conversations.",
+          "useForPromptTypes": ["agree_disagree", "issue_analysis_opinion"]
+        }
+      ]
+    },
+    {
+      "primaryTopic": "work_business_economy",
+      "examples": [
+        {
+          "id": "EX_WORK_001",
+          "title": "Shorter Week Trial",
+          "exampleText": "One company tested a four-day week and found workers had lower stress and similar output.",
+          "useForPromptTypes": ["advantages_disadvantages_opinion", "agree_disagree"]
+        },
+        {
+          "id": "EX_WORK_002",
+          "title": "Tourism Income",
+          "exampleText": "A small town gained jobs from tourism, but local prices rose quickly for residents.",
+          "useForPromptTypes": ["discuss_both_views_opinion", "advantages_disadvantages_opinion"]
+        }
+      ]
+    },
+    {
+      "primaryTopic": "society_law_policy",
+      "examples": [
+        {
+          "id": "EX_SOC_001",
+          "title": "Road Safety Rule",
+          "exampleText": "After stronger traffic rules, accidents dropped because drivers became more careful.",
+          "useForPromptTypes": ["issue_analysis_opinion", "policy_rule_with_example"]
+        },
+        {
+          "id": "EX_SOC_002",
+          "title": "Family Responsibility",
+          "exampleText": "Parents who set clear limits at home often help children avoid risky behavior.",
+          "useForPromptTypes": ["agree_disagree", "policy_rule_with_example"]
+        }
+      ]
+    },
+    {
+      "primaryTopic": "environment_global_issues",
+      "examples": [
+        {
+          "id": "EX_ENV_001",
+          "title": "City Recycling Plan",
+          "exampleText": "A city introduced waste sorting and reduced landfill use in one year.",
+          "useForPromptTypes": ["responsibility_allocation", "cause_problem_solution"]
+        },
+        {
+          "id": "EX_ENV_002",
+          "title": "School Climate Club",
+          "exampleText": "Students joined a climate club and helped cut paper and energy use at school.",
+          "useForPromptTypes": ["choice_preference_with_reasons", "agree_disagree"]
+        }
+      ]
+    },
+    {
+      "primaryTopic": "city_infrastructure_housing",
+      "examples": [
+        {
+          "id": "EX_CITY_001",
+          "title": "Bus Line Upgrade",
+          "exampleText": "After bus lines were improved, many workers stopped driving to the city center.",
+          "useForPromptTypes": ["agree_disagree", "advantages_disadvantages_opinion"]
+        },
+        {
+          "id": "EX_CITY_002",
+          "title": "Old Building Reuse",
+          "exampleText": "A historic factory was turned into a public library, keeping history and serving modern needs.",
+          "useForPromptTypes": ["choice_preference_with_reasons", "advantages_disadvantages_opinion"]
+        }
+      ]
+    }
+  ],
+  "futureHooks": {
+    "questionSpecificExamples": true,
+    "difficultySpecificExamples": true,
+    "automaticExampleSuggestion": false
+  }
+}

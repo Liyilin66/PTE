@@ -142,50 +142,8 @@ export const questions = {
     }
   ],
 
-  WE: [
-    {
-      id: "WE_001",
-      topic: "Online Education",
-      content:
-        "Do you think online education can replace traditional classroom learning? Discuss both advantages and disadvantages, and give your opinion.",
-      difficulty: 2
-    },
-    {
-      id: "WE_002",
-      topic: "Public Transport",
-      content:
-        "Some people believe governments should spend more money on public transport than on building new roads. To what extent do you agree?",
-      difficulty: 2
-    },
-    {
-      id: "WE_003",
-      topic: "Artificial Intelligence",
-      content:
-        "Artificial intelligence is changing many workplaces. Discuss the potential benefits and risks of AI for employees and businesses.",
-      difficulty: 3
-    },
-    {
-      id: "WE_004",
-      topic: "University Fees",
-      content:
-        "Should higher education be free for all students? Explain your view with reasons and examples.",
-      difficulty: 2
-    },
-    {
-      id: "WE_005",
-      topic: "Urban Living",
-      content:
-        "Many people are moving to large cities, but city life can be stressful. What are the main causes of this stress and how can it be reduced?",
-      difficulty: 2
-    },
-    {
-      id: "WE_006",
-      topic: "Climate Responsibility",
-      content:
-        "Who should take more responsibility for solving climate change: governments, companies, or individuals? Discuss and justify your answer.",
-      difficulty: 3
-    }
-  ],
+  // WE source is now unified in seeds/we/*.json via src/lib/we-data.js.
+  WE: [],
 
   WFD: []
 };

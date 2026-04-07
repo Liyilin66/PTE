@@ -1,0 +1,136 @@
+{
+  "version": "phase1",
+  "taskType": "WE",
+  "styleGuide": {
+    "targetLevel": "junior_senior_high",
+    "maxWordsPerSentence": 20,
+    "tone": "clear_direct"
+  },
+  "groups": [
+    {
+      "primaryTopic": "education_learning",
+      "sentences": [
+        {
+          "id": "OP_EDU_001",
+          "stance": "support",
+          "text": "Schools should teach practical skills because students need them in real life."
+        },
+        {
+          "id": "OP_EDU_002",
+          "stance": "oppose",
+          "text": "Traditional study is still useful because it builds strong basic knowledge."
+        },
+        {
+          "id": "OP_EDU_003",
+          "stance": "balanced",
+          "text": "A mixed method often works best, with both theory and practice."
+        }
+      ]
+    },
+    {
+      "primaryTopic": "technology_media",
+      "sentences": [
+        {
+          "id": "OP_TECH_001",
+          "stance": "support",
+          "text": "Technology can save time and make information easy to get."
+        },
+        {
+          "id": "OP_TECH_002",
+          "stance": "oppose",
+          "text": "Too much media use can harm focus and healthy communication."
+        },
+        {
+          "id": "OP_TECH_003",
+          "stance": "balanced",
+          "text": "Technology is useful when people use it with clear limits."
+        }
+      ]
+    },
+    {
+      "primaryTopic": "work_business_economy",
+      "sentences": [
+        {
+          "id": "OP_WORK_001",
+          "stance": "support",
+          "text": "Workers need fair hours so they can stay healthy and productive."
+        },
+        {
+          "id": "OP_WORK_002",
+          "stance": "oppose",
+          "text": "Some strict rules can reduce company flexibility in hard times."
+        },
+        {
+          "id": "OP_WORK_003",
+          "stance": "balanced",
+          "text": "Good policy should protect workers and support business growth."
+        }
+      ]
+    },
+    {
+      "primaryTopic": "society_law_policy",
+      "sentences": [
+        {
+          "id": "OP_SOC_001",
+          "stance": "support",
+          "text": "Clear laws can guide behavior and protect vulnerable people."
+        },
+        {
+          "id": "OP_SOC_002",
+          "stance": "oppose",
+          "text": "Rules alone are not enough if people do not accept them."
+        },
+        {
+          "id": "OP_SOC_003",
+          "stance": "balanced",
+          "text": "Law and education should work together for long-term change."
+        }
+      ]
+    },
+    {
+      "primaryTopic": "environment_global_issues",
+      "sentences": [
+        {
+          "id": "OP_ENV_001",
+          "stance": "support",
+          "text": "Climate action should start now because delay makes problems worse."
+        },
+        {
+          "id": "OP_ENV_002",
+          "stance": "oppose",
+          "text": "Short-term costs are high, so policy needs careful planning."
+        },
+        {
+          "id": "OP_ENV_003",
+          "stance": "balanced",
+          "text": "Shared action by governments, companies and people is the best path."
+        }
+      ]
+    },
+    {
+      "primaryTopic": "city_infrastructure_housing",
+      "sentences": [
+        {
+          "id": "OP_CITY_001",
+          "stance": "support",
+          "text": "Public transport can cut traffic and make cities more livable."
+        },
+        {
+          "id": "OP_CITY_002",
+          "stance": "oppose",
+          "text": "Rapid city changes can hurt local culture and small businesses."
+        },
+        {
+          "id": "OP_CITY_003",
+          "stance": "balanced",
+          "text": "Cities need modern development and protection of key heritage."
+        }
+      ]
+    }
+  ],
+  "futureHooks": {
+    "promptTypeSpecificSentences": true,
+    "difficultySpecificSentences": true,
+    "autoOpinionMatch": false
+  }
+}
