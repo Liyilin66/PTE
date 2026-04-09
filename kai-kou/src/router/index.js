@@ -17,6 +17,7 @@ const routes = [
   { path: "/we", name: "we", component: () => import("@/views/WEView.vue"), meta: { requiresAuth: true } },
   { path: "/we/select", name: "we-select", component: () => import("@/views/WESelectView.vue"), meta: { requiresAuth: true } },
   { path: "/we/templates", name: "we-templates", component: () => import("@/views/WETemplateLibraryView.vue"), meta: { requiresAuth: true } },
+  { path: "/we/opinions", name: "we-opinions", component: () => import("@/views/WEOpinionLibraryView.vue"), meta: { requiresAuth: true } },
   { path: "/we/practice/:id", name: "we-practice", component: () => import("@/views/WEView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd", name: "wfd", component: () => import("@/views/WFDView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd/list", name: "wfd-list", component: () => import("@/views/WFDListView.vue"), meta: { requiresAuth: true } },

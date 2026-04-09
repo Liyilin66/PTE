@@ -4,6 +4,7 @@ const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 const DEFAULT_TIMEOUT_MS = 8000;
 
 let hasWarnedLegacyGroqKey = false;
+let hasLoggedGroqKeySuffix = false;
 
 export async function callGroq({ prompt, apiKey, model, timeoutMs } = {}) {
   const resolvedApiKey = `${apiKey || getGroqApiKeyFromEnv() || ""}`.trim();
@@ -19,6 +20,7 @@ export async function callGroq({ prompt, apiKey, model, timeoutMs } = {}) {
   const resolvedModel = `${model || process.env.LLM_GROQ_MODEL || DEFAULT_GROQ_MODEL}`.trim() || DEFAULT_GROQ_MODEL;
   const resolvedTimeoutMs = toPositiveInt(timeoutMs, process.env.LLM_FALLBACK_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
   const startedAt = nowMs();
+  maybeLogGroqKeySuffix(resolvedApiKey, resolveGroqKeySource(apiKey));
 
   try {
     const response = await fetchWithTimeout(
@@ -135,4 +137,37 @@ function toPositiveInt(...values) {
     if (Number.isFinite(num) && num > 0) return Math.floor(num);
   }
   return DEFAULT_TIMEOUT_MS;
+}
+
+function maybeLogGroqKeySuffix(apiKey, source) {
+  if (hasLoggedGroqKeySuffix) return;
+  if (!isDevRuntime()) return;
+  const suffix = resolveKeySuffix(apiKey);
+  if (!suffix) return;
+
+  hasLoggedGroqKeySuffix = true;
+  console.info(`[llm] groq key in use (source=${source}, suffix=${suffix})`);
+}
+
+function resolveGroqKeySource(apiKeyArgument) {
+  const fromArg = `${apiKeyArgument || ""}`.trim();
+  if (fromArg) return "call_arg";
+  if (`${process.env.GROQ_API_KEY || ""}`.trim()) return "GROQ_API_KEY";
+  if (`${process.env.GROP_API_KEY || ""}`.trim()) return "GROP_API_KEY";
+  return "unknown";
+}
+
+function resolveKeySuffix(apiKey) {
+  const normalized = `${apiKey || ""}`.trim();
+  if (!normalized) return "";
+  const suffixLength = Math.min(6, Math.max(4, normalized.length));
+  return normalized.slice(-suffixLength);
+}
+
+function isDevRuntime() {
+  const vercelEnv = `${process.env.VERCEL_ENV || ""}`.trim().toLowerCase();
+  if (vercelEnv) return vercelEnv !== "production";
+  const nodeEnv = `${process.env.NODE_ENV || ""}`.trim().toLowerCase();
+  if (!nodeEnv) return true;
+  return nodeEnv !== "production";
 }

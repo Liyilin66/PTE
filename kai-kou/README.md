@@ -5,13 +5,11 @@
 ```bash
 npm install
 npm run dev
-```
-
-If you need to run the local API service for scoring:
-
-```bash
 npm run dev:api
 ```
+
+`WE/RA/RS/RL` scoring needs both the Vite app and local API service running at the same time.
+If you see `Score API failed with status 404`, it usually means `/api/score` was proxied to a different app.
 
 ## Environment Variables
 
@@ -26,9 +24,30 @@ LLM_FALLBACK_TIMEOUT_MS=8000
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 VITE_APP_URL=http://localhost:5173
+VITE_API_BASE=
+VITE_DEV_API_TARGET=http://localhost:3000
+API_PORT=3000
 ```
 
 You can use `.env.example` as a template.
+
+### Local API Routing Checks
+
+```bash
+npm run check:score-api
+```
+
+If port `3000` is occupied by another project, switch to `3001`:
+
+```bash
+# .env
+API_PORT=3001
+VITE_DEV_API_TARGET=http://localhost:3001
+# Keep this empty for public/preview/production builds
+VITE_API_BASE=
+```
+
+For production/preview deployment, do not set `VITE_API_BASE` to any localhost address.
 
 ## LLM Fallback Architecture (Scoring API)
 
@@ -74,6 +93,7 @@ Compatibility note:
 1. Start app and API:
    - `npm run dev`
    - `npm run dev:api`
+   - `npm run check:score-api` (expect route reachable or `401` JSON without token)
 2. Verify Gemini normal path:
    - keep valid `GEMINI_API_KEY`
    - submit RA/RL/RS scoring request
@@ -248,13 +268,13 @@ npm install -g vercel
 vercel login
 ```
 
-2. Deploy from project root:
+1. Deploy from project root:
 
 ```bash
 vercel
 ```
 
-3. In Vercel project settings, add environment variables:
+1. In Vercel project settings, add environment variables:
 
 - `GEMINI_API_KEY` (Production + Preview + Development)
 - `GROQ_API_KEY` (Production + Preview + Development)
@@ -264,7 +284,7 @@ vercel
 - `VITE_SUPABASE_URL` (Production + Preview + Development)
 - `VITE_SUPABASE_ANON_KEY` (Production + Preview + Development)
 
-4. Redeploy after saving env vars.
+1. Redeploy after saving env vars.
 
 ## Verify After Deployment
 

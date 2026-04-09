@@ -1,0 +1,18 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - heading "开口" [level=1] [ref=e6]
+    - paragraph [ref=e7]: PTE 口语备考，开口就练
+  - generic [ref=e31]:
+    - generic [ref=e32]:
+      - button "登录" [ref=e33] [cursor=pointer]
+      - button "注册" [ref=e34] [cursor=pointer]
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]: 邮箱
+        - textbox "your@email.com" [ref=e38]: codex.pte.20260409+we1@gmail.com
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic [ref=e41]: 密码
+          - button "忘记密码？" [ref=e42] [cursor=pointer]
+        - textbox "至少 6 位" [ref=e43]
+      - button "登录" [ref=e44] [cursor=pointer]

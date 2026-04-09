@@ -22,6 +22,8 @@ export default async function handler(req, res) {
 
   const geminiConfigured = Boolean(geminiApiKey && geminiApiKey !== "YOUR_GEMINI_API_KEY");
   const groqConfigured = Boolean(groqApiKey);
+  const geminiKeySuffix = resolveKeySuffix(geminiApiKey);
+  const groqKeySuffix = resolveKeySuffix(groqApiKey);
 
   let geminiOk = false;
   let groqOk = false;
@@ -65,6 +67,8 @@ export default async function handler(req, res) {
     runtime_stage: getRuntimeStage(),
     gemini_configured: geminiConfigured,
     groq_configured: groqConfigured,
+    gemini_key_suffix: geminiKeySuffix,
+    groq_key_suffix: groqKeySuffix,
     gemini_ok: geminiOk,
     groq_ok: groqOk,
     gemini_model: geminiModel,
@@ -86,9 +90,15 @@ function summarizeError(error) {
   return payload;
 }
 
+function resolveKeySuffix(apiKey) {
+  const normalized = `${apiKey || ""}`.trim();
+  if (!normalized) return "";
+  const suffixLength = Math.min(6, Math.max(4, normalized.length));
+  return normalized.slice(-suffixLength);
+}
+
 function safeErrorMessage(message) {
   const clean = `${message || ""}`.trim();
   if (!clean) return "provider_error";
   return clean.length > 200 ? `${clean.slice(0, 200)}...` : clean;
 }
-

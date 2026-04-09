@@ -1,0 +1,74 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - button "返回上一页" [ref=e7] [cursor=pointer]:
+          - img [ref=e8]
+        - generic [ref=e10]: Write Essay
+      - generic [ref=e11]:
+        - generic [ref=e12]: ✅ VIP · 无限练习
+        - button "退出" [ref=e13] [cursor=pointer]
+    - main [ref=e14]:
+      - generic [ref=e15]:
+        - paragraph [ref=e16]: "Question #23"
+        - generic [ref=e17]:
+          - button "看模板" [ref=e18] [cursor=pointer]
+          - button "观点句" [ref=e19] [cursor=pointer]
+          - button "选题练习" [ref=e20] [cursor=pointer]
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - paragraph [ref=e23]: Harder Life
+          - generic [ref=e24]: Medium
+        - paragraph [ref=e25]: It is harder for children to grow up in the 21st century than it was in the past. How far do you agree with this statement? Give your opinions.
+        - generic [ref=e26]:
+          - generic [ref=e27]: agree_disagree
+          - generic [ref=e28]: society_law_policy
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - paragraph [ref=e32]: 当前模板预览
+            - paragraph [ref=e33]: 10 个全文通用模板（默认模板 1）
+          - generic [ref=e34]:
+            - button "切换模板" [ref=e35] [cursor=pointer]
+            - button "一键导入模板" [ref=e36] [cursor=pointer]
+        - generic [ref=e37]:
+          - generic [ref=e38]:
+            - paragraph [ref=e39]: 通用模版 1：聚焦社会现象（Social Phenomenon）
+            - generic [ref=e40]: 聚焦社会现象
+          - generic [ref=e41]: Nowadays, the issue of [填入题目核心话题] has become very popular in our society. People hold different views on this. Personally, I think it brings us a lot to think about. I will explain my ideas below. On the one hand, the first important point is that [填入第一点看法]. For example, [填入具体例子]. This clearly shows how it deeply influences our daily lives and our choices. On the other hand, another key factor is that [填入第二点看法]. A good example to show this is [填入第二个例子]. Therefore, we can easily understand its deeper meaning in modern times. In conclusion, based on the above discussion, [重新抄写核心话题] is an essential part of our world. We should pay more attention to it and make good use of it in the future.
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - paragraph [ref=e44]: Recommended Opinion Sentences
+          - generic [ref=e45]:
+            - generic [ref=e46]: 3 sentences
+            - button "展开观点句" [ref=e47] [cursor=pointer]
+        - paragraph [ref=e48]: 已折叠，点击“展开观点句”查看。
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]: Body
+            - generic [ref=e53]: "Words: 128"
+          - textbox "Write your response here..." [ref=e54]: Children in the twenty first century face both more opportunities and more pressure than previous generations. I partly agree that growing up is harder today. On one side modern children can access better education technology and global information. They can learn new skills quickly and connect with people worldwide. On the other side they also experience intense academic competition social media pressure and mental health challenges at an early age. Governments and schools should reduce unhealthy comparison by improving counseling services and balancing exam systems. Families should also guide children to build healthy digital habits and real world social skills. In conclusion life today offers more resources but also more stress. With supportive policies and responsible parenting children can still grow in a healthier and more confident way.
+        - generic [ref=e55]:
+          - button "Next Question" [ref=e56] [cursor=pointer]
+          - button "Clear" [ref=e57] [cursor=pointer]
+          - button "提交评阅" [ref=e58] [cursor=pointer]
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - paragraph [ref=e61]: AI评阅（估分）
+          - paragraph [ref=e62]: 总分：73/90
+        - paragraph [ref=e63]: 等级：中等
+        - generic [ref=e64]:
+          - paragraph [ref=e65]: 优点
+          - list [ref=e66]:
+            - listitem [ref=e67]: 论点明确，结构清晰
+            - listitem [ref=e68]: 有效地表达了自己的观点
+        - generic [ref=e69]:
+          - paragraph [ref=e70]: 改进建议
+          - list [ref=e71]:
+            - listitem [ref=e72]: 词汇选择可以更丰富
+            - listitem [ref=e73]: 需要更多具体的例子来支持论点
+        - paragraph [ref=e74]: 总评
+        - paragraph [ref=e75]: 学生的作文表达了清晰的观点，结构合理，但词汇选择和例子的提供可以进一步改进。
+        - paragraph [ref=e76]: 当前结果对应最近一次提交内容。 （提交词数：128）
+  - generic: AI评阅已完成。

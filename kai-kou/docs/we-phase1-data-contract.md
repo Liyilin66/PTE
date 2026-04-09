@@ -48,7 +48,7 @@ These two fields are traceability fields, not semantic matching fields.
   Universal 10-template bank for all WE questions (seed + adapter).
 
 - `seeds/we/we-opinion-sentences.phase1.json`  
-  Reusable support/oppose/balanced sentence groups by topic.
+  Opinion sentence bank (seed + adapter) with `topicKey / subTopicKey / questionIds` mapping.
 
 - `seeds/we/we-linker-bank.phase1.json`  
   Connector phrases for intro/body/contrast/example/conclusion.
@@ -81,6 +81,8 @@ Current WE runtime now uses seed-driven adapter reads:
 1. `/we` (random practice)
 2. `/we/select` (select from full 39-question catalog)
 3. `/we/practice/:id` (single-question practice)
+4. `/we/templates` (universal template library)
+5. `/we/opinions` (opinion sentence library)
 
 Adapter access points:
 1. `getWEQuestionCatalog()`
@@ -93,9 +95,12 @@ Adapter access points:
 8. `getWETemplateById(id)`
 9. `getWETemplatesByPromptType(promptType)` (compat path, now returns universal templates)
 10. `getRecommendedWETemplates(question)` (compat path, now returns universal templates)
-11. `getWEOpinionSentencesByTopic(topic)`
-12. `getWELinkers()`
-13. `getWEExamplesByTopic(topic)`
+11. `getWEOpinionSentences()`
+12. `getWEOpinionSentencesByTopic(topicKey)`
+13. `getWEOpinionSentencesByQuestionId(questionId)`
+14. `getWEOpinionSentencesGroupedByStance(questionId)`
+15. `getWELinkers()`
+16. `getWEExamplesByTopic(topic)`
 
 Template runtime behavior:
 - All 39 WE questions share the same 10 universal templates.
@@ -103,6 +108,16 @@ Template runtime behavior:
 - Users can switch current template manually and one-click import to body editor.
 - WE main entry now includes a template library page (`/we/templates`) with view/copy/use actions.
 - This phase does not include AI template generation or AI scoring.
+
+Opinion sentence runtime behavior:
+- Opinion sentence seed keeps 6 top-level topic buckets:
+  `education_learning`, `technology_media`, `work_business_economy`,
+  `government_law_environment`, `city_building_tourism_living`, `family_society_growth`.
+- Each sentence record includes: `id`, `topicKey`, `subTopicKey`, `stance`, `text`, `questionIds`, `sortOrder`.
+- Each sentence record includes: `id`, `topicKey`, `subTopicKey`, `stance`, `text`, `translationZh`, `questionIds`, `sortOrder`.
+- The opinion library page (`/we/opinions`) supports topic-group viewing, search, copy, and \"go use in practice\".
+- Single-question page loads recommended opinion sentences by `questionId` and groups them by `support / against / balanced`.
+- Users can copy or insert a sentence directly into the essay body input.
 
 ## Current Storage Decision
 

@@ -1,0 +1,17 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - heading "开口" [level=1] [ref=e6]
+    - paragraph [ref=e7]: PTE 口语备考，开口就练
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - button "登录" [ref=e10] [cursor=pointer]
+      - button "注册" [active] [ref=e11] [cursor=pointer]
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]: 邮箱
+        - textbox "your@email.com" [ref=e15]: pw_verify_1775696863125@example.com
+      - generic [ref=e16]:
+        - generic [ref=e18]: 密码
+        - textbox "至少 6 位" [ref=e20]
+      - button "注册" [ref=e22] [cursor=pointer]
+    - paragraph [ref=e23]: 注册后可由管理员赠送试用，或开通 VIP 使用 AI 评分

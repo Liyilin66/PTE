@@ -12,6 +12,7 @@ import {
 const router = useRouter();
 const route = useRoute();
 const ACTIVE_TEMPLATE_STORAGE_KEY = "we.activeTemplateId";
+const ACTIVE_OPINION_STORAGE_KEY = "we.activeOpinionId";
 
 const allQuestions = ref(getWEQuestionCatalog());
 const searchText = ref("");
@@ -77,17 +78,35 @@ function persistTemplateId(templateId) {
   window.localStorage.setItem(ACTIVE_TEMPLATE_STORAGE_KEY, key);
 }
 
+function getPersistedOpinionId() {
+  if (typeof window === "undefined") return "";
+  return String(window.localStorage.getItem(ACTIVE_OPINION_STORAGE_KEY) || "").trim();
+}
+
+function persistOpinionId(opinionId) {
+  const key = String(opinionId || "").trim();
+  if (!key || typeof window === "undefined") return;
+  window.localStorage.setItem(ACTIVE_OPINION_STORAGE_KEY, key);
+}
+
 function startPractice(questionId) {
   const templateId = String(route.query?.template || "").trim() || getPersistedTemplateId();
+  const opinionId = String(route.query?.opinion || "").trim() || getPersistedOpinionId();
+  const query = {};
+
   if (templateId) {
+    query.template = templateId;
     persistTemplateId(templateId);
-    router.push({
-      path: `/we/practice/${questionId}`,
-      query: { template: templateId }
-    });
-    return;
   }
-  router.push(`/we/practice/${questionId}`);
+  if (opinionId) {
+    query.opinion = opinionId;
+    persistOpinionId(opinionId);
+  }
+
+  router.push({
+    path: `/we/practice/${questionId}`,
+    query
+  });
 }
 </script>
 

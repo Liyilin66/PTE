@@ -1,0 +1,74 @@
+- generic [ref=e2]:
+  - generic [ref=e135]:
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - button "返回上一页" [ref=e139] [cursor=pointer]:
+          - img [ref=e140]
+        - generic [ref=e142]: Write Essay
+      - generic [ref=e143]:
+        - generic [ref=e144]: ✅ VIP · 无限练习
+        - button "退出" [ref=e145] [cursor=pointer]
+    - main [ref=e146]:
+      - generic [ref=e147]:
+        - paragraph [ref=e148]: "Question #33"
+        - generic [ref=e149]:
+          - button "看模板" [ref=e150] [cursor=pointer]
+          - button "观点句" [ref=e151] [cursor=pointer]
+          - button "选题练习" [ref=e152] [cursor=pointer]
+      - generic [ref=e153]:
+        - generic [ref=e154]:
+          - paragraph [ref=e155]: Transportation Networks
+          - generic [ref=e156]: Hard
+        - paragraph [ref=e157]: As cities expand, governments should look forward to creating better networks of public transport available for everyone rather than building more roads for vehicle owning population. To what extent do you agree or disagree?
+        - generic [ref=e158]:
+          - generic [ref=e159]: agree_disagree
+          - generic [ref=e160]: city_infrastructure_housing
+      - generic [ref=e161]:
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - paragraph [ref=e164]: 当前模板预览
+            - paragraph [ref=e165]: 10 个全文通用模板（默认模板 1）
+          - generic [ref=e166]:
+            - button "切换模板" [ref=e167] [cursor=pointer]
+            - button "一键导入模板" [ref=e168] [cursor=pointer]
+        - generic [ref=e169]:
+          - generic [ref=e170]:
+            - paragraph [ref=e171]: 通用模版 1：聚焦社会现象（Social Phenomenon）
+            - generic [ref=e172]: 聚焦社会现象
+          - generic [ref=e173]: Nowadays, the issue of [填入题目核心话题] has become very popular in our society. People hold different views on this. Personally, I think it brings us a lot to think about. I will explain my ideas below. On the one hand, the first important point is that [填入第一点看法]. For example, [填入具体例子]. This clearly shows how it deeply influences our daily lives and our choices. On the other hand, another key factor is that [填入第二点看法]. A good example to show this is [填入第二个例子]. Therefore, we can easily understand its deeper meaning in modern times. In conclusion, based on the above discussion, [重新抄写核心话题] is an essential part of our world. We should pay more attention to it and make good use of it in the future.
+      - generic [ref=e174]:
+        - generic [ref=e175]:
+          - paragraph [ref=e176]: Recommended Opinion Sentences
+          - generic [ref=e177]:
+            - generic [ref=e178]: 9 sentences
+            - button "展开观点句" [ref=e179] [cursor=pointer]
+        - paragraph [ref=e180]: 已折叠，点击“展开观点句”查看。
+      - generic [ref=e181]:
+        - generic [ref=e182]:
+          - generic [ref=e183]:
+            - generic [ref=e184]: Body
+            - generic [ref=e185]: "Words: 123"
+          - textbox "Write your response here..." [ref=e186]: Public transport should be prioritized in growing cities because it moves more people with less land use and lower emissions than private cars. I agree that governments should invest first in reliable buses, metro lines, and integrated ticket systems instead of only building more roads. Better transit reduces traffic congestion, improves air quality, and supports people who cannot afford private vehicles. At the same time, roads are still necessary for logistics, emergency services, and suburban connections, so policy should be balanced rather than extreme. A practical strategy is to expand public transport capacity, improve last mile links, and apply traffic demand measures in crowded districts. In conclusion, governments should place public transport at the center of urban planning while maintaining essential road infrastructure.
+        - generic [ref=e187]:
+          - button "Next Question" [ref=e188] [cursor=pointer]
+          - button "Clear" [ref=e189] [cursor=pointer]
+          - button "提交评阅" [ref=e190] [cursor=pointer]
+      - generic [ref=e191]:
+        - generic [ref=e192]:
+          - paragraph [ref=e193]: AI评阅（估分）
+          - paragraph [ref=e194]: 总分：69/90
+        - paragraph [ref=e195]: 等级：中等
+        - generic [ref=e196]:
+          - paragraph [ref=e197]: 优点
+          - list [ref=e198]:
+            - listitem [ref=e199]: 论点明确
+            - listitem [ref=e200]: 逻辑结构清晰
+        - generic [ref=e201]:
+          - paragraph [ref=e202]: 改进建议
+          - list [ref=e203]:
+            - listitem [ref=e204]: 词汇丰富度有待提高
+            - listitem [ref=e205]: 段落结构可以更加复杂
+        - paragraph [ref=e206]: 总评
+        - paragraph [ref=e207]: 作文表达清晰，但可进一步提高词汇和论证深度。
+        - paragraph [ref=e208]: 当前结果对应最近一次提交内容。 （提交词数：123）
+  - generic: AI评阅已完成。

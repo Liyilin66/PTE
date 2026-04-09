@@ -1,5 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import { generateScoreTextWithFallback } from "../backend/llm/score-llm-service.js";
+import { getGroqApiKeyFromEnv } from "../backend/llm/providers/groq.js";
+import { analyzeWEEssayForm } from "../backend/we/form-gate-rules.js";
+import {
+  buildWEAiFallbackResult,
+  buildWEFormGateResult,
+  finalizeWEScorePayload
+} from "../backend/we/normalize-we-score.js";
+import { buildWEPrompt } from "../backend/we/we-prompt.js";
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
@@ -22,28 +30,44 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  const requestId = createRequestId(req);
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      error: "Method not allowed",
+      request_id: requestId
+    });
+  }
 
   if (!supabase) {
-    return res.status(500).json({ error: "supabase_not_configured", message: "Supabase 环境变量未配置" });
+    return res.status(500).json({
+      error: "supabase_not_configured",
+      message: "Supabase environment variables are not configured.",
+      request_id: requestId
+    });
   }
 
   const token = getBearerToken(req);
   if (!token) {
-    return res.status(401).json({ error: "请先登录" });
+    return res.status(401).json({
+      error: "Please sign in first.",
+      request_id: requestId
+    });
   }
 
   const { data: authData, error: authError } = await supabase.auth.getUser(token);
   const user = authData?.user || null;
   if (authError || !user) {
-    return res.status(401).json({ error: "登录已过期，请重新登录" });
+    return res.status(401).json({
+      error: "Session expired. Please sign in again.",
+      request_id: requestId
+    });
   }
 
   const { taskType, transcript, questionContent } = req.body || {};
   const normalizedTaskType = normalizeTaskType(taskType);
   const safeTranscript = typeof transcript === "string" ? transcript : "";
   const trimmedTranscript = safeTranscript.trim();
-  const requestId = createRequestId(req);
+  const weFormAnalysis = normalizedTaskType === "WE" ? analyzeWEEssayForm(safeTranscript) : null;
 
   if (!trimmedTranscript) {
     if (normalizedTaskType === "RA") {
@@ -57,33 +81,34 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ...raSilenceResult,
         provider_used: "none",
-        fallback_reason: null
+        fallback_reason: null,
+        request_id: requestId
+      });
+    }
+
+    if (normalizedTaskType === "WE") {
+      return res.status(200).json({
+        ...buildWEFormGateResult({ formAnalysis: weFormAnalysis }),
+        request_id: requestId
       });
     }
 
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
-      feedback: "没有识别到你的语音，请检查麦克风后重试。",
-      overall: 0
+      feedback: "No speech/text recognized. Please retry.",
+      overall: 0,
+      request_id: requestId
     });
   }
 
-  if (normalizedTaskType !== "RA" && trimmedTranscript.length < 3) {
+  if (normalizedTaskType !== "RA" && normalizedTaskType !== "WE" && trimmedTranscript.length < 3) {
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
-      feedback: "没有识别到你的语音，请检查麦克风后重试。",
-      overall: 0
-    });
-  }
-
-  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === "YOUR_GEMINI_API_KEY") {
-    return res.status(500).json({
-      error: "missing_api_key",
-      scores: { pronunciation: 60, fluency: 60, content: 60 },
-      feedback: "AI 服务尚未配置完成，请稍后重试。",
-      overall: 60
+      feedback: "No speech/text recognized. Please retry.",
+      overall: 0,
+      request_id: requestId
     });
   }
 
@@ -104,21 +129,64 @@ export default async function handler(req, res) {
 
     if (profileError) {
       console.error("load profile error:", profileError);
-      return res.status(500).json({ error: "profile_load_failed" });
+      return res.status(500).json({
+        error: "profile_load_failed",
+        request_id: requestId
+      });
     }
 
     const access = getAccessStatus(user, profile);
     if (!access.canUseAiScoring) {
       return res.status(403).json({
         error: "access_expired",
-        message: "当前账号未开通 AI 评分，请开通 VIP 或使用赠送试用权限。",
-        access
+        message: "AI scoring access is not available for this account.",
+        access,
+        request_id: requestId
       });
     }
 
-    const prompt = buildPrompt(normalizedTaskType, safeTranscript, questionContent);
-    const llmResult = await generateScoreTextWithFallback({ prompt });
+    if (normalizedTaskType === "WE" && Number(weFormAnalysis?.form_score || 0) === 0) {
+      return res.status(200).json({
+        ...buildWEFormGateResult({ formAnalysis: weFormAnalysis }),
+        request_id: requestId
+      });
+    }
+
+    const hasGeminiApiKey = hasConfiguredGeminiApiKey();
+    const hasGroqApiKey = hasConfiguredGroqApiKey();
+    if (!hasGeminiApiKey && !hasGroqApiKey) {
+      if (normalizedTaskType === "WE") {
+        return res.status(200).json(
+          {
+            ...buildWEAiFallbackResult({
+              formAnalysis: weFormAnalysis,
+              providerUsed: "none",
+              fallbackReason: "llm_api_keys_missing",
+              errorStage: "precheck_missing_all_keys",
+              rawErrorType: "llm_api_keys_missing",
+              reasonCodes: ["ai_review_unavailable"]
+            }),
+            request_id: requestId
+          }
+        );
+      }
+
+      return res.status(500).json({
+        error: "missing_api_key",
+        scores: { pronunciation: 60, fluency: 60, content: 60 },
+        feedback: "AI service is not configured yet.",
+        overall: 60,
+        request_id: requestId
+      });
+    }
+
+    const prompt = buildPrompt(normalizedTaskType, safeTranscript, questionContent, weFormAnalysis);
+    const llmResult = await generateScoreTextWithFallback({
+      prompt,
+      taskType: normalizedTaskType
+    });
     const latency = normalizeLatency(llmResult?.latency);
+    const providerAttempts = normalizeProviderAttempts(llmResult?.provider_attempts);
 
     let parsedPayload;
     try {
@@ -128,6 +196,7 @@ export default async function handler(req, res) {
       error.provider_used = llmResult?.provider_used || "gemini";
       error.fallback_reason = llmResult?.fallback_reason ?? null;
       error.raw_error_type = error?.raw_error_type || "model_json_parse_failed";
+      error.provider_attempts = providerAttempts;
       error.latency = latency;
       throw error;
     }
@@ -137,13 +206,17 @@ export default async function handler(req, res) {
       parsed = normalizeResult(parsedPayload, {
         taskType: normalizedTaskType,
         transcript: safeTranscript,
-        questionContent
+        questionContent,
+        weFormAnalysis,
+        providerUsed: llmResult?.provider_used || "gemini",
+        fallbackReason: llmResult?.fallback_reason ?? null
       });
     } catch (error) {
       error.error_stage = "response_normalize";
       error.provider_used = llmResult?.provider_used || "gemini";
       error.fallback_reason = llmResult?.fallback_reason ?? null;
       error.raw_error_type = error?.raw_error_type || "score_normalize_failed";
+      error.provider_attempts = providerAttempts;
       error.latency = latency;
       throw error;
     }
@@ -151,15 +224,19 @@ export default async function handler(req, res) {
     const responsePayload = {
       ...parsed,
       provider_used: llmResult?.provider_used || "gemini",
-      fallback_reason: llmResult?.fallback_reason ?? null
+      fallback_reason: llmResult?.fallback_reason ?? null,
+      request_id: requestId
     };
 
     logScoreEvent("score_success", {
       request_id: requestId,
+      task_type: normalizedTaskType,
       provider_used: responsePayload.provider_used,
       fallback_reason: responsePayload.fallback_reason,
       raw_error_type: llmResult?.raw_error_type || null,
       error_stage: "",
+      response_status: 200,
+      provider_attempts: providerAttempts,
       latency_total_ms: latency.total_ms,
       latency_primary_ms: latency.primary_ms,
       latency_fallback_ms: latency.fallback_ms
@@ -169,28 +246,49 @@ export default async function handler(req, res) {
   } catch (error) {
     const latency = normalizeLatency(error?.latency);
     const providerUsed = `${error?.provider_used || error?.provider || "gemini"}`;
-    const fallbackReason = error?.fallback_reason ?? null;
     const rawErrorType = error?.raw_error_type || "ai_error_unknown";
+    const fallbackReason = normalizeFallbackReason(error?.fallback_reason, rawErrorType);
     const errorStage = error?.error_stage || "provider_call";
+    const providerAttempts = normalizeProviderAttempts(error?.provider_attempts);
 
     logScoreEvent("score_failed", {
       request_id: requestId,
+      task_type: normalizedTaskType,
       provider_used: providerUsed,
       fallback_reason: fallbackReason,
       raw_error_type: rawErrorType,
       error_stage: errorStage,
+      response_status: normalizedTaskType === "WE" ? 200 : 500,
+      provider_attempts: providerAttempts,
       latency_total_ms: latency.total_ms,
       latency_primary_ms: latency.primary_ms,
       latency_fallback_ms: latency.fallback_ms
     });
 
+    if (normalizedTaskType === "WE") {
+      return res.status(200).json(
+        {
+          ...buildWEAiFallbackResult({
+            formAnalysis: weFormAnalysis,
+            providerUsed,
+            fallbackReason,
+            errorStage,
+            rawErrorType,
+            reasonCodes: ["ai_review_unavailable"]
+          }),
+          request_id: requestId
+        }
+      );
+    }
+
     return res.status(500).json({
       error: "ai_error",
       scores: { pronunciation: 60, fluency: 60, content: 60 },
-      feedback: "AI 分析暂时遇到问题，这是估算分数，请稍后重试。",
+      feedback: "AI analysis is temporarily unavailable. This is an estimated fallback score.",
       overall: 60,
       provider_used: providerUsed,
-      fallback_reason: fallbackReason
+      fallback_reason: fallbackReason,
+      request_id: requestId
     });
   }
 }
@@ -246,10 +344,10 @@ function getAccessStatus(user, profile) {
 }
 
 function buildStatusText(accessStatus, trialDaysLeft) {
-  if (accessStatus === "vip") return "✨ VIP · 无限练习";
-  if (accessStatus === "trial") return `试用期 · 还剩 ${trialDaysLeft} 天`;
-  if (accessStatus === "trial_expired") return "试用已结束";
-  return "未开通";
+  if (accessStatus === "vip") return "VIP - Unlimited practice";
+  if (accessStatus === "trial") return `Trial - ${trialDaysLeft} day(s) left`;
+  if (accessStatus === "trial_expired") return "Trial expired";
+  return "Not activated";
 }
 
 function createRequestId(req) {
@@ -282,6 +380,36 @@ function normalizeTaskType(taskType) {
   if (typeof taskType !== "string") return "RA";
   const normalized = taskType.trim().toUpperCase();
   return normalized || "RA";
+}
+
+function hasConfiguredGeminiApiKey() {
+  const apiKey = `${process.env.GEMINI_API_KEY || ""}`.trim();
+  return Boolean(apiKey && apiKey !== "YOUR_GEMINI_API_KEY");
+}
+
+function hasConfiguredGroqApiKey() {
+  return Boolean(getGroqApiKeyFromEnv());
+}
+
+function normalizeFallbackReason(fallbackReason, rawErrorType) {
+  const reason = `${fallbackReason || rawErrorType || ""}`.trim();
+  return reason || null;
+}
+
+function normalizeProviderAttempts(attempts) {
+  if (!Array.isArray(attempts)) return [];
+  return attempts
+    .map((item) => ({
+      provider: `${item?.provider || ""}`.trim(),
+      stage: `${item?.stage || ""}`.trim(),
+      started_at: `${item?.started_at || ""}`.trim(),
+      ended_at: `${item?.ended_at || ""}`.trim(),
+      duration_ms: Math.max(0, Math.round(Number(item?.duration_ms || 0))),
+      timeout_ms: Number.isFinite(Number(item?.timeout_ms)) ? Math.round(Number(item.timeout_ms)) : undefined,
+      status: `${item?.status || ""}`.trim(),
+      raw_error_type: `${item?.raw_error_type || ""}`.trim()
+    }))
+    .filter((item) => item.provider);
 }
 
 function parseModelJson(rawText, options = {}) {
@@ -361,10 +489,20 @@ function normalizeResult(payload, options = {}) {
     return finalizeRAScore(payload, options);
   }
 
+  if (options?.taskType === "WE") {
+    return finalizeWEScorePayload(payload, {
+      formAnalysis: options?.weFormAnalysis,
+      providerUsed: options?.providerUsed || "gemini",
+      fallbackReason: options?.fallbackReason ?? null
+    });
+  }
+
   const pronunciation = clampScore(payload?.scores?.pronunciation);
   const fluency = clampScore(payload?.scores?.fluency);
   const content = clampScore(payload?.scores?.content);
-  const feedback = typeof payload?.feedback === "string" ? payload.feedback.trim() : "你已经完成一次练习，继续保持节奏。";
+  const feedback = typeof payload?.feedback === "string"
+    ? payload.feedback.trim()
+    : "Practice completed. Keep the momentum.";
   const overallRaw = Number(payload?.overall);
   const overall = Number.isFinite(overallRaw)
     ? Math.max(0, Math.min(100, Math.round(overallRaw)))
@@ -415,7 +553,7 @@ function finalizeRAScore(payload, context = {}) {
   const weightedOverall =
     pronunciation * RA_WEIGHTS.pronunciation + fluency * RA_WEIGHTS.fluency + content * RA_WEIGHTS.content;
   const overall = clampRAOverall(weightedOverall);
-  const feedback = normalizeFeedback(payload?.feedback, "继续练习朗读节奏和重音，你会越来越稳。");
+  const feedback = normalizeFeedback(payload?.feedback, "Keep practicing pacing and stress patterns for steadier delivery.");
 
   return {
     scores: {
@@ -478,7 +616,7 @@ function tokenizeForOverlap(text) {
 }
 
 function buildRAInvalidResult(payload, responseType) {
-  const feedback = normalizeFeedback(payload?.feedback, "这次没有形成有效朗读，系统已按基础分记录。");
+  const feedback = normalizeFeedback(payload?.feedback, "No valid reading was detected this time, so a baseline score was used.");
 
   return {
     scores: {
@@ -528,8 +666,16 @@ function clampScore(value) {
   return Math.max(0, Math.min(90, Math.round(num)));
 }
 
-function buildPrompt(taskType, transcript, questionContent) {
+function buildPrompt(taskType, transcript, questionContent, weFormAnalysis) {
   const question = questionContent || "";
+
+  if (taskType === "WE") {
+    return buildWEPrompt({
+      essayText: transcript,
+      questionContent: questionContent || "",
+      formAnalysis: weFormAnalysis || analyzeWEEssayForm(transcript)
+    });
+  }
 
   const prompts = {
     RA: `
@@ -593,8 +739,8 @@ Score overall as a percentage of keywords covered (0-100).
 
 Rules:
 - Feedback in Chinese, warm coach tone
-- Never use negative words like "错误", "失败", "很差"
-- Instead say things like "这次抓住了...，下次可以注意..."
+- Never use harsh negative words like "太差", "错误很多", "不行"
+- Instead say things like "这次已经抓住关键词了，下次把句尾补完整会更稳。"
 
 Respond ONLY with this JSON:
 {
@@ -657,7 +803,7 @@ Evaluate:
 Rules:
 - Feedback in Chinese, warm coach tone
 - Focus on spelling, function words, and missing words
-- Never use negative words like "很差"
+- Never use harsh negative words like "太差", "错误很多", "不行"
 
 Respond ONLY with this JSON:
 {
@@ -673,4 +819,7 @@ Respond ONLY with this JSON:
 
   return prompts[taskType] || prompts.RA;
 }
+
+
+
 

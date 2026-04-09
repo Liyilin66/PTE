@@ -170,13 +170,22 @@ const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" 
                   选题练习
                 </button>
               </div>
-              <button
-                type="button"
-                class="w-full rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
-                @click="router.push('/we/templates')"
-              >
-                看模板
-              </button>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  @click="router.push('/we/templates')"
+                >
+                  看模板
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  @click="router.push('/we/opinions')"
+                >
+                  观点句
+                </button>
+              </div>
             </div>
           </div>
         </article>

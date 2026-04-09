@@ -52,6 +52,28 @@ function normalizeTemplate(rawTemplate) {
   };
 }
 
+function normalizeStance(value) {
+  const stance = String(value || "").trim().toLowerCase();
+  if (stance === "oppose") return "against";
+  if (stance === "support" || stance === "against" || stance === "balanced") return stance;
+  return "balanced";
+}
+
+function normalizeOpinionSentence(rawSentence) {
+  return {
+    id: String(rawSentence?.id || "").trim(),
+    topicKey: String(rawSentence?.topicKey || "").trim(),
+    subTopicKey: String(rawSentence?.subTopicKey || "").trim(),
+    subTopicLabel: String(rawSentence?.subTopicLabel || "").trim(),
+    stance: normalizeStance(rawSentence?.stance),
+    text: String(rawSentence?.text || "").trim(),
+    translationZh: String(rawSentence?.translationZh || "").trim(),
+    questionIds: toArray(rawSentence?.questionIds).map((item) => String(item || "").trim()).filter(Boolean),
+    sortOrder: Number(rawSentence?.sortOrder || 999),
+    source: String(rawSentence?.source || "").trim()
+  };
+}
+
 const questionCatalog = toArray(questionCatalogSeed?.questions).map((item) => normalizeQuestion(item));
 const questionMap = new Map(questionCatalog.map((item) => [item.id, item]));
 const relatedOverrideMap = new Map(
@@ -64,6 +86,24 @@ const templateCatalog = toArray(templateBankSeed?.templates)
   .map((item) => normalizeTemplate(item))
   .sort((a, b) => a.sortOrder - b.sortOrder);
 const templateMap = new Map(templateCatalog.map((item) => [item.id, item]));
+const opinionTopicOrder = toArray(opinionSentenceSeed?.topicOrder).map((item) => String(item || "").trim()).filter(Boolean);
+const opinionTopics = toArray(opinionSentenceSeed?.topics).map((item) => ({
+  topicKey: String(item?.topicKey || "").trim(),
+  label: String(item?.label || "").trim(),
+  subTopics: toArray(item?.subTopics).map((subItem) => ({
+    subTopicKey: String(subItem?.subTopicKey || "").trim(),
+    subTopicLabel: String(subItem?.subTopicLabel || "").trim()
+  }))
+}));
+const opinionSentenceCatalog = toArray(opinionSentenceSeed?.sentences)
+  .map((item) => normalizeOpinionSentence(item))
+  .filter((item) => item.id && item.topicKey && item.text)
+  .sort((a, b) => a.sortOrder - b.sortOrder);
+const LEGACY_OPINION_TOPIC_ALIAS = {
+  society_law_policy: ["government_law_environment", "family_society_growth"],
+  environment_global_issues: ["government_law_environment"],
+  city_infrastructure_housing: ["city_building_tourism_living"]
+};
 
 function cloneQuestion(question) {
   if (!question) return null;
@@ -81,6 +121,14 @@ function cloneTemplate(template) {
     ...template,
     promptTypes: [...template.promptTypes],
     sections: { ...template.sections }
+  };
+}
+
+function cloneOpinionSentence(sentence) {
+  if (!sentence) return null;
+  return {
+    ...sentence,
+    questionIds: [...sentence.questionIds]
   };
 }
 
@@ -151,13 +199,66 @@ export function getRecommendedWETemplates(question) {
   return getUniversalWETemplates();
 }
 
+export function getWEOpinionSentences() {
+  return opinionSentenceCatalog.map((item) => cloneOpinionSentence(item));
+}
+
 export function getWEOpinionSentencesByTopic(topic) {
   const normalizedTopic = String(topic || "").trim();
-  if (!normalizedTopic) return [];
+  if (!normalizedTopic) return getWEOpinionSentences();
 
-  const groups = toArray(opinionSentenceSeed?.groups);
-  const found = groups.find((item) => String(item?.primaryTopic || "").trim() === normalizedTopic);
-  return toArray(found?.sentences).map((item) => ({ ...item }));
+  const topicKeys = LEGACY_OPINION_TOPIC_ALIAS[normalizedTopic] || [normalizedTopic];
+  const topicKeySet = new Set(topicKeys);
+
+  return opinionSentenceCatalog
+    .filter((item) => topicKeySet.has(item.topicKey))
+    .map((item) => cloneOpinionSentence(item));
+}
+
+export function getWEOpinionSentencesByQuestionId(questionId) {
+  const normalizedQuestionId = String(questionId || "").trim();
+  if (!normalizedQuestionId) return [];
+  return opinionSentenceCatalog
+    .filter((item) => item.questionIds.includes(normalizedQuestionId))
+    .map((item) => cloneOpinionSentence(item));
+}
+
+export function getWEOpinionSentencesGroupedByStance(questionId) {
+  const grouped = {
+    support: [],
+    against: [],
+    balanced: []
+  };
+
+  const sentences = getWEOpinionSentencesByQuestionId(questionId);
+  sentences.forEach((item) => {
+    const stance = normalizeStance(item?.stance);
+    if (!grouped[stance]) {
+      grouped.balanced.push(item);
+      return;
+    }
+    grouped[stance].push(item);
+  });
+  return grouped;
+}
+
+export function getWEOpinionTopics() {
+  if (opinionTopics.length) {
+    return opinionTopics.map((item) => ({
+      ...item,
+      subTopics: item.subTopics.map((subItem) => ({ ...subItem }))
+    }));
+  }
+
+  const derivedTopicKeys = opinionTopicOrder.length
+    ? opinionTopicOrder
+    : [...new Set(opinionSentenceCatalog.map((item) => item.topicKey).filter(Boolean))];
+
+  return derivedTopicKeys.map((topicKey) => ({
+    topicKey,
+    label: topicKey,
+    subTopics: []
+  }));
 }
 
 export function getWELinkers() {

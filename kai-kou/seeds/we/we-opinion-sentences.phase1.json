@@ -1,136 +1,2250 @@
-{
-  "version": "phase1",
-  "taskType": "WE",
-  "styleGuide": {
-    "targetLevel": "junior_senior_high",
-    "maxWordsPerSentence": 20,
-    "tone": "clear_direct"
-  },
-  "groups": [
-    {
-      "primaryTopic": "education_learning",
-      "sentences": [
-        {
-          "id": "OP_EDU_001",
-          "stance": "support",
-          "text": "Schools should teach practical skills because students need them in real life."
-        },
-        {
-          "id": "OP_EDU_002",
-          "stance": "oppose",
-          "text": "Traditional study is still useful because it builds strong basic knowledge."
-        },
-        {
-          "id": "OP_EDU_003",
-          "stance": "balanced",
-          "text": "A mixed method often works best, with both theory and practice."
-        }
-      ]
-    },
-    {
-      "primaryTopic": "technology_media",
-      "sentences": [
-        {
-          "id": "OP_TECH_001",
-          "stance": "support",
-          "text": "Technology can save time and make information easy to get."
-        },
-        {
-          "id": "OP_TECH_002",
-          "stance": "oppose",
-          "text": "Too much media use can harm focus and healthy communication."
-        },
-        {
-          "id": "OP_TECH_003",
-          "stance": "balanced",
-          "text": "Technology is useful when people use it with clear limits."
-        }
-      ]
-    },
-    {
-      "primaryTopic": "work_business_economy",
-      "sentences": [
-        {
-          "id": "OP_WORK_001",
-          "stance": "support",
-          "text": "Workers need fair hours so they can stay healthy and productive."
-        },
-        {
-          "id": "OP_WORK_002",
-          "stance": "oppose",
-          "text": "Some strict rules can reduce company flexibility in hard times."
-        },
-        {
-          "id": "OP_WORK_003",
-          "stance": "balanced",
-          "text": "Good policy should protect workers and support business growth."
-        }
-      ]
-    },
-    {
-      "primaryTopic": "society_law_policy",
-      "sentences": [
-        {
-          "id": "OP_SOC_001",
-          "stance": "support",
-          "text": "Clear laws can guide behavior and protect vulnerable people."
-        },
-        {
-          "id": "OP_SOC_002",
-          "stance": "oppose",
-          "text": "Rules alone are not enough if people do not accept them."
-        },
-        {
-          "id": "OP_SOC_003",
-          "stance": "balanced",
-          "text": "Law and education should work together for long-term change."
-        }
-      ]
-    },
-    {
-      "primaryTopic": "environment_global_issues",
-      "sentences": [
-        {
-          "id": "OP_ENV_001",
-          "stance": "support",
-          "text": "Climate action should start now because delay makes problems worse."
-        },
-        {
-          "id": "OP_ENV_002",
-          "stance": "oppose",
-          "text": "Short-term costs are high, so policy needs careful planning."
-        },
-        {
-          "id": "OP_ENV_003",
-          "stance": "balanced",
-          "text": "Shared action by governments, companies and people is the best path."
-        }
-      ]
-    },
-    {
-      "primaryTopic": "city_infrastructure_housing",
-      "sentences": [
-        {
-          "id": "OP_CITY_001",
-          "stance": "support",
-          "text": "Public transport can cut traffic and make cities more livable."
-        },
-        {
-          "id": "OP_CITY_002",
-          "stance": "oppose",
-          "text": "Rapid city changes can hurt local culture and small businesses."
-        },
-        {
-          "id": "OP_CITY_003",
-          "stance": "balanced",
-          "text": "Cities need modern development and protection of key heritage."
-        }
-      ]
-    }
-  ],
-  "futureHooks": {
-    "promptTypeSpecificSentences": true,
-    "difficultySpecificSentences": true,
-    "autoOpinionMatch": false
-  }
+﻿{
+    "version":  "phase1",
+    "taskType":  "WE",
+    "schemaVersion":  "opinion-sentences-v2",
+    "topicOrder":  [
+                       "education_learning",
+                       "technology_media",
+                       "work_business_economy",
+                       "government_law_environment",
+                       "city_building_tourism_living",
+                       "family_society_growth"
+                   ],
+    "topics":  [
+                   {
+                       "topicKey":  "education_learning",
+                       "label":  "Education \u0026 Learning",
+                       "subTopics":  [
+                                         {
+                                             "subTopicKey":  "formal_written_examination",
+                                             "subTopicLabel":  "Formal Written Examination"
+                                         },
+                                         {
+                                             "subTopicKey":  "effective_study_with_employment",
+                                             "subTopicLabel":  "Effective Study with Employment"
+                                         },
+                                         {
+                                             "subTopicKey":  "studying_theater_and_play_writing",
+                                             "subTopicLabel":  "Studying Theater \u0026 Play Writing"
+                                         },
+                                         {
+                                             "subTopicKey":  "mark_deduction_policy",
+                                             "subTopicLabel":  "Mark Deduction"
+                                         },
+                                         {
+                                             "subTopicKey":  "digital_materials_and_library",
+                                             "subTopicLabel":  "Digital Materials"
+                                         },
+                                         {
+                                             "subTopicKey":  "foreign_languages_ai_translation",
+                                             "subTopicLabel":  "Foreign Languages"
+                                         },
+                                         {
+                                             "subTopicKey":  "experiential_learning",
+                                             "subTopicLabel":  "Experiential Learning"
+                                         },
+                                         {
+                                             "subTopicKey":  "compulsory_foreign_languages",
+                                             "subTopicLabel":  "Compulsory Learning"
+                                         },
+                                         {
+                                             "subTopicKey":  "travel_for_education",
+                                             "subTopicLabel":  "Travel for Education"
+                                         },
+                                         {
+                                             "subTopicKey":  "best_teachers_life_experience",
+                                             "subTopicLabel":  "Best Teachers / Life Experience"
+                                         },
+                                         {
+                                             "subTopicKey":  "legacy_phase1",
+                                             "subTopicLabel":  "Legacy Phase 1"
+                                         }
+                                     ]
+                   },
+                   {
+                       "topicKey":  "technology_media",
+                       "label":  "Technology \u0026 Media",
+                       "subTopics":  [
+                                         {
+                                             "subTopicKey":  "computer_inventions",
+                                             "subTopicLabel":  "Inventions (Computer)"
+                                         },
+                                         {
+                                             "subTopicKey":  "television_functions",
+                                             "subTopicLabel":  "Television"
+                                         },
+                                         {
+                                             "subTopicKey":  "information_revolution",
+                                             "subTopicLabel":  "Information Revolution"
+                                         },
+                                         {
+                                             "subTopicKey":  "mass_media_influence",
+                                             "subTopicLabel":  "Mass Media"
+                                         },
+                                         {
+                                             "subTopicKey":  "extending_life_expectancy",
+                                             "subTopicLabel":  "Extending Life Expectancy"
+                                         },
+                                         {
+                                             "subTopicKey":  "smartphone_inventions",
+                                             "subTopicLabel":  "Inventions (Smartphone)"
+                                         },
+                                         {
+                                             "subTopicKey":  "mass_media_youth_opinion",
+                                             "subTopicLabel":  "Mass Media on Youth"
+                                         },
+                                         {
+                                             "subTopicKey":  "legacy_phase1",
+                                             "subTopicLabel":  "Legacy Phase 1"
+                                         }
+                                     ]
+                   },
+                   {
+                       "topicKey":  "work_business_economy",
+                       "label":  "Work / Business / Economy",
+                       "subTopics":  [
+                                         {
+                                             "subTopicKey":  "worker_decision_making",
+                                             "subTopicLabel":  "Worker Decision-Making"
+                                         },
+                                         {
+                                             "subTopicKey":  "wage_cap",
+                                             "subTopicLabel":  "Wage Cap"
+                                         },
+                                         {
+                                             "subTopicKey":  "short_weeks_policy",
+                                             "subTopicLabel":  "Short Weeks"
+                                         },
+                                         {
+                                             "subTopicKey":  "fewer_work_hours",
+                                             "subTopicLabel":  "Fewer Work Hours"
+                                         },
+                                         {
+                                             "subTopicKey":  "right_balance",
+                                             "subTopicLabel":  "Right Balance"
+                                         },
+                                         {
+                                             "subTopicKey":  "marketing_strategy",
+                                             "subTopicLabel":  "Marketing in Companies"
+                                         },
+                                         {
+                                             "subTopicKey":  "personal_life_shortage",
+                                             "subTopicLabel":  "Personal Life"
+                                         },
+                                         {
+                                             "subTopicKey":  "legacy_phase1",
+                                             "subTopicLabel":  "Legacy Phase 1"
+                                         }
+                                     ]
+                   },
+                   {
+                       "topicKey":  "government_law_environment",
+                       "label":  "Government / Law / Environment",
+                       "subTopics":  [
+                                         {
+                                             "subTopicKey":  "studying_climate_change",
+                                             "subTopicLabel":  "Studying Climate Change"
+                                         },
+                                         {
+                                             "subTopicKey":  "facing_issues_global_problem",
+                                             "subTopicLabel":  "Facing Issues"
+                                         },
+                                         {
+                                             "subTopicKey":  "transportation_networks_policy",
+                                             "subTopicLabel":  "Transportation Networks"
+                                         },
+                                         {
+                                             "subTopicKey":  "global_issue_responsibility",
+                                             "subTopicLabel":  "Global Issue"
+                                         },
+                                         {
+                                             "subTopicKey":  "law_effect",
+                                             "subTopicLabel":  "Law Effect"
+                                         },
+                                         {
+                                             "subTopicKey":  "legacy_phase1",
+                                             "subTopicLabel":  "Legacy Phase 1"
+                                         }
+                                     ]
+                   },
+                   {
+                       "topicKey":  "city_building_tourism_living",
+                       "label":  "City / Building / Tourism / Living",
+                       "subTopics":  [
+                                         {
+                                             "subTopicKey":  "building_effects",
+                                             "subTopicLabel":  "Building Effects"
+                                         },
+                                         {
+                                             "subTopicKey":  "tourism",
+                                             "subTopicLabel":  "Tourism"
+                                         },
+                                         {
+                                             "subTopicKey":  "shopping_malls",
+                                             "subTopicLabel":  "Shopping Malls"
+                                         },
+                                         {
+                                             "subTopicKey":  "old_or_modern_buildings",
+                                             "subTopicLabel":  "Old or Modern Buildings"
+                                         },
+                                         {
+                                             "subTopicKey":  "city_or_countryside",
+                                             "subTopicLabel":  "City or Countryside"
+                                         },
+                                         {
+                                             "subTopicKey":  "old_buildings_preservation",
+                                             "subTopicLabel":  "Old Buildings"
+                                         },
+                                         {
+                                             "subTopicKey":  "legacy_phase1",
+                                             "subTopicLabel":  "Legacy Phase 1"
+                                         }
+                                     ]
+                   },
+                   {
+                       "topicKey":  "family_society_growth",
+                       "label":  "Family / Society / Growth",
+                       "subTopics":  [
+                                         {
+                                             "subTopicKey":  "harder_life_for_children",
+                                             "subTopicLabel":  "Harder Life"
+                                         },
+                                         {
+                                             "subTopicKey":  "legal_responsibility",
+                                             "subTopicLabel":  "Legal Responsibility"
+                                         },
+                                         {
+                                             "subTopicKey":  "age_limits_for_activity",
+                                             "subTopicLabel":  "Age Limit / Age for Activity"
+                                         },
+                                         {
+                                             "subTopicKey":  "celebrities_privacy",
+                                             "subTopicLabel":  "Celebrities Privacy"
+                                         }
+                                     ]
+                   }
+               ],
+    "sentences":  [
+                      {
+                          "id":  "OPN_EDU_001",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "formal_written_examination",
+                          "subTopicLabel":  "Formal Written Examination",
+                          "stance":  "support",
+                          "text":  "In my opinion, formal written examinations are a valid way to assess students\u0027 learning.",
+                          "questionIds":  [
+                                              "WE_Q013"
+                                          ],
+                          "sortOrder":  1,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，正式笔试是评估学生学习情况的一种有效方式。"
+                      },
+                      {
+                          "id":  "OPN_EDU_002",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "formal_written_examination",
+                          "subTopicLabel":  "Formal Written Examination",
+                          "stance":  "against",
+                          "text":  "In my opinion, formal written examinations are not the best way to assess students\u0027 learning.",
+                          "questionIds":  [
+                                              "WE_Q013"
+                                          ],
+                          "sortOrder":  2,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，正式笔试不是评估学生学习情况的最好方式。"
+                      },
+                      {
+                          "id":  "OPN_EDU_003",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "formal_written_examination",
+                          "subTopicLabel":  "Formal Written Examination",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, formal written examinations are useful, but they should not be the only method.",
+                          "questionIds":  [
+                                              "WE_Q013"
+                                          ],
+                          "sortOrder":  3,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，正式笔试是有用的，但它不应该是唯一的方法。"
+                      },
+                      {
+                          "id":  "OPN_EDU_004",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "travel_for_education",
+                          "subTopicLabel":  "Travel for Education",
+                          "stance":  "support",
+                          "text":  "In my opinion, travel is a necessary part of a quality education.",
+                          "questionIds":  [
+                                              "WE_Q002"
+                                          ],
+                          "sortOrder":  4,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，旅行是高质量教育中必要的一部分。"
+                      },
+                      {
+                          "id":  "OPN_EDU_005",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "travel_for_education",
+                          "subTopicLabel":  "Travel for Education",
+                          "stance":  "against",
+                          "text":  "In my opinion, travel is not a necessary part of a quality education.",
+                          "questionIds":  [
+                                              "WE_Q002"
+                                          ],
+                          "sortOrder":  5,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，旅行不是高质量教育中必要的一部分。"
+                      },
+                      {
+                          "id":  "OPN_EDU_006",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "travel_for_education",
+                          "subTopicLabel":  "Travel for Education",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, travel is helpful for education, but it is not necessary.",
+                          "questionIds":  [
+                                              "WE_Q002"
+                                          ],
+                          "sortOrder":  6,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，旅行对教育有帮助，但不是必须的。"
+                      },
+                      {
+                          "id":  "OPN_EDU_007",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "studying_theater_and_play_writing",
+                          "subTopicLabel":  "Studying Theater \u0026 Play Writing",
+                          "stance":  "support",
+                          "text":  "In my opinion, studying old plays has more benefits than problems for high school students.",
+                          "questionIds":  [
+                                              "WE_Q030",
+                                              "WE_Q039"
+                                          ],
+                          "sortOrder":  7,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，对高中生来说，学习古老戏剧的好处多于问题。"
+                      },
+                      {
+                          "id":  "OPN_EDU_008",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "studying_theater_and_play_writing",
+                          "subTopicLabel":  "Studying Theater \u0026 Play Writing",
+                          "stance":  "balanced",
+                          "text":  "I believe studying plays written centuries ago is useful, but it can also be difficult for students.",
+                          "questionIds":  [
+                                              "WE_Q030",
+                                              "WE_Q039"
+                                          ],
+                          "sortOrder":  8,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为学习几个世纪前写的戏剧是有用的，但它对学生来说也可能很难。"
+                      },
+                      {
+                          "id":  "OPN_EDU_009",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "studying_theater_and_play_writing",
+                          "subTopicLabel":  "Studying Theater \u0026 Play Writing",
+                          "stance":  "support",
+                          "text":  "In my opinion, old plays are valuable if teachers explain them in a clear way.",
+                          "questionIds":  [
+                                              "WE_Q030",
+                                              "WE_Q039"
+                                          ],
+                          "sortOrder":  9,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，如果老师讲解得清楚，古老戏剧是很有价值的。"
+                      },
+                      {
+                          "id":  "OPN_EDU_010",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "experiential_learning",
+                          "subTopicLabel":  "Experiential Learning",
+                          "stance":  "support",
+                          "text":  "In my opinion, experiential learning is very beneficial in high school and college.",
+                          "questionIds":  [
+                                              "WE_Q027"
+                                          ],
+                          "sortOrder":  10,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，体验式学习在高中和大学非常有益。"
+                      },
+                      {
+                          "id":  "OPN_EDU_011",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "experiential_learning",
+                          "subTopicLabel":  "Experiential Learning",
+                          "stance":  "balanced",
+                          "text":  "I believe experiential learning is useful, but traditional teaching is also important.",
+                          "questionIds":  [
+                                              "WE_Q027"
+                                          ],
+                          "sortOrder":  11,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为体验式学习很有用，但传统教学也很重要。"
+                      },
+                      {
+                          "id":  "OPN_EDU_012",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "experiential_learning",
+                          "subTopicLabel":  "Experiential Learning",
+                          "stance":  "support",
+                          "text":  "In my opinion, experiential learning should be used more in schools and colleges.",
+                          "questionIds":  [
+                                              "WE_Q027"
+                                          ],
+                          "sortOrder":  12,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，学校和大学应该更多地使用体验式学习。"
+                      },
+                      {
+                          "id":  "OPN_EDU_013",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "mark_deduction_policy",
+                          "subTopicLabel":  "Mark Deduction",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, universities can deduct marks for late assignments, but the policy should be fair.",
+                          "questionIds":  [
+                                              "WE_Q031"
+                                          ],
+                          "sortOrder":  13,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，大学可以对迟交作业扣分，但这个政策应该公平。"
+                      },
+                      {
+                          "id":  "OPN_EDU_014",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "mark_deduction_policy",
+                          "subTopicLabel":  "Mark Deduction",
+                          "stance":  "balanced",
+                          "text":  "I believe deducting marks for late work is useful, but it should not be too strict.",
+                          "questionIds":  [
+                                              "WE_Q031"
+                                          ],
+                          "sortOrder":  14,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为迟交扣分是有用的，但不应该太严格。"
+                      },
+                      {
+                          "id":  "OPN_EDU_015",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "mark_deduction_policy",
+                          "subTopicLabel":  "Mark Deduction",
+                          "stance":  "support",
+                          "text":  "In my opinion, universities should deduct marks only when students are late without a good reason.",
+                          "questionIds":  [
+                                              "WE_Q031"
+                                          ],
+                          "sortOrder":  15,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，大学只应该在学生无正当理由迟交时扣分。"
+                      },
+                      {
+                          "id":  "OPN_EDU_016",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "effective_study_with_employment",
+                          "subTopicLabel":  "Effective Study with Employment",
+                          "stance":  "support",
+                          "text":  "In my opinion, it is realistic for students to combine study and work at the same time.",
+                          "questionIds":  [
+                                              "WE_Q012"
+                                          ],
+                          "sortOrder":  16,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，学生同时兼顾学习和工作是现实的。"
+                      },
+                      {
+                          "id":  "OPN_EDU_017",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "effective_study_with_employment",
+                          "subTopicLabel":  "Effective Study with Employment",
+                          "stance":  "balanced",
+                          "text":  "I believe study and work can be combined, but students need to keep a good balance.",
+                          "questionIds":  [
+                                              "WE_Q012"
+                                          ],
+                          "sortOrder":  17,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为学习和工作可以同时进行，但学生需要保持良好的平衡。"
+                      },
+                      {
+                          "id":  "OPN_EDU_018",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "effective_study_with_employment",
+                          "subTopicLabel":  "Effective Study with Employment",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, combining study and employment is possible in modern life, but it depends on the situation.",
+                          "questionIds":  [
+                                              "WE_Q012"
+                                          ],
+                          "sortOrder":  18,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，在现代生活中同时兼顾学习和工作是可能的，但这取决于具体情况。"
+                      },
+                      {
+                          "id":  "OPN_EDU_019",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "best_teachers_life_experience",
+                          "subTopicLabel":  "Best Teachers / Life Experience",
+                          "stance":  "support",
+                          "text":  "In my opinion, life experience is a very effective teacher.",
+                          "questionIds":  [
+                                              "WE_Q009"
+                                          ],
+                          "sortOrder":  19,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，生活经验是一位非常有效的老师。"
+                      },
+                      {
+                          "id":  "OPN_EDU_020",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "best_teachers_life_experience",
+                          "subTopicLabel":  "Best Teachers / Life Experience",
+                          "stance":  "support",
+                          "text":  "I agree that experience can teach people more deeply than books in some cases.",
+                          "questionIds":  [
+                                              "WE_Q009"
+                                          ],
+                          "sortOrder":  20,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我同意，在某些情况下，经验比书本更能让人学得深刻。"
+                      },
+                      {
+                          "id":  "OPN_EDU_021",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "best_teachers_life_experience",
+                          "subTopicLabel":  "Best Teachers / Life Experience",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, experience is important, but books and school education are also necessary.",
+                          "questionIds":  [
+                                              "WE_Q009"
+                                          ],
+                          "sortOrder":  21,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，经验很重要，但书本和学校教育也同样是必要的。"
+                      },
+                      {
+                          "id":  "OPN_EDU_022",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "digital_materials_and_library",
+                          "subTopicLabel":  "Digital Materials",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, digital media has many advantages, but libraries are still important.",
+                          "questionIds":  [
+                                              "WE_Q008"
+                                          ],
+                          "sortOrder":  22,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，数字媒体有很多优点，但图书馆仍然很重要。"
+                      },
+                      {
+                          "id":  "OPN_EDU_023",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "digital_materials_and_library",
+                          "subTopicLabel":  "Digital Materials",
+                          "stance":  "against",
+                          "text":  "I believe universities should not depend only on digital media.",
+                          "questionIds":  [
+                                              "WE_Q008"
+                                          ],
+                          "sortOrder":  23,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为大学不应该只依赖数字资料。"
+                      },
+                      {
+                          "id":  "OPN_EDU_024",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "digital_materials_and_library",
+                          "subTopicLabel":  "Digital Materials",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, universities should use both digital media and traditional library resources.",
+                          "questionIds":  [
+                                              "WE_Q008"
+                                          ],
+                          "sortOrder":  24,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，大学应该同时使用数字资料和传统图书馆资源。"
+                      },
+                      {
+                          "id":  "OPN_EDU_025",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "compulsory_foreign_languages",
+                          "subTopicLabel":  "Compulsory Learning",
+                          "stance":  "support",
+                          "text":  "In my opinion, schools should make learning a foreign language compulsory.",
+                          "questionIds":  [
+                                              "WE_Q028"
+                                          ],
+                          "sortOrder":  25,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，学校应该把外语设为必修课。"
+                      },
+                      {
+                          "id":  "OPN_EDU_026",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "compulsory_foreign_languages",
+                          "subTopicLabel":  "Compulsory Learning",
+                          "stance":  "support",
+                          "text":  "I believe foreign language learning is important because it broadens students\u0027 minds.",
+                          "questionIds":  [
+                                              "WE_Q028"
+                                          ],
+                          "sortOrder":  26,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为学习外语很重要，因为它可以开阔学生的眼界。"
+                      },
+                      {
+                          "id":  "OPN_EDU_027",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "compulsory_foreign_languages",
+                          "subTopicLabel":  "Compulsory Learning",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, foreign languages should be compulsory, but schools should teach them in an interesting way.",
+                          "questionIds":  [
+                                              "WE_Q028"
+                                          ],
+                          "sortOrder":  27,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，外语应该是必修课，但学校应该用有趣的方式来教。"
+                      },
+                      {
+                          "id":  "OPN_EDU_028",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "foreign_languages_ai_translation",
+                          "subTopicLabel":  "Foreign Languages",
+                          "stance":  "support",
+                          "text":  "In my opinion, learning a foreign language is still necessary in modern society.",
+                          "questionIds":  [
+                                              "WE_Q018"
+                                          ],
+                          "sortOrder":  28,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，在现代社会学习外语仍然是有必要的。"
+                      },
+                      {
+                          "id":  "OPN_EDU_029",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "foreign_languages_ai_translation",
+                          "subTopicLabel":  "Foreign Languages",
+                          "stance":  "balanced",
+                          "text":  "I believe artificial intelligence is helpful, but it does not make foreign language learning unnecessary.",
+                          "questionIds":  [
+                                              "WE_Q018"
+                                          ],
+                          "sortOrder":  29,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为人工智能很有帮助，但它并没有让外语学习变得没有必要。"
+                      },
+                      {
+                          "id":  "OPN_EDU_030",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "foreign_languages_ai_translation",
+                          "subTopicLabel":  "Foreign Languages",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, learning a foreign language is less necessary than before, but it is still important.",
+                          "questionIds":  [
+                                              "WE_Q018"
+                                          ],
+                          "sortOrder":  30,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，学习外语比以前没那么必要了，但它仍然很重要。"
+                      },
+                      {
+                          "id":  "OP_EDU_001",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "support",
+                          "text":  "Schools should teach practical skills because students need them in real life.",
+                          "questionIds":  [
+                                              "WE_Q002",
+                                              "WE_Q009",
+                                              "WE_Q012",
+                                              "WE_Q013",
+                                              "WE_Q008",
+                                              "WE_Q027",
+                                              "WE_Q028",
+                                              "WE_Q030",
+                                              "WE_Q031",
+                                              "WE_Q018",
+                                              "WE_Q039"
+                                          ],
+                          "sortOrder":  31,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "学校应该教授实用技能，因为学生在现实生活中需要这些技能。"
+                      },
+                      {
+                          "id":  "OP_EDU_002",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "against",
+                          "text":  "Traditional study is still useful because it builds strong basic knowledge.",
+                          "questionIds":  [
+                                              "WE_Q002",
+                                              "WE_Q009",
+                                              "WE_Q012",
+                                              "WE_Q013",
+                                              "WE_Q008",
+                                              "WE_Q027",
+                                              "WE_Q028",
+                                              "WE_Q030",
+                                              "WE_Q031",
+                                              "WE_Q018",
+                                              "WE_Q039"
+                                          ],
+                          "sortOrder":  32,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "传统学习仍然有用，因为它能打下扎实的基础知识。"
+                      },
+                      {
+                          "id":  "OP_EDU_003",
+                          "topicKey":  "education_learning",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "balanced",
+                          "text":  "A mixed method often works best, with both theory and practice.",
+                          "questionIds":  [
+                                              "WE_Q002",
+                                              "WE_Q009",
+                                              "WE_Q012",
+                                              "WE_Q013",
+                                              "WE_Q008",
+                                              "WE_Q027",
+                                              "WE_Q028",
+                                              "WE_Q030",
+                                              "WE_Q031",
+                                              "WE_Q018",
+                                              "WE_Q039"
+                                          ],
+                          "sortOrder":  33,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "理论与实践结合的混合方式通常效果最好。"
+                      },
+                      {
+                          "id":  "OPN_TECH_001",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "information_revolution",
+                          "subTopicLabel":  "Information Revolution",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, modern mass communication has both positive and negative effects on individuals and society.",
+                          "questionIds":  [
+                                              "WE_Q020"
+                                          ],
+                          "sortOrder":  1,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，现代大众传播对个人和社会既有积极影响，也有消极影响。"
+                      },
+                      {
+                          "id":  "OPN_TECH_002",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "information_revolution",
+                          "subTopicLabel":  "Information Revolution",
+                          "stance":  "balanced",
+                          "text":  "I strongly agree that the information revolution has changed people\u0027s lives in both good and bad ways.",
+                          "questionIds":  [
+                                              "WE_Q020"
+                                          ],
+                          "sortOrder":  2,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我非常同意，信息革命以好的和坏的两种方式改变了人们的生活。"
+                      },
+                      {
+                          "id":  "OPN_TECH_003",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "information_revolution",
+                          "subTopicLabel":  "Information Revolution",
+                          "stance":  "balanced",
+                          "text":  "I believe modern mass communication is useful, but it also brings some serious problems.",
+                          "questionIds":  [
+                                              "WE_Q020"
+                                          ],
+                          "sortOrder":  3,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为现代大众传播是有用的，但它也带来了一些严重问题。"
+                      },
+                      {
+                          "id":  "OPN_TECH_004",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "mass_media_influence",
+                          "subTopicLabel":  "Mass Media",
+                          "stance":  "support",
+                          "text":  "In my opinion, mass media has a strong influence on society and on people\u0027s opinions and character.",
+                          "questionIds":  [
+                                              "WE_Q001"
+                                          ],
+                          "sortOrder":  4,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，大众传媒对社会以及人们的观点和性格有很强的影响。"
+                      },
+                      {
+                          "id":  "OPN_TECH_005",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "mass_media_influence",
+                          "subTopicLabel":  "Mass Media",
+                          "stance":  "support",
+                          "text":  "I agree that mass media plays an important role in shaping people\u0027s opinions and character.",
+                          "questionIds":  [
+                                              "WE_Q001"
+                                          ],
+                          "sortOrder":  5,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我同意，大众传媒在塑造人们的观点和性格方面起着重要作用。"
+                      },
+                      {
+                          "id":  "OPN_TECH_006",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "mass_media_influence",
+                          "subTopicLabel":  "Mass Media",
+                          "stance":  "support",
+                          "text":  "I strongly believe that mass media has a great impact on modern society.",
+                          "questionIds":  [
+                                              "WE_Q001"
+                                          ],
+                          "sortOrder":  6,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我坚信大众传媒对现代社会有很大的影响。"
+                      },
+                      {
+                          "id":  "OPN_TECH_007",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "mass_media_youth_opinion",
+                          "subTopicLabel":  "Mass Media on Youth",
+                          "stance":  "support",
+                          "text":  "In my opinion, mass media has a great influence on people, especially young people.",
+                          "questionIds":  [
+                                              "WE_Q001"
+                                          ],
+                          "sortOrder":  7,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，大众传媒对人们，尤其是年轻人，有很大的影响。"
+                      },
+                      {
+                          "id":  "OPN_TECH_008",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "mass_media_youth_opinion",
+                          "subTopicLabel":  "Mass Media on Youth",
+                          "stance":  "support",
+                          "text":  "I strongly agree that mass media plays an important role in shaping people\u0027s opinions.",
+                          "questionIds":  [
+                                              "WE_Q001"
+                                          ],
+                          "sortOrder":  8,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我非常同意，大众传媒在塑造人们观点方面起着重要作用。"
+                      },
+                      {
+                          "id":  "OPN_TECH_009",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "mass_media_youth_opinion",
+                          "subTopicLabel":  "Mass Media on Youth",
+                          "stance":  "balanced",
+                          "text":  "I believe mass media has both positive and negative influences, but its overall effect is very strong.",
+                          "questionIds":  [
+                                              "WE_Q001"
+                                          ],
+                          "sortOrder":  9,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为大众传媒既有积极影响，也有消极影响，但它的整体影响非常强。"
+                      },
+                      {
+                          "id":  "OPN_TECH_010",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "television_functions",
+                          "subTopicLabel":  "Television",
+                          "stance":  "support",
+                          "text":  "In my opinion, television has many useful functions in daily life.",
+                          "questionIds":  [
+                                              "WE_Q016"
+                                          ],
+                          "sortOrder":  10,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，电视在日常生活中有很多有用的功能。"
+                      },
+                      {
+                          "id":  "OPN_TECH_011",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "television_functions",
+                          "subTopicLabel":  "Television",
+                          "stance":  "support",
+                          "text":  "I largely agree that television is useful because it can relax people and help them learn.",
+                          "questionIds":  [
+                                              "WE_Q016"
+                                          ],
+                          "sortOrder":  11,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我大体同意电视是有用的，因为它可以让人放松，也可以帮助人们学习。"
+                      },
+                      {
+                          "id":  "OPN_TECH_012",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "television_functions",
+                          "subTopicLabel":  "Television",
+                          "stance":  "support",
+                          "text":  "I believe television is important, especially for people who feel lonely.",
+                          "questionIds":  [
+                                              "WE_Q016"
+                                          ],
+                          "sortOrder":  12,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为电视很重要，尤其是对感到孤独的人来说。"
+                      },
+                      {
+                          "id":  "OPN_TECH_013",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "extending_life_expectancy",
+                          "subTopicLabel":  "Extending Life Expectancy",
+                          "stance":  "support",
+                          "text":  "In my opinion, it is a blessing rather than a curse.",
+                          "questionIds":  [
+                                              "WE_Q005"
+                                          ],
+                          "sortOrder":  13,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，这更多是一种福祉，而不是诅咒。"
+                      },
+                      {
+                          "id":  "OPN_TECH_014",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "extending_life_expectancy",
+                          "subTopicLabel":  "Extending Life Expectancy",
+                          "stance":  "balanced",
+                          "text":  "I believe increasing life expectancy is a positive development, although it may bring some challenges.",
+                          "questionIds":  [
+                                              "WE_Q005"
+                                          ],
+                          "sortOrder":  14,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为预期寿命的提高是一种积极的发展，尽管它也会带来一些挑战。"
+                      },
+                      {
+                          "id":  "OPN_TECH_015",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "extending_life_expectancy",
+                          "subTopicLabel":  "Extending Life Expectancy",
+                          "stance":  "support",
+                          "text":  "In my opinion, advanced technology is a blessing if it is used in the right way.",
+                          "questionIds":  [
+                                              "WE_Q005"
+                                          ],
+                          "sortOrder":  15,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，如果使用得当，先进技术就是一种福祉。"
+                      },
+                      {
+                          "id":  "OPN_TECH_016",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "smartphone_inventions",
+                          "subTopicLabel":  "Inventions (Smartphone)",
+                          "stance":  "support",
+                          "text":  "In my opinion, the smartphone is one of the most important new inventions in modern society.",
+                          "questionIds":  [
+                                              "WE_Q010"
+                                          ],
+                          "sortOrder":  16,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，智能手机是现代社会最重要的新发明之一。"
+                      },
+                      {
+                          "id":  "OPN_TECH_017",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "smartphone_inventions",
+                          "subTopicLabel":  "Inventions (Smartphone)",
+                          "stance":  "support",
+                          "text":  "I believe the smartphone has had a mostly positive impact on society.",
+                          "questionIds":  [
+                                              "WE_Q010"
+                                          ],
+                          "sortOrder":  17,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为智能手机对社会产生了大多是积极的影响。"
+                      },
+                      {
+                          "id":  "OPN_TECH_018",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "smartphone_inventions",
+                          "subTopicLabel":  "Inventions (Smartphone)",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, the smartphone is a useful invention, but it also has some negative effects.",
+                          "questionIds":  [
+                                              "WE_Q010"
+                                          ],
+                          "sortOrder":  18,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，智能手机是一项有用的发明，但它也有一些负面影响。"
+                      },
+                      {
+                          "id":  "OPN_TECH_019",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "computer_inventions",
+                          "subTopicLabel":  "Inventions (Computer)",
+                          "stance":  "support",
+                          "text":  "In my opinion, the computer is the most important invention of the past hundred years.",
+                          "questionIds":  [
+                                              "WE_Q010"
+                                          ],
+                          "sortOrder":  19,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，计算机是过去一百年里最重要的发明。"
+                      },
+                      {
+                          "id":  "OPN_TECH_020",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "computer_inventions",
+                          "subTopicLabel":  "Inventions (Computer)",
+                          "stance":  "support",
+                          "text":  "I believe the computer is the greatest invention because it affects almost every part of modern life.",
+                          "questionIds":  [
+                                              "WE_Q010"
+                                          ],
+                          "sortOrder":  20,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为计算机是最伟大的发明，因为它影响了现代生活的几乎每一个方面。"
+                      },
+                      {
+                          "id":  "OPN_TECH_021",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "computer_inventions",
+                          "subTopicLabel":  "Inventions (Computer)",
+                          "stance":  "support",
+                          "text":  "In my opinion, the computer is more important than many other inventions.",
+                          "questionIds":  [
+                                              "WE_Q010"
+                                          ],
+                          "sortOrder":  21,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，计算机比许多其他发明更重要。"
+                      },
+                      {
+                          "id":  "OP_TECH_001",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "support",
+                          "text":  "Technology can save time and make information easy to get.",
+                          "questionIds":  [
+                                              "WE_Q001",
+                                              "WE_Q016",
+                                              "WE_Q020",
+                                              "WE_Q010",
+                                              "WE_Q005",
+                                              "WE_Q018"
+                                          ],
+                          "sortOrder":  22,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "科技可以节省时间，并让信息更容易获取。"
+                      },
+                      {
+                          "id":  "OP_TECH_002",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "against",
+                          "text":  "Too much media use can harm focus and healthy communication.",
+                          "questionIds":  [
+                                              "WE_Q001",
+                                              "WE_Q016",
+                                              "WE_Q020",
+                                              "WE_Q010",
+                                              "WE_Q005",
+                                              "WE_Q018"
+                                          ],
+                          "sortOrder":  23,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "过度使用媒体会损害专注力和健康沟通。"
+                      },
+                      {
+                          "id":  "OP_TECH_003",
+                          "topicKey":  "technology_media",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "balanced",
+                          "text":  "Technology is useful when people use it with clear limits.",
+                          "questionIds":  [
+                                              "WE_Q001",
+                                              "WE_Q016",
+                                              "WE_Q020",
+                                              "WE_Q010",
+                                              "WE_Q005",
+                                              "WE_Q018"
+                                          ],
+                          "sortOrder":  24,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "当人们有明确边界地使用科技时，它是有益的。"
+                      },
+                      {
+                          "id":  "OPN_WORK_001",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "worker_decision_making",
+                          "subTopicLabel":  "Worker Decision-Making",
+                          "stance":  "support",
+                          "text":  "In my opinion, involving employees in decision-making has more advantages than disadvantages.",
+                          "questionIds":  [
+                                              "WE_Q025"
+                                          ],
+                          "sortOrder":  1,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，让员工参与决策利大于弊。"
+                      },
+                      {
+                          "id":  "OPN_WORK_002",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "worker_decision_making",
+                          "subTopicLabel":  "Worker Decision-Making",
+                          "stance":  "balanced",
+                          "text":  "I think this policy is helpful, but it can also create some problems.",
+                          "questionIds":  [
+                                              "WE_Q025"
+                                          ],
+                          "sortOrder":  2,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为这种政策有帮助，但它也会带来一些问题。"
+                      },
+                      {
+                          "id":  "OPN_WORK_003",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "worker_decision_making",
+                          "subTopicLabel":  "Worker Decision-Making",
+                          "stance":  "support",
+                          "text":  "I believe this policy is good if it is used in the right way.",
+                          "questionIds":  [
+                                              "WE_Q025"
+                                          ],
+                          "sortOrder":  3,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为如果使用得当，这种政策是好的。"
+                      },
+                      {
+                          "id":  "OPN_WORK_004",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "marketing_strategy",
+                          "subTopicLabel":  "Marketing in Companies",
+                          "stance":  "support",
+                          "text":  "In my opinion, companies should place more emphasis on their reputation.",
+                          "questionIds":  [
+                                              "WE_Q007"
+                                          ],
+                          "sortOrder":  4,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，公司应该更重视自己的声誉。"
+                      },
+                      {
+                          "id":  "OPN_WORK_005",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "marketing_strategy",
+                          "subTopicLabel":  "Marketing in Companies",
+                          "stance":  "support",
+                          "text":  "I believe company reputation is more important than short-term strategies.",
+                          "questionIds":  [
+                                              "WE_Q007"
+                                          ],
+                          "sortOrder":  5,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为公司声誉比短期策略更重要。"
+                      },
+                      {
+                          "id":  "OPN_WORK_006",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "marketing_strategy",
+                          "subTopicLabel":  "Marketing in Companies",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, short-term strategies are useful, but they should not be the main focus.",
+                          "questionIds":  [
+                                              "WE_Q007"
+                                          ],
+                          "sortOrder":  6,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，短期策略是有用的，但它不应该成为重点。"
+                      },
+                      {
+                          "id":  "OPN_WORK_007",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "personal_life_shortage",
+                          "subTopicLabel":  "Personal Life",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, this is a very common problem in modern society.",
+                          "questionIds":  [
+                                              "WE_Q026"
+                                          ],
+                          "sortOrder":  7,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，这是现代社会中一个非常普遍的问题。"
+                      },
+                      {
+                          "id":  "OPN_WORK_008",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "personal_life_shortage",
+                          "subTopicLabel":  "Personal Life",
+                          "stance":  "support",
+                          "text":  "I believe this shortage of personal time can cause serious health and family problems.",
+                          "questionIds":  [
+                                              "WE_Q026"
+                                          ],
+                          "sortOrder":  8,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为个人时间的短缺会带来严重的健康和家庭问题。"
+                      },
+                      {
+                          "id":  "OPN_WORK_009",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "personal_life_shortage",
+                          "subTopicLabel":  "Personal Life",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, the lack of personal time is widespread, and it can also affect society in a negative way.",
+                          "questionIds":  [
+                                              "WE_Q026"
+                                          ],
+                          "sortOrder":  9,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，个人时间不足的问题很普遍，而且它也会对社会产生负面影响。"
+                      },
+                      {
+                          "id":  "OPN_WORK_010",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "right_balance",
+                          "subTopicLabel":  "Right Balance",
+                          "stance":  "support",
+                          "text":  "In my opinion, keeping a balance between work and personal life is very important.",
+                          "questionIds":  [
+                                              "WE_Q003"
+                                          ],
+                          "sortOrder":  10,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，保持工作和个人生活之间的平衡非常重要。"
+                      },
+                      {
+                          "id":  "OPN_WORK_011",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "right_balance",
+                          "subTopicLabel":  "Right Balance",
+                          "stance":  "support",
+                          "text":  "I believe this balance is important because work is not the only part of life.",
+                          "questionIds":  [
+                                              "WE_Q003"
+                                          ],
+                          "sortOrder":  11,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为这种平衡很重要，因为工作并不是生活的全部。"
+                      },
+                      {
+                          "id":  "OPN_WORK_012",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "right_balance",
+                          "subTopicLabel":  "Right Balance",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, work-life balance is very important, but it is difficult to achieve in modern society.",
+                          "questionIds":  [
+                                              "WE_Q003"
+                                          ],
+                          "sortOrder":  12,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，工作与生活的平衡非常重要，但在现代社会中很难实现。"
+                      },
+                      {
+                          "id":  "OPN_WORK_013",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "short_weeks_policy",
+                          "subTopicLabel":  "Short Weeks",
+                          "stance":  "support",
+                          "text":  "In my opinion, shortening the working week can help reduce unemployment, but it is not a complete solution.",
+                          "questionIds":  [
+                                              "WE_Q017"
+                                          ],
+                          "sortOrder":  13,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，缩短每周工作时间可以帮助减少失业，但它不是一个完整的解决办法。"
+                      },
+                      {
+                          "id":  "OPN_WORK_014",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "short_weeks_policy",
+                          "subTopicLabel":  "Short Weeks",
+                          "stance":  "balanced",
+                          "text":  "I believe this idea has both advantages and disadvantages.",
+                          "questionIds":  [
+                                              "WE_Q017"
+                                          ],
+                          "sortOrder":  14,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为这个想法既有优点，也有缺点。"
+                      },
+                      {
+                          "id":  "OPN_WORK_015",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "short_weeks_policy",
+                          "subTopicLabel":  "Short Weeks",
+                          "stance":  "support",
+                          "text":  "In my opinion, this policy should apply to the whole workforce rather than only young people.",
+                          "questionIds":  [
+                                              "WE_Q017"
+                                          ],
+                          "sortOrder":  15,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，这项政策应该适用于整个劳动力，而不只是年轻人。"
+                      },
+                      {
+                          "id":  "OPN_WORK_016",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "fewer_work_hours",
+                          "subTopicLabel":  "Fewer Work Hours",
+                          "stance":  "support",
+                          "text":  "In my opinion, people will work fewer hours in the future.",
+                          "questionIds":  [
+                                              "WE_Q019"
+                                          ],
+                          "sortOrder":  16,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，未来人们会工作更少的时间。"
+                      },
+                      {
+                          "id":  "OPN_WORK_017",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "fewer_work_hours",
+                          "subTopicLabel":  "Fewer Work Hours",
+                          "stance":  "balanced",
+                          "text":  "I partly agree that people will work less in the future.",
+                          "questionIds":  [
+                                              "WE_Q019"
+                                          ],
+                          "sortOrder":  17,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我部分同意未来人们会工作更少时间。"
+                      },
+                      {
+                          "id":  "OPN_WORK_018",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "fewer_work_hours",
+                          "subTopicLabel":  "Fewer Work Hours",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, this change may happen for some workers, but not for everyone.",
+                          "questionIds":  [
+                                              "WE_Q019"
+                                          ],
+                          "sortOrder":  18,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，这种变化可能会发生在一部分劳动者身上，但不会发生在所有人身上。"
+                      },
+                      {
+                          "id":  "OPN_WORK_019",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "wage_cap",
+                          "subTopicLabel":  "Wage Cap",
+                          "stance":  "against",
+                          "text":  "In my opinion, there should not be a strict maximum wage for high-paying people.",
+                          "questionIds":  [
+                                              "WE_Q034"
+                                          ],
+                          "sortOrder":  19,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，不应该为高收入人群设定严格的最高工资。"
+                      },
+                      {
+                          "id":  "OPN_WORK_020",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "wage_cap",
+                          "subTopicLabel":  "Wage Cap",
+                          "stance":  "support",
+                          "text":  "I believe there should be some control over very high wages.",
+                          "questionIds":  [
+                                              "WE_Q034"
+                                          ],
+                          "sortOrder":  20,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为对非常高的工资应该有一定的限制。"
+                      },
+                      {
+                          "id":  "OPN_WORK_021",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "wage_cap",
+                          "subTopicLabel":  "Wage Cap",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, high salaries are acceptable, but they should be reasonable.",
+                          "questionIds":  [
+                                              "WE_Q034"
+                                          ],
+                          "sortOrder":  21,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，高薪是可以接受的，但它应该是合理的。"
+                      },
+                      {
+                          "id":  "OP_WORK_001",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "support",
+                          "text":  "Workers need fair hours so they can stay healthy and productive.",
+                          "questionIds":  [
+                                              "WE_Q003",
+                                              "WE_Q007",
+                                              "WE_Q025",
+                                              "WE_Q026",
+                                              "WE_Q017",
+                                              "WE_Q019",
+                                              "WE_Q034"
+                                          ],
+                          "sortOrder":  22,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "劳动者需要公平的工时，才能保持健康并提高效率。"
+                      },
+                      {
+                          "id":  "OP_WORK_002",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "against",
+                          "text":  "Some strict rules can reduce company flexibility in hard times.",
+                          "questionIds":  [
+                                              "WE_Q003",
+                                              "WE_Q007",
+                                              "WE_Q025",
+                                              "WE_Q026",
+                                              "WE_Q017",
+                                              "WE_Q019",
+                                              "WE_Q034"
+                                          ],
+                          "sortOrder":  23,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "一些过于严格的规则会在困难时期降低公司的灵活性。"
+                      },
+                      {
+                          "id":  "OP_WORK_003",
+                          "topicKey":  "work_business_economy",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "balanced",
+                          "text":  "Good policy should protect workers and support business growth.",
+                          "questionIds":  [
+                                              "WE_Q003",
+                                              "WE_Q007",
+                                              "WE_Q025",
+                                              "WE_Q026",
+                                              "WE_Q017",
+                                              "WE_Q019",
+                                              "WE_Q034"
+                                          ],
+                          "sortOrder":  24,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "好的政策应当既保护劳动者，也支持企业发展。"
+                      },
+                      {
+                          "id":  "OPN_GOV_001",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "law_effect",
+                          "subTopicLabel":  "Law Effect",
+                          "stance":  "support",
+                          "text":  "In my opinion, laws can change human behavior to a great extent.",
+                          "questionIds":  [
+                                              "WE_Q021"
+                                          ],
+                          "sortOrder":  1,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，法律在很大程度上可以改变人的行为。"
+                      },
+                      {
+                          "id":  "OPN_GOV_002",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "law_effect",
+                          "subTopicLabel":  "Law Effect",
+                          "stance":  "against",
+                          "text":  "In my opinion, laws have only a limited effect on human behavior.",
+                          "questionIds":  [
+                                              "WE_Q021"
+                                          ],
+                          "sortOrder":  2,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，法律对人的行为只有有限的影响。"
+                      },
+                      {
+                          "id":  "OPN_GOV_003",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "law_effect",
+                          "subTopicLabel":  "Law Effect",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, laws can change human behavior, but they are not the only factor.",
+                          "questionIds":  [
+                                              "WE_Q021"
+                                          ],
+                          "sortOrder":  3,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，法律可以改变人的行为，但它不是唯一因素。"
+                      },
+                      {
+                          "id":  "OPN_GOV_004",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "global_issue_responsibility",
+                          "subTopicLabel":  "Global Issue",
+                          "stance":  "support",
+                          "text":  "In my opinion, governments should take the main responsibility for climate change.",
+                          "questionIds":  [
+                                              "WE_Q015"
+                                          ],
+                          "sortOrder":  4,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，政府应该对气候变化承担主要责任。"
+                      },
+                      {
+                          "id":  "OPN_GOV_005",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "global_issue_responsibility",
+                          "subTopicLabel":  "Global Issue",
+                          "stance":  "support",
+                          "text":  "I believe big companies should take more responsibility for climate change.",
+                          "questionIds":  [
+                                              "WE_Q015"
+                                          ],
+                          "sortOrder":  5,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为大公司应该对气候变化承担更多责任。"
+                      },
+                      {
+                          "id":  "OPN_GOV_006",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "global_issue_responsibility",
+                          "subTopicLabel":  "Global Issue",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, everyone should take responsibility, but governments and big companies should do more.",
+                          "questionIds":  [
+                                              "WE_Q015"
+                                          ],
+                          "sortOrder":  6,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，每个人都应该承担责任，但政府和大公司应该做得更多。"
+                      },
+                      {
+                          "id":  "OPN_GOV_007",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "studying_climate_change",
+                          "subTopicLabel":  "Studying Climate Change",
+                          "stance":  "support",
+                          "text":  "In my opinion, I would choose global warming as my area of study.",
+                          "questionIds":  [
+                                              "WE_Q024"
+                                          ],
+                          "sortOrder":  7,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，我会选择全球变暖作为我的研究方向。"
+                      },
+                      {
+                          "id":  "OPN_GOV_008",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "studying_climate_change",
+                          "subTopicLabel":  "Studying Climate Change",
+                          "stance":  "support",
+                          "text":  "I would prefer to study renewable energy in the field of climate change.",
+                          "questionIds":  [
+                                              "WE_Q024"
+                                          ],
+                          "sortOrder":  8,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在气候变化这个领域中，我更想研究可再生能源。"
+                      },
+                      {
+                          "id":  "OPN_GOV_009",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "studying_climate_change",
+                          "subTopicLabel":  "Studying Climate Change",
+                          "stance":  "support",
+                          "text":  "In my opinion, environmental protection is the best area to study.",
+                          "questionIds":  [
+                                              "WE_Q024"
+                                          ],
+                          "sortOrder":  9,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，环境保护是最好的研究方向。"
+                      },
+                      {
+                          "id":  "OPN_GOV_010",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "facing_issues_global_problem",
+                          "subTopicLabel":  "Facing Issues",
+                          "stance":  "support",
+                          "text":  "In my opinion, global warming is the most pressing problem in the world today.",
+                          "questionIds":  [
+                                              "WE_Q032",
+                                              "WE_Q005"
+                                          ],
+                          "sortOrder":  10,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，全球变暖是当今世界最紧迫的问题。"
+                      },
+                      {
+                          "id":  "OPN_GOV_011",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "facing_issues_global_problem",
+                          "subTopicLabel":  "Facing Issues",
+                          "stance":  "support",
+                          "text":  "I believe global warming is the biggest problem for people on our planet.",
+                          "questionIds":  [
+                                              "WE_Q032",
+                                              "WE_Q005"
+                                          ],
+                          "sortOrder":  11,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为全球变暖是地球上人类面临的最大问题。"
+                      },
+                      {
+                          "id":  "OPN_GOV_012",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "facing_issues_global_problem",
+                          "subTopicLabel":  "Facing Issues",
+                          "stance":  "support",
+                          "text":  "In my opinion, global warming should be the top concern of governments and organizations.",
+                          "questionIds":  [
+                                              "WE_Q032",
+                                              "WE_Q005"
+                                          ],
+                          "sortOrder":  12,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，全球变暖应该成为各国政府和组织最关注的问题。"
+                      },
+                      {
+                          "id":  "OPN_GOV_013",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "transportation_networks_policy",
+                          "subTopicLabel":  "Transportation Networks",
+                          "stance":  "support",
+                          "text":  "In my opinion, governments should focus more on improving public transport.",
+                          "questionIds":  [
+                                              "WE_Q033",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  13,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，政府应该更重视改善公共交通。"
+                      },
+                      {
+                          "id":  "OPN_GOV_014",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "transportation_networks_policy",
+                          "subTopicLabel":  "Transportation Networks",
+                          "stance":  "support",
+                          "text":  "I believe building better public transport is more important than building more roads.",
+                          "questionIds":  [
+                                              "WE_Q033",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  14,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为建设更好的公共交通比修更多道路更重要。"
+                      },
+                      {
+                          "id":  "OPN_GOV_015",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "transportation_networks_policy",
+                          "subTopicLabel":  "Transportation Networks",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, public transport should be the main choice, although roads are still necessary.",
+                          "questionIds":  [
+                                              "WE_Q033",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  15,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，公共交通应该成为主要选择，尽管道路仍然是必要的。"
+                      },
+                      {
+                          "id":  "OP_SOC_001",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "support",
+                          "text":  "Clear laws can guide behavior and protect vulnerable people.",
+                          "questionIds":  [
+                                              "WE_Q015",
+                                              "WE_Q024",
+                                              "WE_Q032",
+                                              "WE_Q033",
+                                              "WE_Q021",
+                                              "WE_Q005",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  16,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "明确的法律可以引导行为并保护弱势群体。"
+                      },
+                      {
+                          "id":  "OP_SOC_002",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "against",
+                          "text":  "Rules alone are not enough if people do not accept them.",
+                          "questionIds":  [
+                                              "WE_Q015",
+                                              "WE_Q024",
+                                              "WE_Q032",
+                                              "WE_Q033",
+                                              "WE_Q021",
+                                              "WE_Q005",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  17,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "如果人们不认可，单靠规则是不够的。"
+                      },
+                      {
+                          "id":  "OP_SOC_003",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "balanced",
+                          "text":  "Law and education should work together for long-term change.",
+                          "questionIds":  [
+                                              "WE_Q015",
+                                              "WE_Q024",
+                                              "WE_Q032",
+                                              "WE_Q033",
+                                              "WE_Q021",
+                                              "WE_Q005",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  18,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "法律与教育应协同作用，才能实现长期改变。"
+                      },
+                      {
+                          "id":  "OP_ENV_001",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "support",
+                          "text":  "Climate action should start now because delay makes problems worse.",
+                          "questionIds":  [
+                                              "WE_Q015",
+                                              "WE_Q024",
+                                              "WE_Q032",
+                                              "WE_Q033",
+                                              "WE_Q021",
+                                              "WE_Q005",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  19,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "气候行动应该现在开始，因为拖延会让问题更严重。"
+                      },
+                      {
+                          "id":  "OP_ENV_002",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "against",
+                          "text":  "Short-term costs are high, so policy needs careful planning.",
+                          "questionIds":  [
+                                              "WE_Q015",
+                                              "WE_Q024",
+                                              "WE_Q032",
+                                              "WE_Q033",
+                                              "WE_Q021",
+                                              "WE_Q005",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  20,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "短期成本较高，因此政策需要谨慎规划。"
+                      },
+                      {
+                          "id":  "OP_ENV_003",
+                          "topicKey":  "government_law_environment",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "balanced",
+                          "text":  "Shared action by governments, companies and people is the best path.",
+                          "questionIds":  [
+                                              "WE_Q015",
+                                              "WE_Q024",
+                                              "WE_Q032",
+                                              "WE_Q033",
+                                              "WE_Q021",
+                                              "WE_Q005",
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  21,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "政府、企业和公众的共同行动是最佳路径。"
+                      },
+                      {
+                          "id":  "OPN_CITY_001",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "tourism",
+                          "subTopicLabel":  "Tourism",
+                          "stance":  "support",
+                          "text":  "In my opinion, tourism has more advantages than disadvantages for a less developed country.",
+                          "questionIds":  [
+                                              "WE_Q036"
+                                          ],
+                          "sortOrder":  1,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，对于一个欠发达国家来说，旅游业利大于弊。"
+                      },
+                      {
+                          "id":  "OPN_CITY_002",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "tourism",
+                          "subTopicLabel":  "Tourism",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, tourism has both advantages and disadvantages for a less developed country.",
+                          "questionIds":  [
+                                              "WE_Q036"
+                                          ],
+                          "sortOrder":  2,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，对于一个欠发达国家来说，旅游业既有优点也有缺点。"
+                      },
+                      {
+                          "id":  "OPN_CITY_003",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "tourism",
+                          "subTopicLabel":  "Tourism",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, tourism can be good for a less developed country, but it must be controlled carefully.",
+                          "questionIds":  [
+                                              "WE_Q036"
+                                          ],
+                          "sortOrder":  3,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，旅游业对欠发达国家可以是有好处的，但必须被谨慎管理。"
+                      },
+                      {
+                          "id":  "OPN_CITY_004",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "old_buildings_preservation",
+                          "subTopicLabel":  "Old Buildings",
+                          "stance":  "support",
+                          "text":  "In my opinion, it is important to preserve beautiful old buildings, even if it is expensive.",
+                          "questionIds":  [
+                                              "WE_Q038"
+                                          ],
+                          "sortOrder":  4,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，保护美丽的老建筑很重要，即使花费很高。"
+                      },
+                      {
+                          "id":  "OPN_CITY_005",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "old_buildings_preservation",
+                          "subTopicLabel":  "Old Buildings",
+                          "stance":  "support",
+                          "text":  "I believe preserving old buildings is necessary because they have both cultural and practical value.",
+                          "questionIds":  [
+                                              "WE_Q038"
+                                          ],
+                          "sortOrder":  5,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为保护老建筑是有必要的，因为它们既有文化价值，也有实际价值。"
+                      },
+                      {
+                          "id":  "OPN_CITY_006",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "old_buildings_preservation",
+                          "subTopicLabel":  "Old Buildings",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, preserving old buildings is important, but the cost should also be considered carefully.",
+                          "questionIds":  [
+                                              "WE_Q038"
+                                          ],
+                          "sortOrder":  6,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，保护老建筑很重要，但成本也应该被认真考虑。"
+                      },
+                      {
+                          "id":  "OPN_CITY_007",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "shopping_malls",
+                          "subTopicLabel":  "Shopping Malls",
+                          "stance":  "against",
+                          "text":  "In my opinion, this is not a fully positive development.",
+                          "questionIds":  [
+                                              "WE_Q014"
+                                          ],
+                          "sortOrder":  7,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，这并不是一个完全积极的发展。"
+                      },
+                      {
+                          "id":  "OPN_CITY_008",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "shopping_malls",
+                          "subTopicLabel":  "Shopping Malls",
+                          "stance":  "against",
+                          "text":  "I believe replacing small shops with large malls has more disadvantages than advantages.",
+                          "questionIds":  [
+                                              "WE_Q014"
+                                          ],
+                          "sortOrder":  8,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为用大型商场取代小商店是弊大于利的。"
+                      },
+                      {
+                          "id":  "OPN_CITY_009",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "shopping_malls",
+                          "subTopicLabel":  "Shopping Malls",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, large shopping malls are convenient, but they should not replace all local shops.",
+                          "questionIds":  [
+                                              "WE_Q014"
+                                          ],
+                          "sortOrder":  9,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，大型购物商场很方便，但它们不应该取代所有本地小商店。"
+                      },
+                      {
+                          "id":  "OPN_CITY_010",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "building_effects",
+                          "subTopicLabel":  "Building Effects",
+                          "stance":  "support",
+                          "text":  "In my opinion, building design has a strong influence on people\u0027s work and daily life.",
+                          "questionIds":  [
+                                              "WE_Q004"
+                                          ],
+                          "sortOrder":  10,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，建筑设计对人们的工作和日常生活有很大的影响。"
+                      },
+                      {
+                          "id":  "OPN_CITY_011",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "building_effects",
+                          "subTopicLabel":  "Building Effects",
+                          "stance":  "support",
+                          "text":  "I believe good building design brings many positive effects to both homes and workplaces.",
+                          "questionIds":  [
+                                              "WE_Q004"
+                                          ],
+                          "sortOrder":  11,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为好的建筑设计会给住宅和工作场所带来很多积极影响。"
+                      },
+                      {
+                          "id":  "OPN_CITY_012",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "building_effects",
+                          "subTopicLabel":  "Building Effects",
+                          "stance":  "against",
+                          "text":  "In my opinion, poor building design can cause many problems in people\u0027s lives.",
+                          "questionIds":  [
+                                              "WE_Q004"
+                                          ],
+                          "sortOrder":  12,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，不好的建筑设计会给人们的生活带来很多问题。"
+                      },
+                      {
+                          "id":  "OPN_CITY_013",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "city_or_countryside",
+                          "subTopicLabel":  "City or Countryside",
+                          "stance":  "support",
+                          "text":  "In my opinion, I prefer city life.",
+                          "questionIds":  [
+                                              "WE_Q029"
+                                          ],
+                          "sortOrder":  13,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，我更喜欢城市生活。"
+                      },
+                      {
+                          "id":  "OPN_CITY_014",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "city_or_countryside",
+                          "subTopicLabel":  "City or Countryside",
+                          "stance":  "against",
+                          "text":  "I prefer living in the countryside because it is quieter and more peaceful.",
+                          "questionIds":  [
+                                              "WE_Q029"
+                                          ],
+                          "sortOrder":  14,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我更喜欢住在乡村，因为那里更安静、更平和。"
+                      },
+                      {
+                          "id":  "OPN_CITY_015",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "city_or_countryside",
+                          "subTopicLabel":  "City or Countryside",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, city life is better for me at this stage of life.",
+                          "questionIds":  [
+                                              "WE_Q029"
+                                          ],
+                          "sortOrder":  15,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，在我现阶段的人生中，城市生活更适合我。"
+                      },
+                      {
+                          "id":  "OPN_CITY_016",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "old_or_modern_buildings",
+                          "subTopicLabel":  "Old or Modern Buildings",
+                          "stance":  "against",
+                          "text":  "In my opinion, I do not fully agree with this idea.",
+                          "questionIds":  [
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  16,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，我并不完全同意这个观点。"
+                      },
+                      {
+                          "id":  "OPN_CITY_017",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "old_or_modern_buildings",
+                          "subTopicLabel":  "Old or Modern Buildings",
+                          "stance":  "balanced",
+                          "text":  "I believe countries should spend money on both old buildings and modern housing.",
+                          "questionIds":  [
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  17,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为各国应该同时把钱花在老建筑和现代住房上。"
+                      },
+                      {
+                          "id":  "OPN_CITY_018",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "old_or_modern_buildings",
+                          "subTopicLabel":  "Old or Modern Buildings",
+                          "stance":  "against",
+                          "text":  "In my opinion, spending too much money on old buildings instead of housing is not a good idea.",
+                          "questionIds":  [
+                                              "WE_Q022"
+                                          ],
+                          "sortOrder":  18,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，把太多钱花在老建筑上而不是住房上，并不是一个好主意。"
+                      },
+                      {
+                          "id":  "OP_CITY_001",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "support",
+                          "text":  "Public transport can cut traffic and make cities more livable.",
+                          "questionIds":  [
+                                              "WE_Q004",
+                                              "WE_Q014",
+                                              "WE_Q029",
+                                              "WE_Q036",
+                                              "WE_Q022",
+                                              "WE_Q038"
+                                          ],
+                          "sortOrder":  19,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "公共交通可以缓解拥堵，让城市更宜居。"
+                      },
+                      {
+                          "id":  "OP_CITY_002",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "against",
+                          "text":  "Rapid city changes can hurt local culture and small businesses.",
+                          "questionIds":  [
+                                              "WE_Q004",
+                                              "WE_Q014",
+                                              "WE_Q029",
+                                              "WE_Q036",
+                                              "WE_Q022",
+                                              "WE_Q038"
+                                          ],
+                          "sortOrder":  20,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "城市的快速变化可能伤害本地文化和小商户。"
+                      },
+                      {
+                          "id":  "OP_CITY_003",
+                          "topicKey":  "city_building_tourism_living",
+                          "subTopicKey":  "legacy_phase1",
+                          "subTopicLabel":  "Legacy Phase 1",
+                          "stance":  "balanced",
+                          "text":  "Cities need modern development and protection of key heritage.",
+                          "questionIds":  [
+                                              "WE_Q004",
+                                              "WE_Q014",
+                                              "WE_Q029",
+                                              "WE_Q036",
+                                              "WE_Q022",
+                                              "WE_Q038"
+                                          ],
+                          "sortOrder":  21,
+                          "source":  "legacy_seed_phase1",
+                          "translationZh":  "城市既需要现代化发展，也需要保护关键文化遗产。"
+                      },
+                      {
+                          "id":  "OPN_FAM_001",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "legal_responsibility",
+                          "subTopicLabel":  "Legal Responsibility",
+                          "stance":  "support",
+                          "text":  "In my opinion, parents should be legally responsible for some actions of their children.",
+                          "questionIds":  [
+                                              "WE_Q011"
+                                          ],
+                          "sortOrder":  1,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，父母应该为孩子的某些行为承担法律责任。"
+                      },
+                      {
+                          "id":  "OPN_FAM_002",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "legal_responsibility",
+                          "subTopicLabel":  "Legal Responsibility",
+                          "stance":  "against",
+                          "text":  "I believe parents should not be legally responsible for every action of their children.",
+                          "questionIds":  [
+                                              "WE_Q011"
+                                          ],
+                          "sortOrder":  2,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为父母不应该为孩子的每一个行为都承担法律责任。"
+                      },
+                      {
+                          "id":  "OPN_FAM_003",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "legal_responsibility",
+                          "subTopicLabel":  "Legal Responsibility",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, parents should share some responsibility, but children should also be responsible for their own actions.",
+                          "questionIds":  [
+                                              "WE_Q011"
+                                          ],
+                          "sortOrder":  3,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，父母应该承担一部分责任，但孩子也应该为自己的行为负责。"
+                      },
+                      {
+                          "id":  "OPN_FAM_004",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "celebrities_privacy",
+                          "subTopicLabel":  "Celebrities Privacy",
+                          "stance":  "against",
+                          "text":  "In my opinion, famous entertainers and sportspeople should not give up their right to privacy.",
+                          "questionIds":  [
+                                              "WE_Q035"
+                                          ],
+                          "sortOrder":  4,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，著名艺人和运动员不应该放弃他们的隐私权。"
+                      },
+                      {
+                          "id":  "OPN_FAM_005",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "celebrities_privacy",
+                          "subTopicLabel":  "Celebrities Privacy",
+                          "stance":  "against",
+                          "text":  "I disagree with the idea that privacy is the price of fame.",
+                          "questionIds":  [
+                                              "WE_Q035"
+                                          ],
+                          "sortOrder":  5,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我不同意“隐私是成名代价”这个观点。"
+                      },
+                      {
+                          "id":  "OPN_FAM_006",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "celebrities_privacy",
+                          "subTopicLabel":  "Celebrities Privacy",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, famous people should accept some public attention, but they should still keep basic privacy.",
+                          "questionIds":  [
+                                              "WE_Q035"
+                                          ],
+                          "sortOrder":  6,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，名人应该接受一定的公众关注，但他们仍然应该保有基本隐私。"
+                      },
+                      {
+                          "id":  "OPN_FAM_007",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "age_limits_for_activity",
+                          "subTopicLabel":  "Age Limit / Age for Activity",
+                          "stance":  "support",
+                          "text":  "In my opinion, the minimum age for driving should be 18.",
+                          "questionIds":  [
+                                              "WE_Q006",
+                                              "WE_Q037"
+                                          ],
+                          "sortOrder":  7,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，开车的最低年龄应该是 18 岁。"
+                      },
+                      {
+                          "id":  "OPN_FAM_008",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "age_limits_for_activity",
+                          "subTopicLabel":  "Age Limit / Age for Activity",
+                          "stance":  "support",
+                          "text":  "I believe people should not drive until they are 18 years old.",
+                          "questionIds":  [
+                                              "WE_Q006",
+                                              "WE_Q037"
+                                          ],
+                          "sortOrder":  8,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我认为人们应该到 18 岁以后再开车。"
+                      },
+                      {
+                          "id":  "OPN_FAM_009",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "age_limits_for_activity",
+                          "subTopicLabel":  "Age Limit / Age for Activity",
+                          "stance":  "support",
+                          "text":  "In my opinion, 18 is the right age for driving.",
+                          "questionIds":  [
+                                              "WE_Q006",
+                                              "WE_Q037"
+                                          ],
+                          "sortOrder":  9,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，18 岁是适合开车的年龄。"
+                      },
+                      {
+                          "id":  "OPN_FAM_010",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "harder_life_for_children",
+                          "subTopicLabel":  "Harder Life",
+                          "stance":  "support",
+                          "text":  "In my opinion, it is harder for children to grow up in the 21st century than in the past.",
+                          "questionIds":  [
+                                              "WE_Q023"
+                                          ],
+                          "sortOrder":  10,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，孩子们在21世纪成长比过去更难。"
+                      },
+                      {
+                          "id":  "OPN_FAM_011",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "harder_life_for_children",
+                          "subTopicLabel":  "Harder Life",
+                          "stance":  "support",
+                          "text":  "I agree that modern life has made childhood more difficult in many ways.",
+                          "questionIds":  [
+                                              "WE_Q023"
+                                          ],
+                          "sortOrder":  11,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "我同意现代生活在很多方面让童年变得更困难。"
+                      },
+                      {
+                          "id":  "OPN_FAM_012",
+                          "topicKey":  "family_society_growth",
+                          "subTopicKey":  "harder_life_for_children",
+                          "subTopicLabel":  "Harder Life",
+                          "stance":  "balanced",
+                          "text":  "In my opinion, children\u0027s lives today are better in some ways, but growing up is still harder overall.",
+                          "questionIds":  [
+                                              "WE_Q023"
+                                          ],
+                          "sortOrder":  12,
+                          "source":  "docx_观点句分类整理_通用万能句+场景版",
+                          "translationZh":  "在我看来，虽然今天孩子们的生活在一些方面更好了，但总体来说成长还是更难。"
+                      }
+                  ],
+    "futureHooks":  {
+                        "promptTypeSpecificSentences":  true,
+                        "difficultySpecificSentences":  true,
+                        "autoOpinionMatch":  false
+                    }
 }

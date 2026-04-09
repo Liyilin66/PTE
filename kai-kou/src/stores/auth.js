@@ -1,4 +1,4 @@
-import { defineStore } from "pinia";
+﻿import { defineStore } from "pinia";
 import { supabase } from "@/lib/supabase";
 
 const ACCESS_STATUS = {
@@ -28,8 +28,8 @@ export const useAuthStore = defineStore("auth", {
   getters: {
     isLoggedIn: (state) => Boolean(state.session && state.user),
     statusText(state) {
-      if (state.accessStatus === ACCESS_STATUS.VIP) return "✨ VIP · 无限练习";
-      if (state.accessStatus === ACCESS_STATUS.TRIAL) return `试用期 · 还剩 ${state.trialDaysLeft} 天`;
+      if (state.accessStatus === ACCESS_STATUS.VIP) return "✅ VIP · 无限练习";
+      if (state.accessStatus === ACCESS_STATUS.TRIAL) return `试用中 · 剩余 ${state.trialDaysLeft} 天`;
       if (state.accessStatus === ACCESS_STATUS.TRIAL_EXPIRED) return "试用已结束";
       return "未开通";
     },
@@ -275,3 +275,4 @@ function isAuthLockRaceError(error) {
   const message = String(error?.message || "");
   return message.includes("was released because another request stole it");
 }
+
