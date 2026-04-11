@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-11T13:27:29.754Z",
-  "turn_count": 104,
-  "last_agent_output": "已删掉了，这个“继续弱项（mixed）”入口现在不会再出现。\n\n我同时做了两件事：\n- 删除 DI 卡片里这颗按钮\n- 清理掉它对应的弱项查询逻辑（不再请求 weakest 类型，避免无用加载）\n\n改"
+  "last_turn_at": "2026-04-11T15:19:08.897Z",
+  "turn_count": 106,
+  "last_agent_output": "已改好：现在 WE 和 DI 对非会员会被拦截到 `/limit`，和 RA/WFD 一致。\n\n改动文件：\n- [router/index.js](D:/PTE/kai-kou/src/router/"
 }

@@ -31,32 +31,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "male",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "male",
+          "note": "key term related to this image",
+          "example": "This image highlights male."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "female",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "female",
+          "note": "key term related to this image",
+          "example": "This image highlights female."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -89,32 +89,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "water wheel",
+          "partOfSpeech": "noun",
+          "chinese": "water wheel",
+          "note": "key term related to this image",
+          "example": "This image highlights water wheel."
         },
         {
-          "word": "distribute",
-          "partOfSpeech": "verb",
-          "chinese": "deliver",
-          "note": "to deliver to users or places",
-          "example": "Products are distributed to stores."
-        },
-        {
-          "word": "initial",
-          "partOfSpeech": "adjective",
-          "chinese": "first",
-          "note": "at the beginning of a process",
-          "example": "The initial step requires sorting."
+          "word": "water flow",
+          "partOfSpeech": "noun",
+          "chinese": "water flow",
+          "note": "key term related to this image",
+          "example": "This image highlights water flow."
         },
         {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -147,32 +147,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "population",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "population",
+          "note": "key term related to this image",
+          "example": "This image highlights population."
+        },
+        {
+          "word": "town",
+          "partOfSpeech": "noun",
+          "chinese": "town",
+          "note": "key term related to this image",
+          "example": "This image highlights town."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -205,32 +205,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "arrests",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "arrests",
+          "note": "key term related to this image",
+          "example": "This image highlights arrests."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "illegal drugs",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "illegal drugs",
+          "note": "key term related to this image",
+          "example": "This image highlights illegal drugs."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -263,32 +263,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "consumer confidence",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "consumer confidence",
+          "note": "key term related to this image",
+          "example": "This image highlights consumer confidence."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "index",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "index",
+          "note": "key term related to this image",
+          "example": "This image highlights index."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -321,32 +321,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "laws",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "laws",
+          "note": "key term related to this image",
+          "example": "This image highlights laws."
         },
         {
-          "word": "peak",
+          "word": "Brazil",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "Brazil",
+          "note": "key term related to this image",
+          "example": "This image highlights Brazil."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -379,32 +379,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "stock price",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "stock price",
+          "note": "key term related to this image",
+          "example": "This image highlights stock price."
+        },
+        {
+          "word": "market",
+          "partOfSpeech": "noun",
+          "chinese": "market",
+          "note": "key term related to this image",
+          "example": "This image highlights market."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -437,32 +437,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "employment",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "employment",
+          "note": "key term related to this image",
+          "example": "This image highlights employment."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "exchange rate",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "exchange rate",
+          "note": "key term related to this image",
+          "example": "This image highlights exchange rate."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -495,32 +495,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "vegetables",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "vegetables",
+          "note": "key term related to this image",
+          "example": "This image highlights vegetables."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "fruit",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "fruit",
+          "note": "key term related to this image",
+          "example": "This image highlights fruit."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -553,32 +553,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "life expectancy",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "life expectancy",
+          "note": "key term related to this image",
+          "example": "This image highlights life expectancy."
         },
         {
-          "word": "peak",
+          "word": "years",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "years",
+          "note": "key term related to this image",
+          "example": "This image highlights years."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -611,32 +611,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "population growth",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "population growth",
+          "note": "key term related to this image",
+          "example": "This image highlights population growth."
+        },
+        {
+          "word": "birth rate",
+          "partOfSpeech": "noun",
+          "chinese": "birth rate",
+          "note": "key term related to this image",
+          "example": "This image highlights birth rate."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -669,32 +669,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "electricity",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "electricity",
+          "note": "key term related to this image",
+          "example": "This image highlights electricity."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "hydroelectric",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "hydroelectric",
+          "note": "key term related to this image",
+          "example": "This image highlights hydroelectric."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -727,32 +727,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "part-time students",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "part-time students",
+          "note": "key term related to this image",
+          "example": "This image highlights part-time students."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "full-time students",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "full-time students",
+          "note": "key term related to this image",
+          "example": "This image highlights full-time students."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -785,32 +785,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "carbon dioxide",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "carbon dioxide",
+          "note": "key term related to this image",
+          "example": "This image highlights carbon dioxide."
         },
         {
-          "word": "peak",
+          "word": "temperature",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "temperature",
+          "note": "key term related to this image",
+          "example": "This image highlights temperature."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -843,32 +843,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "oil price",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "oil price",
+          "note": "key term related to this image",
+          "example": "This image highlights oil price."
+        },
+        {
+          "word": "food price",
+          "partOfSpeech": "noun",
+          "chinese": "food price",
+          "note": "key term related to this image",
+          "example": "This image highlights food price."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -901,32 +901,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "projected population",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "projected population",
+          "note": "key term related to this image",
+          "example": "This image highlights projected population."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "Australia",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "Australia",
+          "note": "key term related to this image",
+          "example": "This image highlights Australia."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -959,32 +959,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "energy consumption",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "energy consumption",
+          "note": "key term related to this image",
+          "example": "This image highlights energy consumption."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "fuel",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "fuel",
+          "note": "key term related to this image",
+          "example": "This image highlights fuel."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -1017,32 +1017,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "internet users",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "internet users",
+          "note": "key term related to this image",
+          "example": "This image highlights internet users."
         },
         {
-          "word": "peak",
+          "word": "country",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "country",
+          "note": "key term related to this image",
+          "example": "This image highlights country."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -1075,32 +1075,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "taxation",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "taxation",
+          "note": "key term related to this image",
+          "example": "This image highlights taxation."
+        },
+        {
+          "word": "contribution",
+          "partOfSpeech": "noun",
+          "chinese": "contribution",
+          "note": "key term related to this image",
+          "example": "This image highlights contribution."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -1133,32 +1133,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "unemployment rate",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "unemployment rate",
+          "note": "key term related to this image",
+          "example": "This image highlights unemployment rate."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "ethnic group",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "ethnic group",
+          "note": "key term related to this image",
+          "example": "This image highlights ethnic group."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -1191,32 +1191,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "earnings",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "earnings",
+          "note": "key term related to this image",
+          "example": "This image highlights earnings."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "education",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "education",
+          "note": "key term related to this image",
+          "example": "This image highlights education."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -1249,32 +1249,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "drinking habits",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "drinking habits",
+          "note": "key term related to this image",
+          "example": "This image highlights drinking habits."
         },
         {
-          "word": "peak",
+          "word": "age",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "age",
+          "note": "key term related to this image",
+          "example": "This image highlights age."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -1307,32 +1307,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "wheat export",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "wheat export",
+          "note": "key term related to this image",
+          "example": "This image highlights wheat export."
         },
         {
-          "word": "comparison",
+          "word": "tonnes",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
+          "chinese": "tonnes",
+          "note": "key term related to this image",
+          "example": "This image highlights tonnes."
         },
         {
           "word": "proportion",
           "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
           "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
         }
       ]
     },
@@ -1365,32 +1365,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "nitrogen",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "nitrogen",
+          "note": "key term related to this image",
+          "example": "This image highlights nitrogen."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "oxygen",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "oxygen",
+          "note": "key term related to this image",
+          "example": "This image highlights oxygen."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
         }
       ]
     },
@@ -1423,32 +1423,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "deforestation",
+          "partOfSpeech": "noun",
+          "chinese": "deforestation",
+          "note": "key term related to this image",
+          "example": "This image highlights deforestation."
+        },
+        {
+          "word": "Amazon",
+          "partOfSpeech": "noun",
+          "chinese": "Amazon",
+          "note": "key term related to this image",
+          "example": "This image highlights Amazon."
+        },
+        {
           "word": "proportion",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "share",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
         }
       ]
     },
@@ -1481,32 +1481,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "EU population",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "EU population",
+          "note": "key term related to this image",
+          "example": "This image highlights EU population."
         },
         {
-          "word": "peak",
+          "word": "country share",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "country share",
+          "note": "key term related to this image",
+          "example": "This image highlights country share."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
         }
       ]
     },
@@ -1539,32 +1539,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "structure",
+          "word": "planet",
           "partOfSpeech": "noun",
-          "chinese": "framework",
-          "note": "how parts are organized",
-          "example": "The structure is divided into clear sections."
+          "chinese": "planet",
+          "note": "key term related to this image",
+          "example": "This image highlights planet."
         },
         {
-          "word": "relationship",
+          "word": "orbit",
           "partOfSpeech": "noun",
-          "chinese": "link",
-          "note": "how two parts are connected",
-          "example": "The relationship between labels is clear."
+          "chinese": "orbit",
+          "note": "key term related to this image",
+          "example": "This image highlights orbit."
         },
         {
           "word": "feature",
           "partOfSpeech": "noun",
-          "chinese": "element",
+          "chinese": "feature",
           "note": "an important visible element",
-          "example": "A central feature appears in the middle."
+          "example": "A key feature appears in the top section."
         },
         {
           "word": "pattern",
           "partOfSpeech": "noun",
-          "chinese": "shape trend",
-          "note": "a repeated or clear visual form",
-          "example": "A repeated pattern can be observed."
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -1597,32 +1597,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "right",
+          "partOfSpeech": "noun",
+          "chinese": "right",
+          "note": "key term related to this image",
+          "example": "This image highlights right."
+        },
+        {
+          "word": "wrong",
+          "partOfSpeech": "noun",
+          "chinese": "wrong",
+          "note": "key term related to this image",
+          "example": "This image highlights wrong."
+        },
+        {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
-          "word": "transform",
-          "partOfSpeech": "verb",
-          "chinese": "change into",
-          "note": "to change into another form",
-          "example": "Raw items are transformed into products."
-        },
-        {
-          "word": "circulate",
-          "partOfSpeech": "verb",
-          "chinese": "cycle around",
-          "note": "to move repeatedly in a cycle",
-          "example": "Water circulates through each chamber."
-        },
-        {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -1655,32 +1655,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "BMI",
+          "partOfSpeech": "noun",
+          "chinese": "BMI",
+          "note": "key term related to this image",
+          "example": "This image highlights BMI."
+        },
+        {
+          "word": "height",
+          "partOfSpeech": "noun",
+          "chinese": "height",
+          "note": "key term related to this image",
+          "example": "This image highlights height."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
           "word": "pattern",
           "partOfSpeech": "noun",
-          "chinese": "shape trend",
-          "note": "a repeated or clear visual form",
-          "example": "A repeated pattern can be observed."
-        },
-        {
-          "word": "variable",
-          "partOfSpeech": "noun",
-          "chinese": "factor",
-          "note": "a factor that can change",
-          "example": "One variable rises while another falls."
-        },
-        {
-          "word": "composition",
-          "partOfSpeech": "noun",
-          "chinese": "make-up",
-          "note": "the way parts form a whole",
-          "example": "The composition is balanced by color blocks."
-        },
-        {
-          "word": "structure",
-          "partOfSpeech": "noun",
-          "chinese": "framework",
-          "note": "how parts are organized",
-          "example": "The structure is divided into clear sections."
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -1713,32 +1713,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "solar panel",
+          "partOfSpeech": "noun",
+          "chinese": "solar panel",
+          "note": "key term related to this image",
+          "example": "This image highlights solar panel."
         },
         {
-          "word": "distribute",
-          "partOfSpeech": "verb",
-          "chinese": "deliver",
-          "note": "to deliver to users or places",
-          "example": "Products are distributed to stores."
-        },
-        {
-          "word": "initial",
-          "partOfSpeech": "adjective",
-          "chinese": "first",
-          "note": "at the beginning of a process",
-          "example": "The initial step requires sorting."
+          "word": "battery",
+          "partOfSpeech": "noun",
+          "chinese": "battery",
+          "note": "key term related to this image",
+          "example": "This image highlights battery."
         },
         {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -1771,32 +1771,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "structure",
+          "word": "food pyramid",
           "partOfSpeech": "noun",
-          "chinese": "framework",
-          "note": "how parts are organized",
-          "example": "The structure is divided into clear sections."
+          "chinese": "food pyramid",
+          "note": "key term related to this image",
+          "example": "This image highlights food pyramid."
         },
         {
-          "word": "relationship",
+          "word": "nutrition",
           "partOfSpeech": "noun",
-          "chinese": "link",
-          "note": "how two parts are connected",
-          "example": "The relationship between labels is clear."
+          "chinese": "nutrition",
+          "note": "key term related to this image",
+          "example": "This image highlights nutrition."
         },
         {
           "word": "feature",
           "partOfSpeech": "noun",
-          "chinese": "element",
+          "chinese": "feature",
           "note": "an important visible element",
-          "example": "A central feature appears in the middle."
+          "example": "A key feature appears in the top section."
         },
         {
           "word": "pattern",
           "partOfSpeech": "noun",
-          "chinese": "shape trend",
-          "note": "a repeated or clear visual form",
-          "example": "A repeated pattern can be observed."
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -1829,32 +1829,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "illustrate",
-          "partOfSpeech": "verb",
-          "chinese": "show",
-          "note": "to show information visually",
-          "example": "The image illustrates a key concept."
-        },
-        {
-          "word": "highlight",
-          "partOfSpeech": "verb",
-          "chinese": "emphasize",
-          "note": "to make a point stand out",
-          "example": "Color is used to highlight differences."
-        },
-        {
-          "word": "category",
+          "word": "education fund",
           "partOfSpeech": "noun",
-          "chinese": "type",
-          "note": "one grouped type in a visual",
-          "example": "Each category has a distinct label."
+          "chinese": "education fund",
+          "note": "key term related to this image",
+          "example": "This image highlights education fund."
         },
         {
-          "word": "contrast",
+          "word": "government expenditure",
           "partOfSpeech": "noun",
-          "chinese": "difference",
-          "note": "difference between two elements",
-          "example": "The contrast between sections is obvious."
+          "chinese": "government expenditure",
+          "note": "key term related to this image",
+          "example": "This image highlights government expenditure."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -1887,32 +1887,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "boundary",
+          "word": "library",
           "partOfSpeech": "noun",
-          "chinese": "border",
-          "note": "a line dividing areas",
-          "example": "A river marks the eastern boundary."
+          "chinese": "library",
+          "note": "key term related to this image",
+          "example": "This image highlights library."
         },
         {
-          "word": "route",
+          "word": "floor plan",
           "partOfSpeech": "noun",
-          "chinese": "path",
-          "note": "a path used to move across an area",
-          "example": "The route connects the station and campus."
+          "chinese": "floor plan",
+          "note": "key term related to this image",
+          "example": "This image highlights floor plan."
         },
         {
-          "word": "commercial",
-          "partOfSpeech": "adjective",
-          "chinese": "business area",
-          "note": "related to business areas",
-          "example": "Commercial zones cluster near the center."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
         },
         {
-          "word": "expand",
-          "partOfSpeech": "verb",
-          "chinese": "grow bigger",
-          "note": "to become larger in area",
-          "example": "The urban area expands to the south."
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -1945,32 +1945,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "residential",
-          "partOfSpeech": "adjective",
-          "chinese": "housing area",
-          "note": "related to housing areas",
-          "example": "The western side is mainly residential."
-        },
-        {
-          "word": "landmark",
+          "word": "river",
           "partOfSpeech": "noun",
-          "chinese": "key place",
-          "note": "an important visual reference point",
-          "example": "The museum is a key landmark on the map."
+          "chinese": "river",
+          "note": "key term related to this image",
+          "example": "This image highlights river."
         },
         {
-          "word": "replace",
-          "partOfSpeech": "verb",
-          "chinese": "take place of",
-          "note": "to take the place of something",
-          "example": "Old facilities are replaced by new blocks."
+          "word": "meander",
+          "partOfSpeech": "noun",
+          "chinese": "meander",
+          "note": "key term related to this image",
+          "example": "This image highlights meander."
         },
         {
-          "word": "located",
-          "partOfSpeech": "adjective",
-          "chinese": "positioned",
-          "note": "positioned in a place",
-          "example": "The station is located in the center."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -2003,32 +2003,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "freshwater",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "freshwater",
+          "note": "key term related to this image",
+          "example": "This image highlights freshwater."
+        },
+        {
+          "word": "saltwater",
+          "partOfSpeech": "noun",
+          "chinese": "saltwater",
+          "note": "key term related to this image",
+          "example": "This image highlights saltwater."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -2061,32 +2061,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "illustrate",
-          "partOfSpeech": "verb",
-          "chinese": "show",
-          "note": "to show information visually",
-          "example": "The image illustrates a key concept."
-        },
-        {
-          "word": "highlight",
-          "partOfSpeech": "verb",
-          "chinese": "emphasize",
-          "note": "to make a point stand out",
-          "example": "Color is used to highlight differences."
-        },
-        {
-          "word": "category",
+          "word": "lunar cycle",
           "partOfSpeech": "noun",
-          "chinese": "type",
-          "note": "one grouped type in a visual",
-          "example": "Each category has a distinct label."
+          "chinese": "lunar cycle",
+          "note": "key term related to this image",
+          "example": "This image highlights lunar cycle."
         },
         {
-          "word": "contrast",
+          "word": "fish catch",
           "partOfSpeech": "noun",
-          "chinese": "difference",
-          "note": "difference between two elements",
-          "example": "The contrast between sections is obvious."
+          "chinese": "fish catch",
+          "note": "key term related to this image",
+          "example": "This image highlights fish catch."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -2119,32 +2119,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "computer",
+          "partOfSpeech": "noun",
+          "chinese": "computer",
+          "note": "key term related to this image",
+          "example": "This image highlights computer."
+        },
+        {
+          "word": "then and now",
+          "partOfSpeech": "noun",
+          "chinese": "then and now",
+          "note": "key term related to this image",
+          "example": "This image highlights then and now."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
           "word": "pattern",
           "partOfSpeech": "noun",
-          "chinese": "shape trend",
-          "note": "a repeated or clear visual form",
-          "example": "A repeated pattern can be observed."
-        },
-        {
-          "word": "variable",
-          "partOfSpeech": "noun",
-          "chinese": "factor",
-          "note": "a factor that can change",
-          "example": "One variable rises while another falls."
-        },
-        {
-          "word": "composition",
-          "partOfSpeech": "noun",
-          "chinese": "make-up",
-          "note": "the way parts form a whole",
-          "example": "The composition is balanced by color blocks."
-        },
-        {
-          "word": "structure",
-          "partOfSpeech": "noun",
-          "chinese": "framework",
-          "note": "how parts are organized",
-          "example": "The structure is divided into clear sections."
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -2177,32 +2177,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "tree height",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "tree height",
+          "note": "key term related to this image",
+          "example": "This image highlights tree height."
         },
         {
-          "word": "peak",
+          "word": "species",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "species",
+          "note": "key term related to this image",
+          "example": "This image highlights species."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -2235,32 +2235,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "structure",
+          "word": "wing",
           "partOfSpeech": "noun",
-          "chinese": "framework",
-          "note": "how parts are organized",
-          "example": "The structure is divided into clear sections."
+          "chinese": "wing",
+          "note": "key term related to this image",
+          "example": "This image highlights wing."
         },
         {
-          "word": "relationship",
+          "word": "structure",
           "partOfSpeech": "noun",
-          "chinese": "link",
-          "note": "how two parts are connected",
-          "example": "The relationship between labels is clear."
+          "chinese": "structure",
+          "note": "key term related to this image",
+          "example": "This image highlights structure."
         },
         {
           "word": "feature",
           "partOfSpeech": "noun",
-          "chinese": "element",
+          "chinese": "feature",
           "note": "an important visible element",
-          "example": "A central feature appears in the middle."
+          "example": "A key feature appears in the top section."
         },
         {
           "word": "pattern",
           "partOfSpeech": "noun",
-          "chinese": "shape trend",
-          "note": "a repeated or clear visual form",
-          "example": "A repeated pattern can be observed."
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -2293,32 +2293,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "located",
-          "partOfSpeech": "adjective",
-          "chinese": "positioned",
-          "note": "positioned in a place",
-          "example": "The station is located in the center."
-        },
-        {
-          "word": "district",
+          "word": "inner core",
           "partOfSpeech": "noun",
-          "chinese": "area",
-          "note": "a defined part of a city or map",
-          "example": "The northern district is residential."
+          "chinese": "inner core",
+          "note": "key term related to this image",
+          "example": "This image highlights inner core."
         },
         {
-          "word": "intersection",
+          "word": "mantle",
           "partOfSpeech": "noun",
-          "chinese": "crossroad",
-          "note": "where roads or lines cross",
-          "example": "An intersection links the two main streets."
+          "chinese": "mantle",
+          "note": "key term related to this image",
+          "example": "This image highlights mantle."
         },
         {
-          "word": "residential",
-          "partOfSpeech": "adjective",
-          "chinese": "housing area",
-          "note": "related to housing areas",
-          "example": "The western side is mainly residential."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -2351,32 +2351,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "bird feeder",
+          "partOfSpeech": "noun",
+          "chinese": "bird feeder",
+          "note": "key term related to this image",
+          "example": "This image highlights bird feeder."
+        },
+        {
+          "word": "recycled bottle",
+          "partOfSpeech": "noun",
+          "chinese": "recycled bottle",
+          "note": "key term related to this image",
+          "example": "This image highlights recycled bottle."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
           "word": "pattern",
           "partOfSpeech": "noun",
-          "chinese": "shape trend",
-          "note": "a repeated or clear visual form",
-          "example": "A repeated pattern can be observed."
-        },
-        {
-          "word": "variable",
-          "partOfSpeech": "noun",
-          "chinese": "factor",
-          "note": "a factor that can change",
-          "example": "One variable rises while another falls."
-        },
-        {
-          "word": "composition",
-          "partOfSpeech": "noun",
-          "chinese": "make-up",
-          "note": "the way parts form a whole",
-          "example": "The composition is balanced by color blocks."
-        },
-        {
-          "word": "structure",
-          "partOfSpeech": "noun",
-          "chinese": "framework",
-          "note": "how parts are organized",
-          "example": "The structure is divided into clear sections."
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -2409,32 +2409,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "residential",
-          "partOfSpeech": "adjective",
-          "chinese": "housing area",
-          "note": "related to housing areas",
-          "example": "The western side is mainly residential."
-        },
-        {
-          "word": "landmark",
+          "word": "root",
           "partOfSpeech": "noun",
-          "chinese": "key place",
-          "note": "an important visual reference point",
-          "example": "The museum is a key landmark on the map."
+          "chinese": "root",
+          "note": "key term related to this image",
+          "example": "This image highlights root."
         },
         {
-          "word": "replace",
-          "partOfSpeech": "verb",
-          "chinese": "take place of",
-          "note": "to take the place of something",
-          "example": "Old facilities are replaced by new blocks."
+          "word": "branch",
+          "partOfSpeech": "noun",
+          "chinese": "branch",
+          "note": "key term related to this image",
+          "example": "This image highlights branch."
         },
         {
-          "word": "located",
-          "partOfSpeech": "adjective",
-          "chinese": "positioned",
-          "note": "positioned in a place",
-          "example": "The station is located in the center."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -2467,32 +2467,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "expand",
-          "partOfSpeech": "verb",
-          "chinese": "grow bigger",
-          "note": "to become larger in area",
-          "example": "The urban area expands to the south."
+          "word": "global warming",
+          "partOfSpeech": "noun",
+          "chinese": "global warming",
+          "note": "key term related to this image",
+          "example": "This image highlights global warming."
+        },
+        {
+          "word": "temperature increase",
+          "partOfSpeech": "noun",
+          "chinese": "temperature increase",
+          "note": "key term related to this image",
+          "example": "This image highlights temperature increase."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
         },
         {
           "word": "layout",
           "partOfSpeech": "noun",
-          "chinese": "arrangement",
-          "note": "overall arrangement of spaces",
-          "example": "The floor-plan layout is highly structured."
-        },
-        {
-          "word": "adjacent",
-          "partOfSpeech": "adjective",
-          "chinese": "next to",
-          "note": "next to something else",
-          "example": "The library is adjacent to the park."
-        },
-        {
-          "word": "boundary",
-          "partOfSpeech": "noun",
-          "chinese": "border",
-          "note": "a line dividing areas",
-          "example": "A river marks the eastern boundary."
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -2525,32 +2525,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "germination",
+          "partOfSpeech": "noun",
+          "chinese": "germination",
+          "note": "key term related to this image",
+          "example": "This image highlights germination."
+        },
+        {
+          "word": "bean plant",
+          "partOfSpeech": "noun",
+          "chinese": "bean plant",
+          "note": "key term related to this image",
+          "example": "This image highlights bean plant."
+        },
+        {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
-          "word": "transform",
-          "partOfSpeech": "verb",
-          "chinese": "change into",
-          "note": "to change into another form",
-          "example": "Raw items are transformed into products."
-        },
-        {
-          "word": "circulate",
-          "partOfSpeech": "verb",
-          "chinese": "cycle around",
-          "note": "to move repeatedly in a cycle",
-          "example": "Water circulates through each chamber."
-        },
-        {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -2583,32 +2583,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "output",
+          "word": "evaporation",
           "partOfSpeech": "noun",
-          "chinese": "result",
-          "note": "the final product of a process",
-          "example": "The final output is packed for delivery."
+          "chinese": "evaporation",
+          "note": "key term related to this image",
+          "example": "This image highlights evaporation."
         },
         {
-          "word": "assemble",
-          "partOfSpeech": "verb",
-          "chinese": "put together",
-          "note": "to put parts together",
-          "example": "Components are assembled at this stage."
+          "word": "precipitation",
+          "partOfSpeech": "noun",
+          "chinese": "precipitation",
+          "note": "key term related to this image",
+          "example": "This image highlights precipitation."
         },
         {
-          "word": "transport",
-          "partOfSpeech": "verb",
-          "chinese": "move",
-          "note": "to move goods from one point to another",
-          "example": "The material is transported to the next unit."
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
-          "word": "convert",
-          "partOfSpeech": "verb",
-          "chinese": "turn into",
-          "note": "to change energy or material form",
-          "example": "Energy is converted into electricity."
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -2641,32 +2641,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "download",
+          "partOfSpeech": "noun",
+          "chinese": "download",
+          "note": "key term related to this image",
+          "example": "This image highlights download."
         },
         {
-          "word": "distribute",
-          "partOfSpeech": "verb",
-          "chinese": "deliver",
-          "note": "to deliver to users or places",
-          "example": "Products are distributed to stores."
-        },
-        {
-          "word": "initial",
-          "partOfSpeech": "adjective",
-          "chinese": "first",
-          "note": "at the beginning of a process",
-          "example": "The initial step requires sorting."
+          "word": "purchase",
+          "partOfSpeech": "noun",
+          "chinese": "purchase",
+          "note": "key term related to this image",
+          "example": "This image highlights purchase."
         },
         {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -2699,32 +2699,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "convert",
-          "partOfSpeech": "verb",
-          "chinese": "turn into",
-          "note": "to change energy or material form",
-          "example": "Energy is converted into electricity."
+          "word": "egg",
+          "partOfSpeech": "noun",
+          "chinese": "egg",
+          "note": "key term related to this image",
+          "example": "This image highlights egg."
         },
         {
-          "word": "final",
-          "partOfSpeech": "adjective",
-          "chinese": "last",
-          "note": "at the end of a process",
-          "example": "The final stage focuses on packaging."
+          "word": "larva",
+          "partOfSpeech": "noun",
+          "chinese": "larva",
+          "note": "key term related to this image",
+          "example": "This image highlights larva."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
           "word": "sequence",
           "partOfSpeech": "noun",
-          "chinese": "order",
-          "note": "the fixed order of actions",
-          "example": "The sequence moves from left to right."
-        },
-        {
-          "word": "output",
-          "partOfSpeech": "noun",
-          "chinese": "result",
-          "note": "the final product of a process",
-          "example": "The final output is packed for delivery."
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -2757,32 +2757,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "acid rain",
+          "partOfSpeech": "noun",
+          "chinese": "acid rain",
+          "note": "key term related to this image",
+          "example": "This image highlights acid rain."
+        },
+        {
+          "word": "emissions",
+          "partOfSpeech": "noun",
+          "chinese": "emissions",
+          "note": "key term related to this image",
+          "example": "This image highlights emissions."
+        },
+        {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
-          "word": "transform",
-          "partOfSpeech": "verb",
-          "chinese": "change into",
-          "note": "to change into another form",
-          "example": "Raw items are transformed into products."
-        },
-        {
-          "word": "circulate",
-          "partOfSpeech": "verb",
-          "chinese": "cycle around",
-          "note": "to move repeatedly in a cycle",
-          "example": "Water circulates through each chamber."
-        },
-        {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -2815,32 +2815,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "doubling time",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "doubling time",
+          "note": "key term related to this image",
+          "example": "This image highlights doubling time."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "population",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "population",
+          "note": "key term related to this image",
+          "example": "This image highlights population."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -2873,32 +2873,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
-        },
-        {
-          "word": "outperform",
-          "partOfSpeech": "verb",
-          "chinese": "do better than",
-          "note": "to do better than others",
-          "example": "Category A outperforms the rest."
-        },
-        {
-          "word": "indicator",
+          "word": "gold sales",
           "partOfSpeech": "noun",
-          "chinese": "metric",
-          "note": "a measured signal of change",
-          "example": "This indicator rises steadily."
+          "chinese": "gold sales",
+          "note": "key term related to this image",
+          "example": "This image highlights gold sales."
         },
         {
-          "word": "peak",
+          "word": "Dubai",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "Dubai",
+          "note": "key term related to this image",
+          "example": "This image highlights Dubai."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -2931,32 +2931,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "convert",
-          "partOfSpeech": "verb",
-          "chinese": "turn into",
-          "note": "to change energy or material form",
-          "example": "Energy is converted into electricity."
+          "word": "eclipse",
+          "partOfSpeech": "noun",
+          "chinese": "eclipse",
+          "note": "key term related to this image",
+          "example": "This image highlights eclipse."
         },
         {
-          "word": "final",
-          "partOfSpeech": "adjective",
-          "chinese": "last",
-          "note": "at the end of a process",
-          "example": "The final stage focuses on packaging."
+          "word": "sun",
+          "partOfSpeech": "noun",
+          "chinese": "sun",
+          "note": "key term related to this image",
+          "example": "This image highlights sun."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
           "word": "sequence",
           "partOfSpeech": "noun",
-          "chinese": "order",
-          "note": "the fixed order of actions",
-          "example": "The sequence moves from left to right."
-        },
-        {
-          "word": "output",
-          "partOfSpeech": "noun",
-          "chinese": "result",
-          "note": "the final product of a process",
-          "example": "The final output is packed for delivery."
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -2989,32 +2989,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "recycling",
+          "partOfSpeech": "noun",
+          "chinese": "recycling",
+          "note": "key term related to this image",
+          "example": "This image highlights recycling."
+        },
+        {
+          "word": "closed-loop",
+          "partOfSpeech": "noun",
+          "chinese": "closed-loop",
+          "note": "key term related to this image",
+          "example": "This image highlights closed-loop."
+        },
+        {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
-          "word": "transform",
-          "partOfSpeech": "verb",
-          "chinese": "change into",
-          "note": "to change into another form",
-          "example": "Raw items are transformed into products."
-        },
-        {
-          "word": "circulate",
-          "partOfSpeech": "verb",
-          "chinese": "cycle around",
-          "note": "to move repeatedly in a cycle",
-          "example": "Water circulates through each chamber."
-        },
-        {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -3047,32 +3047,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "boundary",
+          "word": "honey production",
           "partOfSpeech": "noun",
-          "chinese": "border",
-          "note": "a line dividing areas",
-          "example": "A river marks the eastern boundary."
+          "chinese": "honey production",
+          "note": "key term related to this image",
+          "example": "This image highlights honey production."
         },
         {
-          "word": "route",
+          "word": "state",
           "partOfSpeech": "noun",
-          "chinese": "path",
-          "note": "a path used to move across an area",
-          "example": "The route connects the station and campus."
+          "chinese": "state",
+          "note": "key term related to this image",
+          "example": "This image highlights state."
         },
         {
-          "word": "commercial",
-          "partOfSpeech": "adjective",
-          "chinese": "business area",
-          "note": "related to business areas",
-          "example": "Commercial zones cluster near the center."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
         },
         {
-          "word": "expand",
-          "partOfSpeech": "verb",
-          "chinese": "grow bigger",
-          "note": "to become larger in area",
-          "example": "The urban area expands to the south."
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -3105,32 +3105,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "contrast",
+          "word": "day",
           "partOfSpeech": "noun",
-          "chinese": "difference",
-          "note": "difference between two elements",
-          "example": "The contrast between sections is obvious."
+          "chinese": "day",
+          "note": "key term related to this image",
+          "example": "This image highlights day."
         },
         {
-          "word": "observe",
-          "partOfSpeech": "verb",
-          "chinese": "notice",
-          "note": "to notice from visual evidence",
-          "example": "We can observe several key changes."
-        },
-        {
-          "word": "element",
+          "word": "night",
           "partOfSpeech": "noun",
-          "chinese": "component",
-          "note": "a single part within an image",
-          "example": "Each element contributes to the main message."
+          "chinese": "night",
+          "note": "key term related to this image",
+          "example": "This image highlights night."
         },
         {
-          "word": "illustrate",
-          "partOfSpeech": "verb",
-          "chinese": "show",
-          "note": "to show information visually",
-          "example": "The image illustrates a key concept."
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
         }
       ]
     },
@@ -3163,32 +3163,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "expand",
-          "partOfSpeech": "verb",
-          "chinese": "grow bigger",
-          "note": "to become larger in area",
-          "example": "The urban area expands to the south."
+          "word": "population density",
+          "partOfSpeech": "noun",
+          "chinese": "population density",
+          "note": "key term related to this image",
+          "example": "This image highlights population density."
+        },
+        {
+          "word": "Australia",
+          "partOfSpeech": "noun",
+          "chinese": "Australia",
+          "note": "key term related to this image",
+          "example": "This image highlights Australia."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
         },
         {
           "word": "layout",
           "partOfSpeech": "noun",
-          "chinese": "arrangement",
-          "note": "overall arrangement of spaces",
-          "example": "The floor-plan layout is highly structured."
-        },
-        {
-          "word": "adjacent",
-          "partOfSpeech": "adjective",
-          "chinese": "next to",
-          "note": "next to something else",
-          "example": "The library is adjacent to the park."
-        },
-        {
-          "word": "boundary",
-          "partOfSpeech": "noun",
-          "chinese": "border",
-          "note": "a line dividing areas",
-          "example": "A river marks the eastern boundary."
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -3221,32 +3221,32 @@
       },
       "highFrequencyWords": [
         {
+          "word": "fruit",
+          "partOfSpeech": "noun",
+          "chinese": "fruit",
+          "note": "key term related to this image",
+          "example": "This image highlights fruit."
+        },
+        {
+          "word": "supply chain",
+          "partOfSpeech": "noun",
+          "chinese": "supply chain",
+          "note": "key term related to this image",
+          "example": "This image highlights supply chain."
+        },
+        {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
         },
         {
-          "word": "transform",
-          "partOfSpeech": "verb",
-          "chinese": "change into",
-          "note": "to change into another form",
-          "example": "Raw items are transformed into products."
-        },
-        {
-          "word": "circulate",
-          "partOfSpeech": "verb",
-          "chinese": "cycle around",
-          "note": "to move repeatedly in a cycle",
-          "example": "Water circulates through each chamber."
-        },
-        {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -3279,32 +3279,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "proportion",
+          "word": "household spending",
           "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "household spending",
+          "note": "key term related to this image",
+          "example": "This image highlights household spending."
         },
         {
-          "word": "gradual",
-          "partOfSpeech": "adjective",
-          "chinese": "step-by-step",
-          "note": "happening slowly over time",
-          "example": "There is a gradual increase across years."
-        },
-        {
-          "word": "stable",
-          "partOfSpeech": "adjective",
-          "chinese": "steady",
-          "note": "showing little change",
-          "example": "The value remains stable in the second half."
-        },
-        {
-          "word": "distribution",
+          "word": "goods and services",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "goods and services",
+          "note": "key term related to this image",
+          "example": "This image highlights goods and services."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -3337,32 +3337,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "filter",
-          "partOfSpeech": "verb",
-          "chinese": "screen",
-          "note": "to remove unwanted parts",
-          "example": "The liquid is filtered before storage."
+          "word": "electricity",
+          "partOfSpeech": "noun",
+          "chinese": "electricity",
+          "note": "key term related to this image",
+          "example": "This image highlights electricity."
         },
         {
-          "word": "distribute",
-          "partOfSpeech": "verb",
-          "chinese": "deliver",
-          "note": "to deliver to users or places",
-          "example": "Products are distributed to stores."
-        },
-        {
-          "word": "initial",
-          "partOfSpeech": "adjective",
-          "chinese": "first",
-          "note": "at the beginning of a process",
-          "example": "The initial step requires sorting."
+          "word": "wind turbine",
+          "partOfSpeech": "noun",
+          "chinese": "wind turbine",
+          "note": "key term related to this image",
+          "example": "This image highlights wind turbine."
         },
         {
           "word": "stage",
           "partOfSpeech": "noun",
-          "chinese": "step",
-          "note": "one step in a process",
-          "example": "The first stage starts with input materials."
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
         }
       ]
     },
@@ -3395,32 +3395,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "distribution",
+          "word": "natural increase",
           "partOfSpeech": "noun",
-          "chinese": "spread",
-          "note": "the way values are spread",
-          "example": "The distribution is uneven across groups."
+          "chinese": "natural increase",
+          "note": "key term related to this image",
+          "example": "This image highlights natural increase."
+        },
+        {
+          "word": "net migration",
+          "partOfSpeech": "noun",
+          "chinese": "net migration",
+          "note": "key term related to this image",
+          "example": "This image highlights net migration."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
         },
         {
           "word": "comparison",
           "partOfSpeech": "noun",
-          "chinese": "contrast",
-          "note": "examining differences between sets",
-          "example": "The comparison highlights a large gap."
-        },
-        {
-          "word": "decline",
-          "partOfSpeech": "verb",
-          "chinese": "drop",
-          "note": "to become lower in value",
-          "example": "The figure declines after 2010."
-        },
-        {
-          "word": "proportion",
-          "partOfSpeech": "noun",
-          "chinese": "share",
-          "note": "a part compared with the whole",
-          "example": "Transport takes a smaller proportion."
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -3453,32 +3453,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "peak",
+          "word": "e-waste",
           "partOfSpeech": "noun",
-          "chinese": "peak value",
-          "note": "the highest point in a chart",
-          "example": "The peak appears in the final period."
+          "chinese": "e-waste",
+          "note": "key term related to this image",
+          "example": "This image highlights e-waste."
         },
         {
-          "word": "fluctuate",
-          "partOfSpeech": "verb",
-          "chinese": "go up and down",
-          "note": "to rise and fall repeatedly",
-          "example": "The trend fluctuates during the middle years."
-        },
-        {
-          "word": "segment",
+          "word": "electronics",
           "partOfSpeech": "noun",
-          "chinese": "group",
-          "note": "one part of grouped data",
-          "example": "This segment records the highest spending."
+          "chinese": "electronics",
+          "note": "key term related to this image",
+          "example": "This image highlights electronics."
         },
         {
-          "word": "sharp",
-          "partOfSpeech": "adjective",
-          "chinese": "steep",
-          "note": "sudden and large in degree",
-          "example": "A sharp drop is visible in March."
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
         }
       ]
     },
@@ -3511,32 +3511,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "boundary",
+          "word": "climate zone",
           "partOfSpeech": "noun",
-          "chinese": "border",
-          "note": "a line dividing areas",
-          "example": "A river marks the eastern boundary."
+          "chinese": "climate zone",
+          "note": "key term related to this image",
+          "example": "This image highlights climate zone."
         },
         {
-          "word": "route",
+          "word": "equator",
           "partOfSpeech": "noun",
-          "chinese": "path",
-          "note": "a path used to move across an area",
-          "example": "The route connects the station and campus."
+          "chinese": "equator",
+          "note": "key term related to this image",
+          "example": "This image highlights equator."
         },
         {
-          "word": "commercial",
-          "partOfSpeech": "adjective",
-          "chinese": "business area",
-          "note": "related to business areas",
-          "example": "Commercial zones cluster near the center."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
         },
         {
-          "word": "expand",
-          "partOfSpeech": "verb",
-          "chinese": "grow bigger",
-          "note": "to become larger in area",
-          "example": "The urban area expands to the south."
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -3569,32 +3569,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "residential",
-          "partOfSpeech": "adjective",
-          "chinese": "housing area",
-          "note": "related to housing areas",
-          "example": "The western side is mainly residential."
-        },
-        {
-          "word": "landmark",
+          "word": "apartment layout",
           "partOfSpeech": "noun",
-          "chinese": "key place",
-          "note": "an important visual reference point",
-          "example": "The museum is a key landmark on the map."
+          "chinese": "apartment layout",
+          "note": "key term related to this image",
+          "example": "This image highlights apartment layout."
         },
         {
-          "word": "replace",
-          "partOfSpeech": "verb",
-          "chinese": "take place of",
-          "note": "to take the place of something",
-          "example": "Old facilities are replaced by new blocks."
+          "word": "dimensions",
+          "partOfSpeech": "noun",
+          "chinese": "dimensions",
+          "note": "key term related to this image",
+          "example": "This image highlights dimensions."
         },
         {
-          "word": "located",
-          "partOfSpeech": "adjective",
-          "chinese": "positioned",
-          "note": "positioned in a place",
-          "example": "The station is located in the center."
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     },
@@ -3627,32 +3627,32 @@
       },
       "highFrequencyWords": [
         {
-          "word": "expand",
-          "partOfSpeech": "verb",
-          "chinese": "grow bigger",
-          "note": "to become larger in area",
-          "example": "The urban area expands to the south."
+          "word": "South America",
+          "partOfSpeech": "noun",
+          "chinese": "South America",
+          "note": "key term related to this image",
+          "example": "This image highlights South America."
+        },
+        {
+          "word": "landform",
+          "partOfSpeech": "noun",
+          "chinese": "landform",
+          "note": "key term related to this image",
+          "example": "This image highlights landform."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
         },
         {
           "word": "layout",
           "partOfSpeech": "noun",
-          "chinese": "arrangement",
-          "note": "overall arrangement of spaces",
-          "example": "The floor-plan layout is highly structured."
-        },
-        {
-          "word": "adjacent",
-          "partOfSpeech": "adjective",
-          "chinese": "next to",
-          "note": "next to something else",
-          "example": "The library is adjacent to the park."
-        },
-        {
-          "word": "boundary",
-          "partOfSpeech": "noun",
-          "chinese": "border",
-          "note": "a line dividing areas",
-          "example": "A river marks the eastern boundary."
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
         }
       ]
     }

@@ -49,6 +49,11 @@ router.beforeEach(async (to) => {
     return "/auth";
   }
 
+  const needsPremiumAccess = to.path.startsWith("/we") || to.path.startsWith("/di");
+  if (needsPremiumAccess && !authStore.canPractice && to.path !== "/limit") {
+    return "/limit";
+  }
+
   if (to.path === "/auth" && authStore.isLoggedIn) {
     return "/home";
   }
