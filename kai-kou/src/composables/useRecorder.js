@@ -1839,6 +1839,7 @@ export function useRecorder() {
   async function stopRecorderAndGetBlob(options = {}) {
     const stopReason = options.reason || "manual";
     const stopAttemptId = Number(options.attemptId || currentAttemptId.value || 0);
+    const skipPlayableValidation = Boolean(options.skipPlayableValidation);
     if (!stopAttemptId || !isAttemptCurrent(stopAttemptId)) {
       return createStaleStopResult(stopReason, stopAttemptId, {
         stopErrorCode: "ATTEMPT_STALE_BEFORE_STOP"
@@ -1871,6 +1872,7 @@ export function useRecorder() {
         stopCallCount,
         stopReason,
         stopAttemptId,
+        skipPlayableValidation,
         platformStrategy,
         isAndroidLike,
         isIOSSafari,
@@ -1999,8 +2001,15 @@ export function useRecorder() {
       const blobTooLarge = blobSize > MAX_AUDIO_BLOB_BYTES;
       const hasAudio = blobSize > 0;
       const mimeType = mediaStopResult?.mimeType || blob?.type || "audio/webm";
-      const playableCheck = await validatePlayableAudioBlob(blob, mimeType, stopAttemptId);
-      if (!isAttemptCurrent(stopAttemptId) || playableCheck?.staleAttempt) {
+      const playableCheck = skipPlayableValidation
+        ? {
+            playable: true,
+            method: "skipped",
+            durationSec: 0,
+            errorCode: ""
+          }
+        : await validatePlayableAudioBlob(blob, mimeType, stopAttemptId);
+      if (!skipPlayableValidation && (!isAttemptCurrent(stopAttemptId) || playableCheck?.staleAttempt)) {
         return createStaleStopResult(stopReason, stopAttemptId, {
           stopErrorCode: "ATTEMPT_STALE_AFTER_PLAYABLE_CHECK"
         });

@@ -1,0 +1,18 @@
+﻿{
+  "version": "phase1",
+  "taskType": "DI",
+  "phrases": [
+    { "id": "DI_RES_001", "text": "Let me start with the overall trend.", "functionType": "rescue", "hintLevel": "strong", "tags": ["opening", "stall_recovery"], "sortOrder": 1 },
+    { "id": "DI_RES_002", "text": "Overall, the image shows clear differences across categories.", "functionType": "rescue", "hintLevel": "strong", "tags": ["overview", "stall_recovery"], "sortOrder": 2 },
+    { "id": "DI_RES_003", "text": "The highest value is ..., while the lowest value is ...", "functionType": "rescue", "hintLevel": "strong", "tags": ["extreme"], "sortOrder": 3 },
+    { "id": "DI_RES_004", "text": "One key point is that ...", "functionType": "rescue", "hintLevel": "medium", "tags": ["detail"], "sortOrder": 4 },
+    { "id": "DI_RES_005", "text": "Another notable point is ...", "functionType": "rescue", "hintLevel": "medium", "tags": ["detail"], "sortOrder": 5 },
+    { "id": "DI_RES_006", "text": "Compared with ..., ... is clearly higher.", "functionType": "rescue", "hintLevel": "medium", "tags": ["comparison"], "sortOrder": 6 },
+    { "id": "DI_RES_007", "text": "This figure rises gradually over time.", "functionType": "rescue", "hintLevel": "medium", "tags": ["trend"], "sortOrder": 7 },
+    { "id": "DI_RES_008", "text": "In short, the image mainly highlights ...", "functionType": "rescue", "hintLevel": "medium", "tags": ["closing"], "sortOrder": 8 },
+    { "id": "DI_RES_009", "text": "overall trend first", "functionType": "rescue", "hintLevel": "light", "tags": ["keyword"], "sortOrder": 9 },
+    { "id": "DI_RES_010", "text": "highest vs lowest", "functionType": "rescue", "hintLevel": "light", "tags": ["keyword"], "sortOrder": 10 },
+    { "id": "DI_RES_011", "text": "two key comparisons", "functionType": "rescue", "hintLevel": "light", "tags": ["keyword"], "sortOrder": 11 },
+    { "id": "DI_RES_012", "text": "short conclusion", "functionType": "rescue", "hintLevel": "light", "tags": ["keyword"], "sortOrder": 12 }
+  ]
+}

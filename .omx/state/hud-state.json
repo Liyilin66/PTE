@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-09T02:17:36.107Z",
-  "turn_count": 69,
-  "last_agent_output": "1. 验收结论  \n未通过。当前正式站桌面端和移动端 WE 提交仍请求 `http://localhost:3001/api/score`，不满足你要求的 `/api/score` 线上链路。\n\n2."
+  "last_turn_at": "2026-04-11T13:27:29.754Z",
+  "turn_count": 104,
+  "last_agent_output": "已删掉了，这个“继续弱项（mixed）”入口现在不会再出现。\n\n我同时做了两件事：\n- 删除 DI 卡片里这颗按钮\n- 清理掉它对应的弱项查询逻辑（不再请求 weakest 类型，避免无用加载）\n\n改"
 }

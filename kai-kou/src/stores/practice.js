@@ -82,7 +82,9 @@ export const usePracticeStore = defineStore("practice", {
     transcript: "",
     audioBlob: null,
     result: null,
-    wfdResult: null
+    wfdResult: null,
+
+    diRecentRecordings: []
   }),
 
   actions: {
@@ -125,6 +127,54 @@ export const usePracticeStore = defineStore("practice", {
     setWFDResult(result) {
       this.wfdResult = result || null;
       this.phase = "done";
+    },
+
+    pushDIRecentRecording(record) {
+      const nextRecord = record && typeof record === "object" ? record : null;
+      if (!nextRecord) return;
+      const normalizedId = `${nextRecord.id || ""}`.trim() || `di_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const normalized = {
+        id: normalizedId,
+        questionId: `${nextRecord.questionId || ""}`.trim(),
+        blobUrl: `${nextRecord.blobUrl || ""}`.trim(),
+        durationSec: Math.max(0, Number(nextRecord.durationSec || 0)),
+        rating: Math.max(0, Math.min(5, Math.round(Number(nextRecord.rating || 0)))),
+        createdAt: `${nextRecord.createdAt || new Date().toISOString()}`
+      };
+
+      const deduped = this.diRecentRecordings.filter((item) => `${item?.id || ""}`.trim() !== normalizedId);
+      const merged = [normalized, ...deduped];
+      const kept = merged.slice(0, 20);
+      const dropped = merged.slice(20);
+
+      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        dropped.forEach((item) => {
+          const url = `${item?.blobUrl || ""}`.trim();
+          if (!url) return;
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // no-op
+          }
+        });
+      }
+
+      this.diRecentRecordings = kept;
+    },
+
+    clearDIRecentRecordings() {
+      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        this.diRecentRecordings.forEach((item) => {
+          const url = `${item?.blobUrl || ""}`.trim();
+          if (!url) return;
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // no-op
+          }
+        });
+      }
+      this.diRecentRecordings = [];
     },
 
     resetResult() {

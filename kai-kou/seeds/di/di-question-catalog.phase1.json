@@ -1,0 +1,3660 @@
+{
+  "version": "phase1",
+  "taskType": "DI",
+  "questions": [
+    {
+      "id": "DI_Q001",
+      "sourceNumberLabel": "#DI-001",
+      "displayTitle": "DI Image 001",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-001.png",
+      "imageAlt": "DI practice image 001",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q002",
+      "sourceNumberLabel": "#DI-002",
+      "displayTitle": "DI Image 002",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-002.png",
+      "imageAlt": "DI practice image 002",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        },
+        {
+          "word": "distribute",
+          "partOfSpeech": "verb",
+          "chinese": "deliver",
+          "note": "to deliver to users or places",
+          "example": "Products are distributed to stores."
+        },
+        {
+          "word": "initial",
+          "partOfSpeech": "adjective",
+          "chinese": "first",
+          "note": "at the beginning of a process",
+          "example": "The initial step requires sorting."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q003",
+      "sourceNumberLabel": "#DI-003",
+      "displayTitle": "DI Image 003",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-003.png",
+      "imageAlt": "DI practice image 003",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q004",
+      "sourceNumberLabel": "#DI-004",
+      "displayTitle": "DI Image 004",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-004.png",
+      "imageAlt": "DI practice image 004",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q005",
+      "sourceNumberLabel": "#DI-005",
+      "displayTitle": "DI Image 005",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-005.png",
+      "imageAlt": "DI practice image 005",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q006",
+      "sourceNumberLabel": "#DI-006",
+      "displayTitle": "DI Image 006",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-006.png",
+      "imageAlt": "DI practice image 006",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q007",
+      "sourceNumberLabel": "#DI-007",
+      "displayTitle": "DI Image 007",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-007.png",
+      "imageAlt": "DI practice image 007",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q008",
+      "sourceNumberLabel": "#DI-008",
+      "displayTitle": "DI Image 008",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-008.png",
+      "imageAlt": "DI practice image 008",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q009",
+      "sourceNumberLabel": "#DI-009",
+      "displayTitle": "DI Image 009",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-009.png",
+      "imageAlt": "DI practice image 009",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q010",
+      "sourceNumberLabel": "#DI-010",
+      "displayTitle": "DI Image 010",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-010.png",
+      "imageAlt": "DI practice image 010",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q011",
+      "sourceNumberLabel": "#DI-011",
+      "displayTitle": "DI Image 011",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-011.png",
+      "imageAlt": "DI practice image 011",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q012",
+      "sourceNumberLabel": "#DI-012",
+      "displayTitle": "DI Image 012",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-012.png",
+      "imageAlt": "DI practice image 012",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q013",
+      "sourceNumberLabel": "#DI-013",
+      "displayTitle": "DI Image 013",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-013.png",
+      "imageAlt": "DI practice image 013",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q014",
+      "sourceNumberLabel": "#DI-014",
+      "displayTitle": "DI Image 014",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-014.png",
+      "imageAlt": "DI practice image 014",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q015",
+      "sourceNumberLabel": "#DI-015",
+      "displayTitle": "DI Image 015",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-015.png",
+      "imageAlt": "DI practice image 015",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q016",
+      "sourceNumberLabel": "#DI-016",
+      "displayTitle": "DI Image 016",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-016.png",
+      "imageAlt": "DI practice image 016",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q017",
+      "sourceNumberLabel": "#DI-017",
+      "displayTitle": "DI Image 017",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-017.png",
+      "imageAlt": "DI practice image 017",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q018",
+      "sourceNumberLabel": "#DI-018",
+      "displayTitle": "DI Image 018",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-018.png",
+      "imageAlt": "DI practice image 018",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q019",
+      "sourceNumberLabel": "#DI-019",
+      "displayTitle": "DI Image 019",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-019.png",
+      "imageAlt": "DI practice image 019",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q020",
+      "sourceNumberLabel": "#DI-020",
+      "displayTitle": "DI Image 020",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-020.png",
+      "imageAlt": "DI practice image 020",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q021",
+      "sourceNumberLabel": "#DI-021",
+      "displayTitle": "DI Image 021",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-021.png",
+      "imageAlt": "DI practice image 021",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q022",
+      "sourceNumberLabel": "#DI-022",
+      "displayTitle": "DI Image 022",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-022.png",
+      "imageAlt": "DI practice image 022",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q023",
+      "sourceNumberLabel": "#DI-023",
+      "displayTitle": "DI Image 023",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-023.png",
+      "imageAlt": "DI practice image 023",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q024",
+      "sourceNumberLabel": "#DI-024",
+      "displayTitle": "DI Image 024",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-024.png",
+      "imageAlt": "DI practice image 024",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q025",
+      "sourceNumberLabel": "#DI-025",
+      "displayTitle": "DI Image 025",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-025.png",
+      "imageAlt": "DI practice image 025",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q026",
+      "sourceNumberLabel": "#DI-026",
+      "displayTitle": "DI Image 026",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-026.png",
+      "imageAlt": "DI practice image 026",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q027",
+      "sourceNumberLabel": "#DI-027",
+      "displayTitle": "DI Image 027",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-027.png",
+      "imageAlt": "DI practice image 027",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "framework",
+          "note": "how parts are organized",
+          "example": "The structure is divided into clear sections."
+        },
+        {
+          "word": "relationship",
+          "partOfSpeech": "noun",
+          "chinese": "link",
+          "note": "how two parts are connected",
+          "example": "The relationship between labels is clear."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "element",
+          "note": "an important visible element",
+          "example": "A central feature appears in the middle."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "shape trend",
+          "note": "a repeated or clear visual form",
+          "example": "A repeated pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q028",
+      "sourceNumberLabel": "#DI-028",
+      "displayTitle": "DI Image 028",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-028.png",
+      "imageAlt": "DI practice image 028",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        },
+        {
+          "word": "transform",
+          "partOfSpeech": "verb",
+          "chinese": "change into",
+          "note": "to change into another form",
+          "example": "Raw items are transformed into products."
+        },
+        {
+          "word": "circulate",
+          "partOfSpeech": "verb",
+          "chinese": "cycle around",
+          "note": "to move repeatedly in a cycle",
+          "example": "Water circulates through each chamber."
+        },
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q029",
+      "sourceNumberLabel": "#DI-029",
+      "displayTitle": "DI Image 029",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-029.png",
+      "imageAlt": "DI practice image 029",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "shape trend",
+          "note": "a repeated or clear visual form",
+          "example": "A repeated pattern can be observed."
+        },
+        {
+          "word": "variable",
+          "partOfSpeech": "noun",
+          "chinese": "factor",
+          "note": "a factor that can change",
+          "example": "One variable rises while another falls."
+        },
+        {
+          "word": "composition",
+          "partOfSpeech": "noun",
+          "chinese": "make-up",
+          "note": "the way parts form a whole",
+          "example": "The composition is balanced by color blocks."
+        },
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "framework",
+          "note": "how parts are organized",
+          "example": "The structure is divided into clear sections."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q030",
+      "sourceNumberLabel": "#DI-030",
+      "displayTitle": "DI Image 030",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-030.png",
+      "imageAlt": "DI practice image 030",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        },
+        {
+          "word": "distribute",
+          "partOfSpeech": "verb",
+          "chinese": "deliver",
+          "note": "to deliver to users or places",
+          "example": "Products are distributed to stores."
+        },
+        {
+          "word": "initial",
+          "partOfSpeech": "adjective",
+          "chinese": "first",
+          "note": "at the beginning of a process",
+          "example": "The initial step requires sorting."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q031",
+      "sourceNumberLabel": "#DI-031",
+      "displayTitle": "DI Image 031",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-031.png",
+      "imageAlt": "DI practice image 031",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "framework",
+          "note": "how parts are organized",
+          "example": "The structure is divided into clear sections."
+        },
+        {
+          "word": "relationship",
+          "partOfSpeech": "noun",
+          "chinese": "link",
+          "note": "how two parts are connected",
+          "example": "The relationship between labels is clear."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "element",
+          "note": "an important visible element",
+          "example": "A central feature appears in the middle."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "shape trend",
+          "note": "a repeated or clear visual form",
+          "example": "A repeated pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q032",
+      "sourceNumberLabel": "#DI-032",
+      "displayTitle": "DI Image 032",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-032.png",
+      "imageAlt": "DI practice image 032",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "illustrate",
+          "partOfSpeech": "verb",
+          "chinese": "show",
+          "note": "to show information visually",
+          "example": "The image illustrates a key concept."
+        },
+        {
+          "word": "highlight",
+          "partOfSpeech": "verb",
+          "chinese": "emphasize",
+          "note": "to make a point stand out",
+          "example": "Color is used to highlight differences."
+        },
+        {
+          "word": "category",
+          "partOfSpeech": "noun",
+          "chinese": "type",
+          "note": "one grouped type in a visual",
+          "example": "Each category has a distinct label."
+        },
+        {
+          "word": "contrast",
+          "partOfSpeech": "noun",
+          "chinese": "difference",
+          "note": "difference between two elements",
+          "example": "The contrast between sections is obvious."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q033",
+      "sourceNumberLabel": "#DI-033",
+      "displayTitle": "DI Image 033",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-033.png",
+      "imageAlt": "DI practice image 033",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "boundary",
+          "partOfSpeech": "noun",
+          "chinese": "border",
+          "note": "a line dividing areas",
+          "example": "A river marks the eastern boundary."
+        },
+        {
+          "word": "route",
+          "partOfSpeech": "noun",
+          "chinese": "path",
+          "note": "a path used to move across an area",
+          "example": "The route connects the station and campus."
+        },
+        {
+          "word": "commercial",
+          "partOfSpeech": "adjective",
+          "chinese": "business area",
+          "note": "related to business areas",
+          "example": "Commercial zones cluster near the center."
+        },
+        {
+          "word": "expand",
+          "partOfSpeech": "verb",
+          "chinese": "grow bigger",
+          "note": "to become larger in area",
+          "example": "The urban area expands to the south."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q034",
+      "sourceNumberLabel": "#DI-034",
+      "displayTitle": "DI Image 034",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-034.png",
+      "imageAlt": "DI practice image 034",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "residential",
+          "partOfSpeech": "adjective",
+          "chinese": "housing area",
+          "note": "related to housing areas",
+          "example": "The western side is mainly residential."
+        },
+        {
+          "word": "landmark",
+          "partOfSpeech": "noun",
+          "chinese": "key place",
+          "note": "an important visual reference point",
+          "example": "The museum is a key landmark on the map."
+        },
+        {
+          "word": "replace",
+          "partOfSpeech": "verb",
+          "chinese": "take place of",
+          "note": "to take the place of something",
+          "example": "Old facilities are replaced by new blocks."
+        },
+        {
+          "word": "located",
+          "partOfSpeech": "adjective",
+          "chinese": "positioned",
+          "note": "positioned in a place",
+          "example": "The station is located in the center."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q035",
+      "sourceNumberLabel": "#DI-035",
+      "displayTitle": "DI Image 035",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-035.png",
+      "imageAlt": "DI practice image 035",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q036",
+      "sourceNumberLabel": "#DI-036",
+      "displayTitle": "DI Image 036",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-036.png",
+      "imageAlt": "DI practice image 036",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "illustrate",
+          "partOfSpeech": "verb",
+          "chinese": "show",
+          "note": "to show information visually",
+          "example": "The image illustrates a key concept."
+        },
+        {
+          "word": "highlight",
+          "partOfSpeech": "verb",
+          "chinese": "emphasize",
+          "note": "to make a point stand out",
+          "example": "Color is used to highlight differences."
+        },
+        {
+          "word": "category",
+          "partOfSpeech": "noun",
+          "chinese": "type",
+          "note": "one grouped type in a visual",
+          "example": "Each category has a distinct label."
+        },
+        {
+          "word": "contrast",
+          "partOfSpeech": "noun",
+          "chinese": "difference",
+          "note": "difference between two elements",
+          "example": "The contrast between sections is obvious."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q037",
+      "sourceNumberLabel": "#DI-037",
+      "displayTitle": "DI Image 037",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-037.png",
+      "imageAlt": "DI practice image 037",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "shape trend",
+          "note": "a repeated or clear visual form",
+          "example": "A repeated pattern can be observed."
+        },
+        {
+          "word": "variable",
+          "partOfSpeech": "noun",
+          "chinese": "factor",
+          "note": "a factor that can change",
+          "example": "One variable rises while another falls."
+        },
+        {
+          "word": "composition",
+          "partOfSpeech": "noun",
+          "chinese": "make-up",
+          "note": "the way parts form a whole",
+          "example": "The composition is balanced by color blocks."
+        },
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "framework",
+          "note": "how parts are organized",
+          "example": "The structure is divided into clear sections."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q038",
+      "sourceNumberLabel": "#DI-038",
+      "displayTitle": "DI Image 038",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-038.png",
+      "imageAlt": "DI practice image 038",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q039",
+      "sourceNumberLabel": "#DI-039",
+      "displayTitle": "DI Image 039",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-039.png",
+      "imageAlt": "DI practice image 039",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "framework",
+          "note": "how parts are organized",
+          "example": "The structure is divided into clear sections."
+        },
+        {
+          "word": "relationship",
+          "partOfSpeech": "noun",
+          "chinese": "link",
+          "note": "how two parts are connected",
+          "example": "The relationship between labels is clear."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "element",
+          "note": "an important visible element",
+          "example": "A central feature appears in the middle."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "shape trend",
+          "note": "a repeated or clear visual form",
+          "example": "A repeated pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q040",
+      "sourceNumberLabel": "#DI-040",
+      "displayTitle": "DI Image 040",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-040.png",
+      "imageAlt": "DI practice image 040",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "located",
+          "partOfSpeech": "adjective",
+          "chinese": "positioned",
+          "note": "positioned in a place",
+          "example": "The station is located in the center."
+        },
+        {
+          "word": "district",
+          "partOfSpeech": "noun",
+          "chinese": "area",
+          "note": "a defined part of a city or map",
+          "example": "The northern district is residential."
+        },
+        {
+          "word": "intersection",
+          "partOfSpeech": "noun",
+          "chinese": "crossroad",
+          "note": "where roads or lines cross",
+          "example": "An intersection links the two main streets."
+        },
+        {
+          "word": "residential",
+          "partOfSpeech": "adjective",
+          "chinese": "housing area",
+          "note": "related to housing areas",
+          "example": "The western side is mainly residential."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q041",
+      "sourceNumberLabel": "#DI-041",
+      "displayTitle": "DI Image 041",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-041.png",
+      "imageAlt": "DI practice image 041",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "shape trend",
+          "note": "a repeated or clear visual form",
+          "example": "A repeated pattern can be observed."
+        },
+        {
+          "word": "variable",
+          "partOfSpeech": "noun",
+          "chinese": "factor",
+          "note": "a factor that can change",
+          "example": "One variable rises while another falls."
+        },
+        {
+          "word": "composition",
+          "partOfSpeech": "noun",
+          "chinese": "make-up",
+          "note": "the way parts form a whole",
+          "example": "The composition is balanced by color blocks."
+        },
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "framework",
+          "note": "how parts are organized",
+          "example": "The structure is divided into clear sections."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q042",
+      "sourceNumberLabel": "#DI-042",
+      "displayTitle": "DI Image 042",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-042.png",
+      "imageAlt": "DI practice image 042",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "residential",
+          "partOfSpeech": "adjective",
+          "chinese": "housing area",
+          "note": "related to housing areas",
+          "example": "The western side is mainly residential."
+        },
+        {
+          "word": "landmark",
+          "partOfSpeech": "noun",
+          "chinese": "key place",
+          "note": "an important visual reference point",
+          "example": "The museum is a key landmark on the map."
+        },
+        {
+          "word": "replace",
+          "partOfSpeech": "verb",
+          "chinese": "take place of",
+          "note": "to take the place of something",
+          "example": "Old facilities are replaced by new blocks."
+        },
+        {
+          "word": "located",
+          "partOfSpeech": "adjective",
+          "chinese": "positioned",
+          "note": "positioned in a place",
+          "example": "The station is located in the center."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q043",
+      "sourceNumberLabel": "#DI-043",
+      "displayTitle": "DI Image 043",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-043.png",
+      "imageAlt": "DI practice image 043",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "expand",
+          "partOfSpeech": "verb",
+          "chinese": "grow bigger",
+          "note": "to become larger in area",
+          "example": "The urban area expands to the south."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "arrangement",
+          "note": "overall arrangement of spaces",
+          "example": "The floor-plan layout is highly structured."
+        },
+        {
+          "word": "adjacent",
+          "partOfSpeech": "adjective",
+          "chinese": "next to",
+          "note": "next to something else",
+          "example": "The library is adjacent to the park."
+        },
+        {
+          "word": "boundary",
+          "partOfSpeech": "noun",
+          "chinese": "border",
+          "note": "a line dividing areas",
+          "example": "A river marks the eastern boundary."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q044",
+      "sourceNumberLabel": "#DI-044",
+      "displayTitle": "DI Image 044",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-044.png",
+      "imageAlt": "DI practice image 044",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        },
+        {
+          "word": "transform",
+          "partOfSpeech": "verb",
+          "chinese": "change into",
+          "note": "to change into another form",
+          "example": "Raw items are transformed into products."
+        },
+        {
+          "word": "circulate",
+          "partOfSpeech": "verb",
+          "chinese": "cycle around",
+          "note": "to move repeatedly in a cycle",
+          "example": "Water circulates through each chamber."
+        },
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q045",
+      "sourceNumberLabel": "#DI-045",
+      "displayTitle": "DI Image 045",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-045.png",
+      "imageAlt": "DI practice image 045",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "output",
+          "partOfSpeech": "noun",
+          "chinese": "result",
+          "note": "the final product of a process",
+          "example": "The final output is packed for delivery."
+        },
+        {
+          "word": "assemble",
+          "partOfSpeech": "verb",
+          "chinese": "put together",
+          "note": "to put parts together",
+          "example": "Components are assembled at this stage."
+        },
+        {
+          "word": "transport",
+          "partOfSpeech": "verb",
+          "chinese": "move",
+          "note": "to move goods from one point to another",
+          "example": "The material is transported to the next unit."
+        },
+        {
+          "word": "convert",
+          "partOfSpeech": "verb",
+          "chinese": "turn into",
+          "note": "to change energy or material form",
+          "example": "Energy is converted into electricity."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q046",
+      "sourceNumberLabel": "#DI-046",
+      "displayTitle": "DI Image 046",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-046.png",
+      "imageAlt": "DI practice image 046",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        },
+        {
+          "word": "distribute",
+          "partOfSpeech": "verb",
+          "chinese": "deliver",
+          "note": "to deliver to users or places",
+          "example": "Products are distributed to stores."
+        },
+        {
+          "word": "initial",
+          "partOfSpeech": "adjective",
+          "chinese": "first",
+          "note": "at the beginning of a process",
+          "example": "The initial step requires sorting."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q047",
+      "sourceNumberLabel": "#DI-047",
+      "displayTitle": "DI Image 047",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-047.png",
+      "imageAlt": "DI practice image 047",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "convert",
+          "partOfSpeech": "verb",
+          "chinese": "turn into",
+          "note": "to change energy or material form",
+          "example": "Energy is converted into electricity."
+        },
+        {
+          "word": "final",
+          "partOfSpeech": "adjective",
+          "chinese": "last",
+          "note": "at the end of a process",
+          "example": "The final stage focuses on packaging."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "order",
+          "note": "the fixed order of actions",
+          "example": "The sequence moves from left to right."
+        },
+        {
+          "word": "output",
+          "partOfSpeech": "noun",
+          "chinese": "result",
+          "note": "the final product of a process",
+          "example": "The final output is packed for delivery."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q048",
+      "sourceNumberLabel": "#DI-048",
+      "displayTitle": "DI Image 048",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-048.png",
+      "imageAlt": "DI practice image 048",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        },
+        {
+          "word": "transform",
+          "partOfSpeech": "verb",
+          "chinese": "change into",
+          "note": "to change into another form",
+          "example": "Raw items are transformed into products."
+        },
+        {
+          "word": "circulate",
+          "partOfSpeech": "verb",
+          "chinese": "cycle around",
+          "note": "to move repeatedly in a cycle",
+          "example": "Water circulates through each chamber."
+        },
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q049",
+      "sourceNumberLabel": "#DI-049",
+      "displayTitle": "DI Image 049",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-049.png",
+      "imageAlt": "DI practice image 049",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q050",
+      "sourceNumberLabel": "#DI-050",
+      "displayTitle": "DI Image 050",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-050.png",
+      "imageAlt": "DI practice image 050",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        },
+        {
+          "word": "outperform",
+          "partOfSpeech": "verb",
+          "chinese": "do better than",
+          "note": "to do better than others",
+          "example": "Category A outperforms the rest."
+        },
+        {
+          "word": "indicator",
+          "partOfSpeech": "noun",
+          "chinese": "metric",
+          "note": "a measured signal of change",
+          "example": "This indicator rises steadily."
+        },
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q051",
+      "sourceNumberLabel": "#DI-051",
+      "displayTitle": "DI Image 051",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-051.png",
+      "imageAlt": "DI practice image 051",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "convert",
+          "partOfSpeech": "verb",
+          "chinese": "turn into",
+          "note": "to change energy or material form",
+          "example": "Energy is converted into electricity."
+        },
+        {
+          "word": "final",
+          "partOfSpeech": "adjective",
+          "chinese": "last",
+          "note": "at the end of a process",
+          "example": "The final stage focuses on packaging."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "order",
+          "note": "the fixed order of actions",
+          "example": "The sequence moves from left to right."
+        },
+        {
+          "word": "output",
+          "partOfSpeech": "noun",
+          "chinese": "result",
+          "note": "the final product of a process",
+          "example": "The final output is packed for delivery."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q052",
+      "sourceNumberLabel": "#DI-052",
+      "displayTitle": "DI Image 052",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-052.png",
+      "imageAlt": "DI practice image 052",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        },
+        {
+          "word": "transform",
+          "partOfSpeech": "verb",
+          "chinese": "change into",
+          "note": "to change into another form",
+          "example": "Raw items are transformed into products."
+        },
+        {
+          "word": "circulate",
+          "partOfSpeech": "verb",
+          "chinese": "cycle around",
+          "note": "to move repeatedly in a cycle",
+          "example": "Water circulates through each chamber."
+        },
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q053",
+      "sourceNumberLabel": "#DI-053",
+      "displayTitle": "DI Image 053",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-053.jpg",
+      "imageAlt": "DI practice image 053",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "boundary",
+          "partOfSpeech": "noun",
+          "chinese": "border",
+          "note": "a line dividing areas",
+          "example": "A river marks the eastern boundary."
+        },
+        {
+          "word": "route",
+          "partOfSpeech": "noun",
+          "chinese": "path",
+          "note": "a path used to move across an area",
+          "example": "The route connects the station and campus."
+        },
+        {
+          "word": "commercial",
+          "partOfSpeech": "adjective",
+          "chinese": "business area",
+          "note": "related to business areas",
+          "example": "Commercial zones cluster near the center."
+        },
+        {
+          "word": "expand",
+          "partOfSpeech": "verb",
+          "chinese": "grow bigger",
+          "note": "to become larger in area",
+          "example": "The urban area expands to the south."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q054",
+      "sourceNumberLabel": "#DI-054",
+      "displayTitle": "DI Image 054",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-054.jpg",
+      "imageAlt": "DI practice image 054",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "contrast",
+          "partOfSpeech": "noun",
+          "chinese": "difference",
+          "note": "difference between two elements",
+          "example": "The contrast between sections is obvious."
+        },
+        {
+          "word": "observe",
+          "partOfSpeech": "verb",
+          "chinese": "notice",
+          "note": "to notice from visual evidence",
+          "example": "We can observe several key changes."
+        },
+        {
+          "word": "element",
+          "partOfSpeech": "noun",
+          "chinese": "component",
+          "note": "a single part within an image",
+          "example": "Each element contributes to the main message."
+        },
+        {
+          "word": "illustrate",
+          "partOfSpeech": "verb",
+          "chinese": "show",
+          "note": "to show information visually",
+          "example": "The image illustrates a key concept."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q055",
+      "sourceNumberLabel": "#DI-055",
+      "displayTitle": "DI Image 055",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-055.png",
+      "imageAlt": "DI practice image 055",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "expand",
+          "partOfSpeech": "verb",
+          "chinese": "grow bigger",
+          "note": "to become larger in area",
+          "example": "The urban area expands to the south."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "arrangement",
+          "note": "overall arrangement of spaces",
+          "example": "The floor-plan layout is highly structured."
+        },
+        {
+          "word": "adjacent",
+          "partOfSpeech": "adjective",
+          "chinese": "next to",
+          "note": "next to something else",
+          "example": "The library is adjacent to the park."
+        },
+        {
+          "word": "boundary",
+          "partOfSpeech": "noun",
+          "chinese": "border",
+          "note": "a line dividing areas",
+          "example": "A river marks the eastern boundary."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q056",
+      "sourceNumberLabel": "#DI-056",
+      "displayTitle": "DI Image 056",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-056.png",
+      "imageAlt": "DI practice image 056",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        },
+        {
+          "word": "transform",
+          "partOfSpeech": "verb",
+          "chinese": "change into",
+          "note": "to change into another form",
+          "example": "Raw items are transformed into products."
+        },
+        {
+          "word": "circulate",
+          "partOfSpeech": "verb",
+          "chinese": "cycle around",
+          "note": "to move repeatedly in a cycle",
+          "example": "Water circulates through each chamber."
+        },
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q057",
+      "sourceNumberLabel": "#DI-057",
+      "displayTitle": "DI Image 057",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-057.png",
+      "imageAlt": "DI practice image 057",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        },
+        {
+          "word": "gradual",
+          "partOfSpeech": "adjective",
+          "chinese": "step-by-step",
+          "note": "happening slowly over time",
+          "example": "There is a gradual increase across years."
+        },
+        {
+          "word": "stable",
+          "partOfSpeech": "adjective",
+          "chinese": "steady",
+          "note": "showing little change",
+          "example": "The value remains stable in the second half."
+        },
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q058",
+      "sourceNumberLabel": "#DI-058",
+      "displayTitle": "DI Image 058",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-058.jpg",
+      "imageAlt": "DI practice image 058",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "filter",
+          "partOfSpeech": "verb",
+          "chinese": "screen",
+          "note": "to remove unwanted parts",
+          "example": "The liquid is filtered before storage."
+        },
+        {
+          "word": "distribute",
+          "partOfSpeech": "verb",
+          "chinese": "deliver",
+          "note": "to deliver to users or places",
+          "example": "Products are distributed to stores."
+        },
+        {
+          "word": "initial",
+          "partOfSpeech": "adjective",
+          "chinese": "first",
+          "note": "at the beginning of a process",
+          "example": "The initial step requires sorting."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "step",
+          "note": "one step in a process",
+          "example": "The first stage starts with input materials."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q059",
+      "sourceNumberLabel": "#DI-059",
+      "displayTitle": "DI Image 059",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-059.jpg",
+      "imageAlt": "DI practice image 059",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "distribution",
+          "partOfSpeech": "noun",
+          "chinese": "spread",
+          "note": "the way values are spread",
+          "example": "The distribution is uneven across groups."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "contrast",
+          "note": "examining differences between sets",
+          "example": "The comparison highlights a large gap."
+        },
+        {
+          "word": "decline",
+          "partOfSpeech": "verb",
+          "chinese": "drop",
+          "note": "to become lower in value",
+          "example": "The figure declines after 2010."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "a part compared with the whole",
+          "example": "Transport takes a smaller proportion."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q060",
+      "sourceNumberLabel": "#DI-060",
+      "displayTitle": "DI Image 060",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-060.png",
+      "imageAlt": "DI practice image 060",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "peak",
+          "partOfSpeech": "noun",
+          "chinese": "peak value",
+          "note": "the highest point in a chart",
+          "example": "The peak appears in the final period."
+        },
+        {
+          "word": "fluctuate",
+          "partOfSpeech": "verb",
+          "chinese": "go up and down",
+          "note": "to rise and fall repeatedly",
+          "example": "The trend fluctuates during the middle years."
+        },
+        {
+          "word": "segment",
+          "partOfSpeech": "noun",
+          "chinese": "group",
+          "note": "one part of grouped data",
+          "example": "This segment records the highest spending."
+        },
+        {
+          "word": "sharp",
+          "partOfSpeech": "adjective",
+          "chinese": "steep",
+          "note": "sudden and large in degree",
+          "example": "A sharp drop is visible in March."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q061",
+      "sourceNumberLabel": "#DI-061",
+      "displayTitle": "DI Image 061",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-061.jpg",
+      "imageAlt": "DI practice image 061",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "boundary",
+          "partOfSpeech": "noun",
+          "chinese": "border",
+          "note": "a line dividing areas",
+          "example": "A river marks the eastern boundary."
+        },
+        {
+          "word": "route",
+          "partOfSpeech": "noun",
+          "chinese": "path",
+          "note": "a path used to move across an area",
+          "example": "The route connects the station and campus."
+        },
+        {
+          "word": "commercial",
+          "partOfSpeech": "adjective",
+          "chinese": "business area",
+          "note": "related to business areas",
+          "example": "Commercial zones cluster near the center."
+        },
+        {
+          "word": "expand",
+          "partOfSpeech": "verb",
+          "chinese": "grow bigger",
+          "note": "to become larger in area",
+          "example": "The urban area expands to the south."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q062",
+      "sourceNumberLabel": "#DI-062",
+      "displayTitle": "DI Image 062",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-062.jpg",
+      "imageAlt": "DI practice image 062",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "residential",
+          "partOfSpeech": "adjective",
+          "chinese": "housing area",
+          "note": "related to housing areas",
+          "example": "The western side is mainly residential."
+        },
+        {
+          "word": "landmark",
+          "partOfSpeech": "noun",
+          "chinese": "key place",
+          "note": "an important visual reference point",
+          "example": "The museum is a key landmark on the map."
+        },
+        {
+          "word": "replace",
+          "partOfSpeech": "verb",
+          "chinese": "take place of",
+          "note": "to take the place of something",
+          "example": "Old facilities are replaced by new blocks."
+        },
+        {
+          "word": "located",
+          "partOfSpeech": "adjective",
+          "chinese": "positioned",
+          "note": "positioned in a place",
+          "example": "The station is located in the center."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q063",
+      "sourceNumberLabel": "#DI-063",
+      "displayTitle": "DI Image 063",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-063.png",
+      "imageAlt": "DI practice image 063",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "expand",
+          "partOfSpeech": "verb",
+          "chinese": "grow bigger",
+          "note": "to become larger in area",
+          "example": "The urban area expands to the south."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "arrangement",
+          "note": "overall arrangement of spaces",
+          "example": "The floor-plan layout is highly structured."
+        },
+        {
+          "word": "adjacent",
+          "partOfSpeech": "adjective",
+          "chinese": "next to",
+          "note": "next to something else",
+          "example": "The library is adjacent to the park."
+        },
+        {
+          "word": "boundary",
+          "partOfSpeech": "noun",
+          "chinese": "border",
+          "note": "a line dividing areas",
+          "example": "A river marks the eastern boundary."
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { isDIEnabled } from "@/lib/di-feature";
 
 const routes = [
   { path: "/", redirect: "/home" },
@@ -19,6 +20,10 @@ const routes = [
   { path: "/we/templates", name: "we-templates", component: () => import("@/views/WETemplateLibraryView.vue"), meta: { requiresAuth: true } },
   { path: "/we/opinions", name: "we-opinions", component: () => import("@/views/WEOpinionLibraryView.vue"), meta: { requiresAuth: true } },
   { path: "/we/practice/:id", name: "we-practice", component: () => import("@/views/WEView.vue"), meta: { requiresAuth: true } },
+  { path: "/di", name: "di", component: () => import("@/views/DIView.vue"), meta: { requiresAuth: true } },
+  { path: "/di/select", name: "di-select", component: () => import("@/views/DISelectView.vue"), meta: { requiresAuth: true } },
+  { path: "/di/templates", name: "di-templates", component: () => import("@/views/DITemplateLibraryView.vue"), meta: { requiresAuth: true } },
+  { path: "/di/practice/:id", name: "di-practice", component: () => import("@/views/DIPracticeView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd", name: "wfd", component: () => import("@/views/WFDView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd/list", name: "wfd-list", component: () => import("@/views/WFDListView.vue"), meta: { requiresAuth: true } },
   { path: "/wfd/listen", name: "wfd-listen", component: () => import("@/views/WFDListenView.vue"), meta: { requiresAuth: true } },
@@ -35,6 +40,10 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   await authStore.init();
+
+  if (to.path.startsWith("/di") && !isDIEnabled()) {
+    return "/home";
+  }
 
   if (to.meta.requiresAuth && !authStore.isLoggedIn) {
     return "/auth";
