@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-11T15:19:08.897Z",
-  "turn_count": 106,
-  "last_agent_output": "已改好：现在 WE 和 DI 对非会员会被拦截到 `/limit`，和 RA/WFD 一致。\n\n改动文件：\n- [router/index.js](D:/PTE/kai-kou/src/router/"
+  "last_turn_at": "2026-04-12T05:58:00.763Z",
+  "turn_count": 111,
+  "last_agent_output": "这个问题已经修掉了，原因就是你说的：模板库带来的 `tb` 参数之前在 `/di` 页面没有被真正当成“当前模板来源”，每进题又被随机覆盖。\n\n我做了这几处修复（都在 [DIView.vue](/D:"
 }

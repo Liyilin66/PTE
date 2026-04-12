@@ -6,7 +6,7 @@ import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useUIStore } from "@/stores/ui";
 import { useDIRecorder } from "@/composables/useDIRecorder";
-import { getDIQuestionsByFilters, getDITemplatesByFilters } from "@/lib/di-data";
+import { getDIQuestionsByFilters, getDITemplateById, getDITemplatesByFilters } from "@/lib/di-data";
 import {
   DI_IMAGE_TYPE_FILTERS,
   getDIImageTypeMeta,
@@ -31,8 +31,10 @@ const sessionQuestions = ref([]);
 const currentQuestionIndex = ref(0);
 const activeTab = ref("structure");
 const templatePickerOpen = ref(false);
+const templateMode = ref("random");
 const usedPhraseFlags = ref({});
 const selectedTemplateId = ref("");
+const carriedTemplateBlockIds = ref([]);
 const selfRating = ref(0);
 const isFavorite = ref(false);
 const favoriteBusy = ref(false);
@@ -62,6 +64,15 @@ const recorderPreviewUrl = computed(() => `${diRecorder.previewUrl.value || ""}`
 const currentQuestion = computed(() => sessionQuestions.value[currentQuestionIndex.value] || null);
 const currentImageMeta = computed(() => getDIImageTypeMeta(currentQuestion.value?.imageType || selectedImageType.value));
 const templateCandidates = computed(() => {
+  if (carriedTemplateBlockIds.value.length) {
+    const carriedTemplates = carriedTemplateBlockIds.value
+      .map((templateId) => getDITemplateById(templateId))
+      .filter(Boolean);
+    if (carriedTemplates.length) {
+      return carriedTemplates;
+    }
+  }
+
   const imageType = currentQuestion.value?.imageType || selectedImageType.value;
   return getDITemplatesByFilters({
     imageType
@@ -148,6 +159,18 @@ function toArray(value) {
       .filter(Boolean);
   }
   return [];
+}
+
+function normalizeQueryArray(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((item) => `${item || ""}`.trim()).filter(Boolean))];
+  }
+  const text = `${value || ""}`.trim();
+  return text ? [text] : [];
+}
+
+function syncTemplateCarryFromRoute() {
+  carriedTemplateBlockIds.value = normalizeQueryArray(route.query?.tb);
 }
 
 function normalizeQuestionHighFrequencyWords(value) {
@@ -308,10 +331,13 @@ function resetTemplatePanelState() {
   activeTab.value = "structure";
   usedPhraseFlags.value = {};
   templatePickerOpen.value = false;
+  templateMode.value = carriedTemplateBlockIds.value.length ? "manual" : "random";
 }
 
 function chooseRandomTemplate() {
   const templates = templateCandidates.value;
+  templateMode.value = "random";
+  templatePickerOpen.value = false;
   if (!templates.length) {
     selectedTemplateId.value = "";
     return;
@@ -320,13 +346,43 @@ function chooseRandomTemplate() {
   selectedTemplateId.value = randomItem?.id || "";
 }
 
+function applyCarriedTemplateForCurrentQuestion() {
+  const templates = templateCandidates.value;
+  if (!templates.length) {
+    selectedTemplateId.value = "";
+    templateMode.value = "random";
+    return false;
+  }
+
+  if (!carriedTemplateBlockIds.value.length) return false;
+
+  const matchedTemplateId = carriedTemplateBlockIds.value.find((templateId) =>
+    templates.some((item) => item.id === templateId)
+  );
+  if (!matchedTemplateId) return false;
+
+  selectedTemplateId.value = matchedTemplateId;
+  templateMode.value = "manual";
+  templatePickerOpen.value = false;
+  return true;
+}
+
 function selectTemplate(templateId) {
   const normalized = `${templateId || ""}`.trim();
   if (!normalized) return;
   const exists = templateCandidates.value.some((item) => item.id === normalized);
   if (!exists) return;
+  templateMode.value = "manual";
   selectedTemplateId.value = normalized;
   templatePickerOpen.value = false;
+}
+
+function toggleTemplatePicker() {
+  const next = !templatePickerOpen.value;
+  templatePickerOpen.value = next;
+  if (next) {
+    templateMode.value = "manual";
+  }
 }
 
 async function applyQuestionState() {
@@ -340,7 +396,10 @@ async function applyQuestionState() {
   selfRating.value = 0;
   latestSavedAt.value = "";
   resetTemplatePanelState();
-  chooseRandomTemplate();
+  const appliedCarriedTemplate = applyCarriedTemplateForCurrentQuestion();
+  if (!appliedCarriedTemplate) {
+    chooseRandomTemplate();
+  }
   await loadFavoriteState();
   await diRecorder.enterPreparePhase();
 }
@@ -753,10 +812,22 @@ onMounted(async () => {
     await authStore.loadStatus();
   }
 
+  syncTemplateCarryFromRoute();
   await loadQuestions();
   await initializeSessionFromRoute();
   await loadTodayStats();
 });
+
+watch(
+  () => route.query?.tb,
+  () => {
+    syncTemplateCarryFromRoute();
+    const appliedCarriedTemplate = applyCarriedTemplateForCurrentQuestion();
+    if (!appliedCarriedTemplate && !selectedTemplateId.value) {
+      chooseRandomTemplate();
+    }
+  }
+);
 
 onUnmounted(() => {
   stopSpeechSynthesis();
@@ -1011,15 +1082,21 @@ onUnmounted(() => {
             <div class="mb-3 flex items-center gap-2">
               <button
                 type="button"
-                class="rounded-[10px] border border-[#E8EDF5] px-3 py-1.5 text-xs text-[#1B3A6B] transition-colors hover:bg-[#F4F7FB]"
+                class="rounded-[10px] border px-3 py-1.5 text-xs transition-colors hover:bg-[#F4F7FB]"
+                :class="templateMode === 'random'
+                  ? 'border-[#1B3A6B] bg-[#1B3A6B] text-white hover:bg-[#16335E] hover:text-white'
+                  : 'border-[#E8EDF5] bg-white text-[#1B3A6B] hover:text-[#1B3A6B] hover:border-[#C9D4E5]'"
                 @click="chooseRandomTemplate"
               >
                 随机模板
               </button>
               <button
                 type="button"
-                class="rounded-[10px] border border-[#1B3A6B] px-3 py-1.5 text-xs text-[#1B3A6B] transition-colors hover:bg-[#F4F7FB]"
-                @click="templatePickerOpen = !templatePickerOpen"
+                class="rounded-[10px] border px-3 py-1.5 text-xs transition-colors hover:bg-[#F4F7FB]"
+                :class="templateMode === 'manual'
+                  ? 'border-[#1B3A6B] bg-[#1B3A6B] text-white hover:bg-[#16335E] hover:text-white'
+                  : 'border-[#E8EDF5] bg-white text-[#1B3A6B] hover:text-[#1B3A6B] hover:border-[#C9D4E5]'"
+                @click="toggleTemplatePicker"
               >
                 选择模板
               </button>

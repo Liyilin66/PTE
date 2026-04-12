@@ -29,6 +29,39 @@ const IMAGE_TYPE_TO_TEMPLATE_CATEGORY = {
   process: "flowcharts_life_cycles",
   map: "maps_floor_plans"
 };
+const IMAGE_TYPE_TO_TOPIC_PREFIX = {
+  bar: "Bar chart",
+  line: "Line chart",
+  pie: "Pie chart",
+  table: "Table",
+  process: "Process diagram",
+  map: "Map",
+  mixed: "Mixed chart"
+};
+const GENERIC_TOPIC_WORDS = new Set([
+  "trend",
+  "comparison",
+  "stage",
+  "sequence",
+  "data",
+  "chart",
+  "graph",
+  "diagram",
+  "table",
+  "map",
+  "figure",
+  "category",
+  "number",
+  "numbers",
+  "amount",
+  "value",
+  "rate",
+  "percent",
+  "percentage",
+  "year",
+  "years",
+  "period"
+]);
 
 const usedQuestionIdsByPool = new Map();
 
@@ -97,6 +130,63 @@ function normalizeHighFrequencyWords(value) {
     .filter(Boolean);
 }
 
+function normalizeTopicToken(value) {
+  return normalizeText(value).toLowerCase().replace(/\s+/g, " ");
+}
+
+function isPlaceholderDisplayTitle(value) {
+  const normalized = normalizeTopicToken(value);
+  if (!normalized) return true;
+  return /^di\s*image\s*\d+$/.test(normalized) || /^image\s*\d+$/.test(normalized);
+}
+
+function pickQuestionTopicKeywords(words, limit = 2) {
+  const picked = [];
+  const seen = new Set();
+
+  toArray(words).forEach((entry) => {
+    const raw = normalizeText(entry?.word ?? entry);
+    if (!raw) return;
+
+    const token = normalizeTopicToken(raw);
+    if (!token || seen.has(token) || GENERIC_TOPIC_WORDS.has(token)) return;
+
+    seen.add(token);
+    picked.push(raw);
+  });
+
+  return picked.slice(0, limit);
+}
+
+function buildQuestionTopicTitle({ imageType = "", highFrequencyWords = [], fallbackTitle = "" } = {}) {
+  const normalizedImageType = normalizeImageType(imageType);
+  const prefix = IMAGE_TYPE_TO_TOPIC_PREFIX[normalizedImageType] || "Image";
+  const topicKeywords = pickQuestionTopicKeywords(highFrequencyWords, 2);
+
+  if (topicKeywords.length >= 2) {
+    return `${prefix}: ${topicKeywords[0]} vs ${topicKeywords[1]}`;
+  }
+
+  if (topicKeywords.length === 1) {
+    return `${prefix}: ${topicKeywords[0]}`;
+  }
+
+  const normalizedFallbackTitle = normalizeText(fallbackTitle);
+  if (normalizedFallbackTitle && !isPlaceholderDisplayTitle(normalizedFallbackTitle)) {
+    return normalizedFallbackTitle;
+  }
+
+  return `${prefix} overview`;
+}
+
+function resolveQuestionDisplayTitle(rawDisplayTitle, topicTitle) {
+  const normalizedRawTitle = normalizeText(rawDisplayTitle);
+  if (normalizedRawTitle && !isPlaceholderDisplayTitle(normalizedRawTitle)) {
+    return normalizedRawTitle;
+  }
+  return normalizeText(topicTitle) || normalizedRawTitle;
+}
+
 function resolveTemplateCategoryByImageType(imageType) {
   const normalized = normalizeImageType(imageType);
   if (!normalized) return "";
@@ -105,21 +195,33 @@ function resolveTemplateCategoryByImageType(imageType) {
 
 function normalizeQuestion(item) {
   const id = normalizeText(item?.id);
+  const imageType = normalizeImageType(item?.imageType);
+  const highFrequencyWords = normalizeHighFrequencyWords(item?.highFrequencyWords || item?.vocab || item?.keyTerms);
+  const rawDisplayTitle = normalizeText(item?.displayTitle);
+  const topicTitle = buildQuestionTopicTitle({
+    imageType,
+    highFrequencyWords,
+    fallbackTitle: rawDisplayTitle
+  });
+  const displayTitle = resolveQuestionDisplayTitle(rawDisplayTitle, topicTitle);
+
   return {
     id,
     sourceNumberLabel: normalizeText(item?.sourceNumberLabel),
-    displayTitle: normalizeText(item?.displayTitle),
+    displayTitle,
+    topicTitle,
+    rawDisplayTitle,
     promptText: normalizeText(item?.promptText || "Describe the image in detail."),
     imageUrl: normalizeText(item?.imageUrl),
-    imageAlt: normalizeText(item?.imageAlt || item?.displayTitle || id),
-    imageType: normalizeImageType(item?.imageType),
+    imageAlt: normalizeText(item?.imageAlt || displayTitle || id),
+    imageType,
     subType: normalizeText(item?.subType),
     difficulty: normalizeDifficulty(item?.difficulty, 2),
     tags: toArray(item?.tags).map((tag) => normalizeText(tag).toLowerCase()).filter(Boolean),
     isHighFrequency: Boolean(item?.isHighFrequency),
     isActive: item?.isActive !== false,
     recommendedTemplateIds: toArray(item?.recommendedTemplateIds).map((value) => normalizeText(value)).filter(Boolean),
-    highFrequencyWords: normalizeHighFrequencyWords(item?.highFrequencyWords || item?.vocab || item?.keyTerms),
+    highFrequencyWords,
     visualFeatures: {
       hasTrend: Boolean(item?.visualFeatures?.hasTrend),
       hasComparison: Boolean(item?.visualFeatures?.hasComparison),
