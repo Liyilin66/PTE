@@ -21,6 +21,59 @@ const practiceStore = usePracticeStore();
 const uiStore = useUIStore();
 
 const SESSION_TOTAL = 6;
+const DI_FOCUS_STOP_WORDS = new Set([
+  "chart",
+  "graph",
+  "image",
+  "picture",
+  "diagram",
+  "data",
+  "table",
+  "map",
+  "process",
+  "mixed",
+  "line",
+  "bar",
+  "pie",
+  "trend",
+  "comparison",
+  "layout",
+  "location",
+  "figure",
+  "value",
+  "values",
+  "number",
+  "numbers",
+  "title"
+]);
+const DI_COLOR_WORDS = [
+  "red",
+  "blue",
+  "green",
+  "yellow",
+  "orange",
+  "purple",
+  "black",
+  "white",
+  "gray",
+  "grey",
+  "brown",
+  "pink",
+  "gold",
+  "silver",
+  "navy",
+  "teal",
+  "cyan",
+  "红",
+  "蓝",
+  "绿",
+  "黄",
+  "橙",
+  "紫",
+  "黑",
+  "白",
+  "灰"
+];
 
 const loadingQuestions = ref(true);
 const loadingStats = ref(false);
@@ -118,6 +171,42 @@ const ratingCopy = computed(() => {
 const recentRecordings = computed(() => practiceStore.diRecentRecordings.slice(0, 3));
 const canGoNext = computed(() => selfRating.value > 0 || submittingRound.value);
 const recorderErrorText = computed(() => `${diRecorder.recorder.error.value || ""}`.trim());
+const diLiveContext = computed(() => buildDILiveContext(currentQuestion.value, questionHighFrequencyWords.value));
+const diLiveSentences = computed(() => buildDILiveSentences(diLiveContext.value));
+const diLiveTips = computed(() => buildDILiveTips(diLiveContext.value));
+const templateSlotSuggestions = computed(() =>
+  toArray(selectedTemplate.value?.slots).map((slot) => ({
+    slot: `${slot || ""}`.trim(),
+    suggestion: resolveSlotSuggestion(slot, diLiveContext.value)
+  }))
+);
+const imagePreviewOpen = ref(false);
+const imagePreviewUrl = ref("");
+const imagePreviewAlt = ref("");
+
+function openImagePreview() {
+  const url = `${currentQuestion.value?.imageUrl || ""}`.trim();
+  if (!url) return;
+
+  imagePreviewUrl.value = url;
+  imagePreviewAlt.value = `${currentQuestion.value?.topic || currentQuestion.value?.id || "DI image"}`.trim();
+  imagePreviewOpen.value = true;
+}
+
+function closeImagePreview() {
+  imagePreviewOpen.value = false;
+}
+
+function handleImagePreviewMaskClick(event) {
+  if (event?.target !== event?.currentTarget) return;
+  closeImagePreview();
+}
+
+function handleWindowKeydown(event) {
+  if (event?.key === "Escape" && imagePreviewOpen.value) {
+    closeImagePreview();
+  }
+}
 
 watch(
   () => diRecorder.phase.value,
@@ -135,6 +224,25 @@ watch(
     playbackTimeSec.value = 0;
     playbackDurationSec.value = Math.max(0, Number(value?.playableDurationSec || diRecorder.recordingDurationSec.value || 0));
     selfRating.value = 0;
+  }
+);
+
+watch(
+  () => currentQuestion.value?.id,
+  () => {
+    closeImagePreview();
+  }
+);
+
+watch(
+  () => imagePreviewOpen.value,
+  (opened) => {
+    if (typeof document === "undefined") return;
+    document.body.style.overflow = opened ? "hidden" : "";
+    if (!opened) {
+      imagePreviewUrl.value = "";
+      imagePreviewAlt.value = "";
+    }
   }
 );
 
@@ -187,6 +295,242 @@ function normalizeQuestionHighFrequencyWords(value) {
       };
     })
     .filter(Boolean);
+}
+
+function normalizeDIContextText(value) {
+  return `${value || ""}`
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^[,./\\\-|:;]+/, "")
+    .replace(/[,./\\\-|:;]+$/, "");
+}
+
+function stripDITypePrefix(text) {
+  const normalized = normalizeDIContextText(text);
+  return normalized.replace(/^(map|line chart|bar chart|pie chart|table|process diagram|mixed chart)\s*:\s*/i, "").trim();
+}
+
+function extractTermsFromTopic(topic) {
+  const core = stripDITypePrefix(topic);
+  if (!core) return [];
+
+  const splitByVs = core.split(/\s+vs\.?\s+/i).map((item) => normalizeDIContextText(item));
+  const splitByPunc = core.split(/[|,/]/).map((item) => normalizeDIContextText(item));
+  const splitByAnd = core.split(/\s+and\s+/i).map((item) => normalizeDIContextText(item));
+  return [core, ...splitByVs, ...splitByPunc, ...splitByAnd].filter(Boolean);
+}
+
+function extractVsPair(topic) {
+  const core = stripDITypePrefix(topic);
+  const matched = core.match(/(.+?)\s+vs\.?\s+(.+)/i);
+  if (!matched) return [];
+  return [normalizeDIContextText(matched[1]), normalizeDIContextText(matched[2])].filter(Boolean);
+}
+
+function extractNumberTokens(texts = []) {
+  const source = texts
+    .map((item) => normalizeDIContextText(item))
+    .filter(Boolean)
+    .join(" | ");
+  if (!source) return [];
+
+  const pattern = /\b\d+(?:\.\d+)?(?:\s?(?:%|percent|m|km|cm|mm|m2|m²|°c|°f|years?|months?|days?|hours?|minutes?|mins?|seconds?|kg|g|tons?|million|billion|miles?|meters?|metres?))?\b/gi;
+  const matched = source.match(pattern) || [];
+  return uniqueDIContextTerms(matched, 6);
+}
+
+function extractColorTokens(texts = []) {
+  const source = texts
+    .map((item) => normalizeDIContextText(item).toLowerCase())
+    .filter(Boolean)
+    .join(" | ");
+  if (!source) return [];
+
+  const found = DI_COLOR_WORDS.filter((color) => {
+    if (/[\u4e00-\u9fa5]/.test(color)) return source.includes(color);
+    return new RegExp(`\\b${color}\\b`, "i").test(source);
+  });
+  return uniqueDIContextTerms(found, 4);
+}
+
+function uniqueDIContextTerms(values = [], limit = 8) {
+  const output = [];
+  const seen = new Set();
+
+  values.forEach((item) => {
+    const value = normalizeDIContextText(item);
+    if (!value) return;
+
+    const lower = value.toLowerCase();
+    if (!/[\u4e00-\u9fa5a-z]/i.test(value)) return;
+    if (value.length < 2) return;
+    if (value.length > 48) return;
+    if (DI_FOCUS_STOP_WORDS.has(lower)) return;
+    if (seen.has(lower)) return;
+
+    seen.add(lower);
+    output.push(value);
+  });
+
+  return output.slice(0, limit);
+}
+
+function buildDILiveContext(question, highFrequencyWords = []) {
+  const imageType = normalizeDIImageType(question?.imageType) || "mixed";
+  const topic = normalizeDIContextText(question?.topic || "");
+  const topicCore = stripDITypePrefix(topic);
+  const keyPoints = uniqueDIContextTerms(
+    toArray(question?.keyPoints).map((item) => (typeof item === "string" ? item : item?.text || item?.point || "")),
+    6
+  );
+  const vocabTerms = uniqueDIContextTerms(
+    toArray(highFrequencyWords).map((item) => item?.word || item),
+    8
+  );
+  const vsPair = extractVsPair(topic);
+  const topicTerms = extractTermsFromTopic(topic);
+  const focusTerms = uniqueDIContextTerms([...vsPair, ...topicTerms, ...vocabTerms, ...keyPoints], 10);
+
+  const textSources = [
+    topic,
+    normalizeDIContextText(question?.content || ""),
+    ...keyPoints,
+    ...vocabTerms
+  ];
+
+  const numbers = extractNumberTokens(textSources);
+  const colors = extractColorTokens(textSources);
+
+  return {
+    imageType,
+    topic,
+    topicCore: topicCore || topic || "the image",
+    focusTerms,
+    keyPoints,
+    numbers,
+    colors,
+    vsPair,
+    mainA: focusTerms[0] || "the main feature",
+    mainB: focusTerms[1] || "another feature"
+  };
+}
+
+function buildDILiveSentences(context) {
+  const subject = context?.topicCore || "the image";
+  const mainA = context?.mainA || "the main feature";
+  const mainB = context?.mainB || "another feature";
+  const numA = context?.numbers?.[0] || "one key figure";
+  const numB = context?.numbers?.[1] || "another figure";
+  const colorA = context?.colors?.[0] || "a dominant color";
+  const pairLeft = context?.vsPair?.[0] || mainA;
+  const pairRight = context?.vsPair?.[1] || mainB;
+  const imageType = context?.imageType || "mixed";
+
+  const opening = [
+    `This image is mainly about ${subject}.`,
+    `At a glance, the visual focuses on ${mainA} and ${mainB}.`
+  ];
+
+  let detail = [
+    `A clear comparison can be made between ${pairLeft} and ${pairRight}.`,
+    `I can also mention specific figures such as ${numA} and ${numB}.`,
+    `Besides numbers, one visible color cue is ${colorA}.`
+  ];
+
+  if (imageType === "map") {
+    detail = [
+      `The map compares ${pairLeft} and ${pairRight} in terms of location or layout.`,
+      `I can describe position words like top, bottom, left and right around ${mainA}.`,
+      context?.numbers?.length
+        ? `The diagram also includes measurements like ${numA}${context?.numbers?.[1] ? ` and ${numB}` : ""}.`
+        : `I can mention at least one labelled place, for example ${mainA}.`
+    ];
+  } else if (imageType === "process") {
+    detail = [
+      `The process starts from ${mainA} and then moves to ${mainB}.`,
+      `I can describe the middle steps in sequence using first, then and finally.`,
+      context?.numbers?.length
+        ? `If there are figures, I can cite values like ${numA} to support the description.`
+        : `I should mention one input, one transition and one output stage.`
+    ];
+  } else if (imageType === "line") {
+    detail = [
+      `The line chart shows how ${mainA} changes over time compared with ${mainB}.`,
+      `I can state the trend direction first, then describe peaks and lows.`,
+      `A quick numeric reference can be ${numA}${context?.numbers?.[1] ? ` and ${numB}` : ""}.`
+    ];
+  } else if (imageType === "bar" || imageType === "pie" || imageType === "table" || imageType === "mixed") {
+    detail = [
+      `The chart highlights differences between ${pairLeft} and ${pairRight}.`,
+      `I can first mention the highest and lowest parts, then give one comparison.`,
+      `One useful data point to quote is ${numA}.`
+    ];
+  }
+
+  const closing = [
+    `Overall, this visual clearly explains ${subject}.`
+  ];
+
+  return {
+    opening,
+    detail,
+    closing
+  };
+}
+
+function buildDILiveTips(context) {
+  const imageType = context?.imageType || "mixed";
+  let steps = [
+    "先一句总述（主题）。",
+    "再说最高/最低或最明显差异。",
+    "最后补一个数字并总结。"
+  ];
+
+  if (imageType === "map") {
+    steps = [
+      "先说整体对象（地图/平面图讲什么）。",
+      "再按方位说位置关系（上/下/左/右/中间）。",
+      "最后补尺寸或标注信息并总结。"
+    ];
+  } else if (imageType === "process") {
+    steps = [
+      "先说流程主题和起点。",
+      "再按顺序串联中间步骤。",
+      "最后说终点结果并做总结。"
+    ];
+  } else if (imageType === "line") {
+    steps = [
+      "先说时间范围和对象。",
+      "再说总体趋势（上升/下降/波动）。",
+      "最后补高点低点或关键年份。"
+    ];
+  } else if (imageType === "pie") {
+    steps = [
+      "先说饼图主题。",
+      "再说最大占比和最小占比。",
+      "最后补其余部分并总结。"
+    ];
+  }
+
+  return {
+    steps,
+    mustMention: context?.focusTerms?.slice(0, 6) || [],
+    numbers: context?.numbers?.slice(0, 6) || []
+  };
+}
+
+function resolveSlotSuggestion(slot, context) {
+  const label = `${slot || ""}`.trim();
+  if (!label) return context?.mainA || "one key item";
+
+  if (label.includes("标题") || /title/i.test(label)) return context?.topicCore || context?.topic || "the topic";
+  if (label.includes("最大") || label.includes("最高") || /maximum|highest|top/i.test(label)) return context?.focusTerms?.[0] || context?.mainA || "the highest item";
+  if (label.includes("最小") || label.includes("最低") || /minimum|lowest|bottom/i.test(label)) return context?.focusTerms?.[1] || context?.mainB || "the lowest item";
+  if (label.includes("颜色") || /color|colour/i.test(label)) return context?.colors?.[0] || "one visible color";
+  if (label.includes("数字") || label.includes("年份") || /number|year|figure|value/i.test(label)) return context?.numbers?.[0] || "one key figure";
+  if (label.includes("上方") || label.includes("左") || /start|beginning/i.test(label)) return context?.focusTerms?.[0] || context?.mainA || "the starting point";
+  if (label.includes("下方") || label.includes("右") || /end|ending/i.test(label)) return context?.focusTerms?.[1] || context?.mainB || "the ending point";
+  return context?.focusTerms?.[2] || context?.mainA || "one important detail";
 }
 
 function normalizeQuestionRow(row) {
@@ -309,7 +653,7 @@ async function loadQuestions() {
     const fallback = getLocalFallbackQuestions();
     allQuestions.value = fallback;
     if (fallback.length) {
-      uiStore.showToast("Supabase 暂无 DI 题，已使用本地种子题库。", "warning");
+      console.info("DI questions fallback: Supabase has no active DI rows, using local seed catalog.");
     } else {
       uiStore.showToast("DI 题库为空，请先在 Supabase questions 表添加 DI 题目。", "warning");
     }
@@ -318,7 +662,7 @@ async function loadQuestions() {
     const fallback = getLocalFallbackQuestions();
     allQuestions.value = fallback;
     if (fallback.length) {
-      uiStore.showToast("Supabase 读取失败，已使用本地种子题库。", "warning");
+      console.warn("DI questions fallback: Supabase read failed, using local seed catalog.");
     } else {
       uiStore.showToast("DI 题库加载失败，请检查 Supabase 配置。", "warning");
     }
@@ -808,6 +1152,10 @@ async function handleBackHome() {
 }
 
 onMounted(async () => {
+  if (typeof window !== "undefined") {
+    window.addEventListener("keydown", handleWindowKeydown);
+  }
+
   if (!authStore.loaded) {
     await authStore.loadStatus();
   }
@@ -830,6 +1178,13 @@ watch(
 );
 
 onUnmounted(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("keydown", handleWindowKeydown);
+  }
+  if (typeof document !== "undefined") {
+    document.body.style.overflow = "";
+  }
+  closeImagePreview();
   stopSpeechSynthesis();
 });
 </script>
@@ -914,12 +1269,18 @@ onUnmounted(() => {
             </div>
 
             <div class="mb-3 flex h-[190px] items-center justify-center overflow-hidden rounded-[10px] bg-[#F4F7FB]">
-              <img
+              <button
                 v-if="currentQuestion.imageUrl"
-                :src="currentQuestion.imageUrl"
-                :alt="currentQuestion.topic || currentQuestion.id"
-                class="h-full w-full object-contain"
-              />
+                type="button"
+                class="h-full w-full cursor-zoom-in focus:outline-none"
+                @click="openImagePreview"
+              >
+                <img
+                  :src="currentQuestion.imageUrl"
+                  :alt="currentQuestion.topic || currentQuestion.id"
+                  class="h-full w-full object-contain"
+                />
+              </button>
               <p v-else class="px-4 text-center text-xs text-[#8CA0C0]">当前题目缺少 image_url，请在题库补充图片地址。</p>
             </div>
 
@@ -1145,37 +1506,112 @@ onUnmounted(() => {
               </div>
 
               <div v-else-if="activeTab === 'phrases'" class="space-y-3">
+                <article class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] p-3">
+                  <p class="text-xs font-semibold text-[#8CA0C0]">开场句（实时）</p>
+                  <p
+                    v-for="sentence in diLiveSentences.opening"
+                    :key="`opening-${sentence}`"
+                    class="mt-1 text-sm text-[#1B3A6B]"
+                  >
+                    {{ sentence }}
+                  </p>
+                </article>
+
+                <article class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] p-3">
+                  <p class="text-xs font-semibold text-[#8CA0C0]">主体句（实时）</p>
+                  <p
+                    v-for="sentence in diLiveSentences.detail"
+                    :key="`detail-${sentence}`"
+                    class="mt-1 text-sm text-[#1B3A6B]"
+                  >
+                    {{ sentence }}
+                  </p>
+                </article>
+
+                <article class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] p-3">
+                  <p class="text-xs font-semibold text-[#8CA0C0]">收尾句（实时）</p>
+                  <p
+                    v-for="sentence in diLiveSentences.closing"
+                    :key="`closing-${sentence}`"
+                    class="mt-1 text-sm text-[#1B3A6B]"
+                  >
+                    {{ sentence }}
+                  </p>
+                </article>
+
                 <div>
-                  <p class="mb-2 text-xs font-semibold text-[#8CA0C0]">模板槽位</p>
+                  <p class="mb-2 text-xs font-semibold text-[#8CA0C0]">模板槽位（建议填法）</p>
                   <div class="flex flex-wrap gap-2">
                     <button
-                      v-for="slot in selectedTemplate.slots"
-                      :key="slot"
+                      v-for="item in templateSlotSuggestions"
+                      :key="item.slot"
                       type="button"
-                      class="rounded-[20px] border px-3 py-1.5 text-xs transition-colors"
-                      :class="isPhraseUsed(slot) ? 'border-[#1B3A6B] bg-[#1B3A6B] text-white' : 'border-[#E8EDF5] bg-white text-[#1B3A6B]'"
-                      @click="togglePhraseUsage(slot)"
+                      class="rounded-[20px] border px-3 py-1.5 text-left text-xs transition-colors"
+                      :class="isPhraseUsed(item.slot) ? 'border-[#1B3A6B] bg-[#1B3A6B] text-white' : 'border-[#E8EDF5] bg-white text-[#1B3A6B]'"
+                      @click="togglePhraseUsage(item.slot)"
                     >
-                      {{ slot }}
+                      <span class="font-semibold">{{ item.slot }}</span>
+                      <span class="ml-1 opacity-85">→ {{ item.suggestion }}</span>
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <p class="mb-2 text-xs font-semibold text-[#8CA0C0]">关键词</p>
+                  <p class="mb-2 text-xs font-semibold text-[#8CA0C0]">本题关键词（实时）</p>
                   <div class="flex flex-wrap gap-2">
                     <span
-                      v-for="keyword in selectedTemplate.keywords"
+                      v-for="keyword in (diLiveContext.focusTerms.length ? diLiveContext.focusTerms : (selectedTemplate.keywords || []))"
                       :key="keyword"
                       class="rounded-[20px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#1B3A6B]"
                     >
                       {{ keyword }}
+                    </span>
+                    <span
+                      v-if="!(diLiveContext.focusTerms.length || (selectedTemplate.keywords || []).length)"
+                      class="text-xs text-[#8CA0C0]"
+                    >
+                      当前题目暂无关键词，建议优先描述标题、方位和对比关系。
                     </span>
                   </div>
                 </div>
               </div>
 
               <div v-else class="space-y-2">
+                <article class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] px-3 py-2">
+                  <p class="text-sm font-semibold text-[#1B3A6B]">本题观察顺序（实时）</p>
+                  <ul class="mt-1 list-disc space-y-1 pl-5 text-xs text-[#64748B]">
+                    <li v-for="step in diLiveTips.steps" :key="step">{{ step }}</li>
+                  </ul>
+                </article>
+
+                <article class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] px-3 py-2">
+                  <p class="text-sm font-semibold text-[#1B3A6B]">本题必提词（实时）</p>
+                  <div class="mt-1 flex flex-wrap gap-2">
+                    <span
+                      v-for="term in diLiveTips.mustMention"
+                      :key="`must-${term}`"
+                      class="rounded-[20px] border border-[#E8EDF5] bg-white px-3 py-1 text-xs text-[#1B3A6B]"
+                    >
+                      {{ term }}
+                    </span>
+                    <span v-if="!diLiveTips.mustMention.length" class="text-xs text-[#8CA0C0]">当前题目词汇较少，建议优先读图标题和图例词。</span>
+                  </div>
+                </article>
+
+                <article class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] px-3 py-2">
+                  <p class="text-sm font-semibold text-[#1B3A6B]">可引用数字/单位（实时）</p>
+                  <div class="mt-1 flex flex-wrap gap-2">
+                    <span
+                      v-for="number in diLiveTips.numbers"
+                      :key="`num-${number}`"
+                      class="rounded-[20px] border border-[#E8EDF5] bg-white px-3 py-1 text-xs text-[#1B3A6B]"
+                    >
+                      {{ number }}
+                    </span>
+                    <span v-if="!diLiveTips.numbers.length" class="text-xs text-[#8CA0C0]">这一题可先用方位、趋势、对比词替代具体数字。</span>
+                  </div>
+                </article>
+
                 <article
                   v-if="selectedTemplate.fillTips"
                   class="rounded-[11px] border-l-4 border-[#E8845A] bg-[#FFFDFC] px-3 py-2"
@@ -1278,6 +1714,23 @@ onUnmounted(() => {
           <p v-else class="text-xs text-[#8CA0C0]">当前题目暂无词汇数据。</p>
         </section>
       </template>
+
+      <Teleport to="body">
+        <div
+          v-if="imagePreviewOpen"
+          class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-4"
+          @click="handleImagePreviewMaskClick"
+        >
+          <div class="relative w-full max-w-5xl">
+            <img
+              :src="imagePreviewUrl"
+              :alt="imagePreviewAlt"
+              class="max-h-[90vh] w-full rounded-[12px] bg-white object-contain shadow-2xl"
+            />
+            <p class="mt-2 text-center text-xs text-white/85">点击空白处关闭</p>
+          </div>
+        </div>
+      </Teleport>
     </main>
   </div>
 </template>
