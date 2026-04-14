@@ -310,10 +310,6 @@ onMounted(() => {
           </div>
 
           <div class="px-4 pb-4">
-            <div class="pb-3 text-right">
-              <span class="text-sm font-medium text-orange">朗读</span>
-            </div>
-
             <div class="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -351,10 +347,6 @@ onMounted(() => {
           </div>
 
           <div class="px-4 pb-4">
-            <div class="pb-3 text-right">
-              <span class="text-sm font-medium text-orange">Write from Dictation</span>
-            </div>
-
             <div class="mt-1 flex flex-col gap-2">
               <div class="grid grid-cols-2 gap-2">
                 <button

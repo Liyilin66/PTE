@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-14T08:13:53.505Z",
-  "turn_count": 152,
-  "last_agent_output": "你这个点非常对，我已经按“全中文”统一了，首页观感会更一致，也更贴合你现在的中文交互流。\n\n已改内容：\n\n- 统一任务卡文案为中文（含你提到的 WE、RTS）  \n  文件：[practice.js]"
+  "last_turn_at": "2026-04-14T09:16:35.524Z",
+  "turn_count": 160,
+  "last_agent_output": "RA 和 WFD 是被 `HomeView.vue` 里误删了，我刚给你恢复了。\n\n已恢复内容：\n- 首页 `raTask` / `wfdTask` 计算变量\n- RA 卡片整块（随机练习、选题练习）"
 }

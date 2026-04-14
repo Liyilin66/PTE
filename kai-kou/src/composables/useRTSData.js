@@ -1,12 +1,15 @@
-import { ref } from "vue";
+﻿import { ref } from "vue";
 import { supabase } from "@/lib/supabase";
 import { RTS_FALLBACK_QUESTIONS } from "@/data/rtsFallbackQuestions";
 
 const hasSupabaseConfig =
   Boolean(import.meta.env.VITE_SUPABASE_URL) &&
   Boolean(import.meta.env.VITE_SUPABASE_ANON_KEY);
+
 const RTS_AUDIO_BUCKET = "question-audio";
 const RTS_AUDIO_FOLDER = "rts";
+const DYNAMIC_TEMPLATE_CACHE_KEY = "RTS_DYNAMIC_TEMPLATE_CACHE_V3";
+const DYNAMIC_TEMPLATE_PREFIX = "Hi, [name], sorry to bother you.";
 
 const TONE_LABEL_MAP = {
   formal: "正式语气",
@@ -20,7 +23,7 @@ export const RTS_TOPIC_META = {
     label: "学业事务",
     shortLabel: "学业",
     tag: "Academic",
-    emoji: "🎓",
+    emoji: "📗",
     badgeClass: "bg-[#E1F5EE] text-[#085041]"
   },
   daily: {
@@ -28,7 +31,7 @@ export const RTS_TOPIC_META = {
     label: "日常安排",
     shortLabel: "日常",
     tag: "Daily",
-    emoji: "🏡",
+    emoji: "🗓",
     badgeClass: "bg-[#EEF2FF] text-[#2F3C8F]"
   },
   service: {
@@ -50,11 +53,128 @@ export const RTS_TOPIC_META = {
 };
 
 const RTS_TOPIC_ORDER = ["work", "daily", "service", "social"];
-
 const MOCK_RTS_QUESTIONS = RTS_FALLBACK_QUESTIONS;
+
+const FORMAL_HINTS = [
+  "professor",
+  "teacher",
+  "tutor",
+  "lecturer",
+  "librarian",
+  "manager",
+  "officer",
+  "inspector",
+  "staff",
+  "accommodation",
+  "maintenance"
+];
+
+const INFORMAL_HINTS = [
+  "friend",
+  "classmate",
+  "roommate",
+  "flatmate",
+  "neighbor",
+  "wife",
+  "tom",
+  "lisa",
+  "sam",
+  "guys"
+];
+
+const EN_STOPWORDS = new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "if",
+  "then",
+  "than",
+  "to",
+  "of",
+  "for",
+  "from",
+  "in",
+  "on",
+  "at",
+  "by",
+  "with",
+  "without",
+  "as",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "do",
+  "does",
+  "did",
+  "done",
+  "can",
+  "could",
+  "would",
+  "should",
+  "will",
+  "shall",
+  "may",
+  "might",
+  "must",
+  "have",
+  "has",
+  "had",
+  "i",
+  "you",
+  "your",
+  "yours",
+  "my",
+  "me",
+  "we",
+  "our",
+  "ours",
+  "he",
+  "she",
+  "they",
+  "them",
+  "it",
+  "this",
+  "that",
+  "these",
+  "those",
+  "there",
+  "here",
+  "just",
+  "very",
+  "really",
+  "about",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "whom",
+  "why",
+  "how",
+  "into",
+  "also",
+  "still",
+  "much",
+  "more",
+  "most",
+  "some",
+  "any",
+  "all",
+  "few",
+  "many",
+  "lot"
+]);
 
 let cachedQuestions = null;
 let cachedSource = "mock";
+let dynamicTemplateCache = null;
 
 function toObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -79,6 +199,26 @@ function parseJsonLike(value) {
     }
   }
   return toObject(value);
+}
+
+function normalizeWhitespace(text) {
+  return toSafeString(text).replace(/\s+/g, " ");
+}
+
+function toLower(value) {
+  return normalizeWhitespace(value).toLowerCase();
+}
+
+function sentenceCase(text) {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) return "";
+  return normalized.replace(/(^|[.!?]\s+)([a-z])/g, (matched, lead, ch) => `${lead}${ch.toUpperCase()}`);
+}
+
+function polishGeneratedEnglish(text) {
+  return sentenceCase(text)
+    .replace(/\bfollow the schedule to complete housework\b/gi, "follow the cleaning schedule")
+    .replace(/\bfor making this call\b/gi, "for this call");
 }
 
 function normalizeTopic(value) {
@@ -139,6 +279,345 @@ function normalizeDifficulty(value) {
   return Math.max(1, Math.min(3, Math.round(number)));
 }
 
+function splitSentences(text) {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) return [];
+  return normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function ensureSentence(text) {
+  const normalized = polishGeneratedEnglish(text);
+  if (!normalized) return "";
+  if (/[.!?]$/.test(normalized)) return normalized;
+  return `${normalized}.`;
+}
+
+function truncateWords(text, maxWords = 20) {
+  const words = normalizeWhitespace(text).split(" ").filter(Boolean);
+  if (words.length <= maxWords) return words.join(" ");
+  return words.slice(0, maxWords).join(" ");
+}
+
+function uniqueList(list, limit = 4) {
+  const seen = new Set();
+  const output = [];
+  for (const item of list) {
+    const normalized = normalizeWhitespace(item).replace(/[,.!?;:\-\s]+$/, "");
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(normalized);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function stripQuestionTail(content) {
+  return normalizeWhitespace(content)
+    .replace(/\s*what would you say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what should you say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what will you say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what do you say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what are you going to say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*how would you(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*how do you(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what would i say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what should i say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*what do i say(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*how would i(?:[^.?!]*)?\??\s*$/i, "")
+    .replace(/\s*how do i(?:[^.?!]*)?\??\s*$/i, "")
+    .trim();
+}
+
+function toFirstPersonNarration(text) {
+  return normalizeWhitespace(text)
+    .replace(/\b[Yy]ou are\b/g, "I am")
+    .replace(/\b[Yy]ou were\b/g, "I was")
+    .replace(/\b[Yy]ou have\b/g, "I have")
+    .replace(/\b[Yy]ou\'ve\b/g, "I've")
+    .replace(/\b[Yy]ou\'re\b/g, "I'm")
+    .replace(/\b[Yy]our\b/g, "my")
+    .replace(/\b[Yy]ou\b/g, "I")
+    .replace(/\b[Ii]\s+decide to\b/g, "I decide to")
+    .replace(/\b[Ii]\s+want to\s+ask\b/g, "I want to ask")
+    .replace(/\b[Ii]\s+need to\s+call\b/g, "I need to call")
+    .replace(/^i\b/, "I");
+}
+
+function isInstructionSentence(text) {
+  const lower = toLower(text);
+  return /what would (you|i) say|what should (you|i) say|what will (you|i) say|what do (you|i) say|what are (you|i) going to say|how would (you|i)|how do (you|i)|what should you say to|how do you ask|how would you explain/.test(lower);
+}
+
+function cleanScenarioLines(lines = []) {
+  return lines
+    .map((line) => polishGeneratedEnglish(line))
+    .filter(Boolean)
+    .filter((line) => !isInstructionSentence(line));
+}
+
+function inferAudience(content, fallbackRole = "") {
+  const combined = `${toLower(content)} ${toLower(fallbackRole)}`;
+  if (combined.includes("professor") || combined.includes("teacher") || combined.includes("tutor") || combined.includes("lecturer")) return "your professor or teacher";
+  if (combined.includes("librarian") || combined.includes("library staff")) return "library staff";
+  if (combined.includes("manager") || combined.includes("officer") || combined.includes("inspector") || combined.includes("maintenance team")) return "the relevant staff member";
+  if (combined.includes("roommate") || combined.includes("flatmate") || combined.includes("neighbor")) return "your roommate or neighbor";
+  if (combined.includes("friend") || combined.includes("classmate")) return "your friend or classmate";
+  return "the other person";
+}
+
+function inferTone(content, topic, fallbackTone = "") {
+  const explicit = normalizeTone(fallbackTone);
+  if (explicit !== "semi-formal") return explicit;
+
+  const lower = toLower(content);
+  if (FORMAL_HINTS.some((item) => lower.includes(item)) || topic === "service") return "formal";
+  if (INFORMAL_HINTS.some((item) => lower.includes(item)) || topic === "social") return "informal";
+  return "semi-formal";
+}
+
+function extractKeywords(content, limit = 6) {
+  const words = (normalizeWhitespace(content).toLowerCase().match(/[a-z][a-z0-9'-]{2,}/g) || [])
+    .filter((word) => !EN_STOPWORDS.has(word));
+  return uniqueList(words, limit);
+}
+
+function extractRequestAction(content, scenarioLines = []) {
+  const source = normalizeWhitespace(content);
+  const patterns = [
+    /\byou need to\s+([^.!?]+)/i,
+    /\byou want to\s+([^.!?]+)/i,
+    /\byou should\s+([^.!?]+)/i,
+    /\byou decide to\s+([^.!?]+)/i,
+    /\byou are planning to\s+([^.!?]+)/i,
+    /\byou are interested in\s+([^.!?]+)/i
+  ];
+
+  for (const pattern of patterns) {
+    const matched = source.match(pattern);
+    if (!matched?.[1]) continue;
+    const action = toFirstPersonNarration(matched[1]).replace(/^I\s+/i, "");
+    if (!action) continue;
+    return `Could you please ${action}?`;
+  }
+
+  const fromScenario = scenarioLines.find((item) => /\b(need|want|ask|report|request|suggest|borrow|return|help|change|invite|apologize)\b/i.test(item));
+  if (fromScenario) {
+    const cleaned = toFirstPersonNarration(fromScenario)
+      .replace(/^I\s+(need|want)\s+to\s+/i, "")
+      .replace(/^I\s+/i, "");
+    if (cleaned) return `Could you please ${cleaned}?`;
+  }
+
+  return "Could you please help me with this situation?";
+}
+
+function buildTemplateFromQuestion(content, tone) {
+  const scenarioText = stripQuestionTail(content);
+  const firstPersonText = toFirstPersonNarration(scenarioText);
+  const scenarioLines = cleanScenarioLines(splitSentences(firstPersonText));
+
+  const fallbackOpening = {
+    formal: "Hello, I am calling to explain my situation.",
+    informal: "Hi, I want to talk to you about something.",
+    "semi-formal": "Hi, I need to explain this situation."
+  };
+
+  const baseOpener = ensureSentence(scenarioLines[0] || fallbackOpening[tone] || fallbackOpening["semi-formal"]);
+  const opener = ensureSentence(`${ensureSentence(DYNAMIC_TEMPLATE_PREFIX)} ${baseOpener}`.trim());
+  const detail = ensureSentence(scenarioLines[1] || scenarioLines[0] || "I want to explain this clearly so we can solve it quickly.");
+  const request = ensureSentence(extractRequestAction(content, scenarioLines));
+
+  const closing = tone === "formal"
+    ? "Thank you for your understanding and support."
+    : tone === "informal"
+      ? "Thanks for understanding and helping me out."
+      : "Thank you for understanding and helping me with this.";
+
+  const full = [
+    opener,
+    detail,
+    request,
+    closing
+  ]
+    .map((line) => ensureSentence(truncateWords(line, 28)))
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    opener,
+    full,
+    scenarioLines
+  };
+}
+
+function buildDynamicPhrases(templatePayload, fallbackPhrases = {}) {
+  const sentences = splitSentences(templatePayload.full);
+  const requestLike = sentences.filter((item) => /\b(could|would|can|please|may)\b/i.test(item));
+  const closingLike = sentences.filter((item) => /\b(thank|thanks|appreciate|sorry|promise)\b/i.test(item));
+
+  return {
+    opening: uniqueList([
+      templatePayload.opener,
+      sentences[0],
+      ...(fallbackPhrases.opening || [])
+    ], 4),
+    request: uniqueList([
+      ...requestLike,
+      ...(fallbackPhrases.request || []),
+      sentences[1],
+      sentences[2]
+    ], 4),
+    closing: uniqueList([
+      ...closingLike,
+      ...(fallbackPhrases.closing || []),
+      sentences[sentences.length - 1]
+    ], 4)
+  };
+}
+
+function buildDynamicDirections(content, templatePayload, fallbackDirections = []) {
+  const scenarioSnippet = truncateWords(templatePayload.scenarioLines[0] || stripQuestionTail(content), 18);
+  const requestSentence = splitSentences(templatePayload.full).find((item) => /\b(could|would|can|please|may)\b/i.test(item)) || "Could you please help me with this situation?";
+
+  const generated = [
+    {
+      head: "先复述题目情景",
+      body: `直接用题目关键词说明场景：${scenarioSnippet}。`,
+      eg: ensureSentence(truncateWords(templatePayload.opener, 18))
+    },
+    {
+      head: "再表达核心需求",
+      body: "说明你的困难，再提出一个明确请求。",
+      eg: ensureSentence(truncateWords(requestSentence, 18))
+    },
+    {
+      head: "最后礼貌收尾",
+      body: "确认后续安排并表达感谢。",
+      eg: ensureSentence("Thank you for understanding and helping me.")
+    }
+  ];
+
+  return generated.map((item, index) => ({
+    head: item.head,
+    body: item.body,
+    eg: item.eg || fallbackDirections[index]?.eg || ""
+  }));
+}
+
+function buildDynamicTips(content, fallbackTips = []) {
+  const keywords = extractKeywords(content, 6);
+  const keywordLabel = keywords.length ? keywords.join(", ") : "key scenario words";
+
+  return uniqueList([
+    `尽量复用题干关键词：${keywordLabel}`,
+    "把题目里的 You/Your 改成 I/My 来作答。",
+    "先交代情况，再给出请求，最后礼貌收尾。",
+    "避免泛泛表达，优先说题目里出现的具体细节。",
+    ...(fallbackTips || [])
+  ], 6);
+}
+
+function getLocalStorage() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function loadDynamicTemplateCache() {
+  if (dynamicTemplateCache && typeof dynamicTemplateCache === "object") return dynamicTemplateCache;
+  dynamicTemplateCache = {};
+
+  const storage = getLocalStorage();
+  if (!storage) return dynamicTemplateCache;
+
+  try {
+    const raw = storage.getItem(DYNAMIC_TEMPLATE_CACHE_KEY);
+    if (!raw) return dynamicTemplateCache;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      dynamicTemplateCache = parsed;
+    }
+  } catch {
+    dynamicTemplateCache = {};
+  }
+
+  return dynamicTemplateCache;
+}
+
+function persistDynamicTemplateCache(cache) {
+  const storage = getLocalStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(DYNAMIC_TEMPLATE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function buildTemplateSignature(content) {
+  return toLower(content);
+}
+
+function getCachedDynamicKeyPoints(questionId) {
+  const key = toSafeString(questionId);
+  if (!key) return null;
+  const cache = loadDynamicTemplateCache();
+  const item = toObject(cache[key]);
+  if (!item) return null;
+  return toObject(item.keyPoints);
+}
+
+function saveDynamicKeyPoints(questionId, signature, keyPoints) {
+  const key = toSafeString(questionId);
+  if (!key || !signature || !toObject(keyPoints)) return;
+  const cache = loadDynamicTemplateCache();
+  cache[key] = {
+    signature,
+    updatedAt: new Date().toISOString(),
+    keyPoints
+  };
+  dynamicTemplateCache = cache;
+  persistDynamicTemplateCache(cache);
+}
+
+function buildDynamicKeyPoints({ questionId, content, topic, baseKeyPoints }) {
+  const signature = buildTemplateSignature(content);
+  const cached = getCachedDynamicKeyPoints(questionId);
+  if (cached) return cached;
+
+  const tone = inferTone(content, topic, baseKeyPoints?.tone);
+  const role = toSafeString(baseKeyPoints?.role) || `You are a student speaking to ${inferAudience(content, baseKeyPoints?.role)}.`;
+  const templatePayload = buildTemplateFromQuestion(content, tone);
+
+  const phrases = buildDynamicPhrases(templatePayload, baseKeyPoints?.phrases || {});
+  const directions = buildDynamicDirections(content, templatePayload, baseKeyPoints?.directions || []);
+  const tips = buildDynamicTips(content, baseKeyPoints?.tips || []);
+
+  const result = {
+    role,
+    tone,
+    toneLabel: toSafeString(baseKeyPoints?.toneLabel) || TONE_LABEL_MAP[tone],
+    directions: directions.length ? directions : (baseKeyPoints?.directions || []),
+    templateOpener: templatePayload.opener,
+    templateFull: templatePayload.full,
+    phrases,
+    tips,
+    templateSource: "dynamic-question",
+    templateSignature: signature
+  };
+
+  saveDynamicKeyPoints(questionId, signature, result);
+  return result;
+}
+
 function buildRTSAudioPath(questionId) {
   const normalizedId = toSafeString(questionId);
   if (!normalizedId) return "";
@@ -165,6 +644,15 @@ function normalizeQuestion(raw, index = 0) {
   const topic = normalizeTopic(source.topic);
   const audioPath = buildRTSAudioPath(id);
   const audioUrl = buildRTSAudioUrl(id);
+
+  const baseKeyPoints = normalizeKeyPoints(source.key_points);
+  const dynamicKeyPoints = buildDynamicKeyPoints({
+    questionId: id,
+    content,
+    topic,
+    baseKeyPoints
+  });
+
   return {
     id,
     task_type: "RTS",
@@ -173,7 +661,7 @@ function normalizeQuestion(raw, index = 0) {
     audio_path: audioPath,
     audio_url: audioUrl,
     topic,
-    key_points: normalizeKeyPoints(source.key_points),
+    key_points: dynamicKeyPoints,
     difficulty: normalizeDifficulty(source.difficulty),
     is_active: source.is_active !== false
   };
