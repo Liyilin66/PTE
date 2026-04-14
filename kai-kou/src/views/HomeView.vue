@@ -311,7 +311,7 @@ onMounted(() => {
 
           <div class="px-4 pb-4">
             <div class="pb-3 text-right">
-              <span class="text-sm font-medium text-orange">Read Aloud</span>
+              <span class="text-sm font-medium text-orange">朗读</span>
             </div>
 
             <div class="grid grid-cols-2 gap-2">
@@ -512,19 +512,13 @@ onMounted(() => {
             </div>
 
             <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">DI - Describe Image</h3>
+              <h3 class="text-base font-bold text-[#1A1A2E]">DI - 图片描述</h3>
               <p class="text-sm font-medium text-orange">口语起步器 · 结构稳定器</p>
               <p class="mt-1 text-sm text-[#6B7280]">不看分数，先把“看图开口”练成肌肉记忆。</p>
             </div>
           </div>
 
           <div class="px-4 pb-4">
-            <div class="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-              <span class="rounded bg-orange/10 px-2 py-0.5 text-orange">5秒开口</span>
-              <span class="rounded bg-orange/10 px-2 py-0.5 text-orange">本题三连练</span>
-              <span class="rounded bg-orange/10 px-2 py-0.5 text-orange">提示降级</span>
-            </div>
-
             <div class="grid grid-cols-2 gap-2">
               <button
                 type="button"

@@ -31,54 +31,54 @@ const SCORE_API_DEV_FALLBACK_PORTS = [3000, 3001];
 const TASKS = [
   {
     id: "ra",
-    title: "RA - Read Aloud",
-    subtitle: "Pacing trainer",
-    description: "Follow the text with stable pace and fluent delivery.",
+    title: "RA - 朗读",
+    subtitle: "节奏与流利度",
+    description: "跟读文本，稳定语速与停连。",
     icon: "ra",
     iconBg: "bg-[#1E4A86]",
     to: "/ra"
   },
   {
     id: "rs",
-    title: "RS - Repeat Sentence",
-    subtitle: "Keyword catcher",
-    description: "Catch key words first, then repeat fluently.",
+    title: "RS - 复述句子",
+    subtitle: "关键词抓取",
+    description: "先抓关键词，再完整复述。",
     icon: "rs",
     iconBg: "bg-[#2E5EA8]",
     to: "/rs"
   },
   {
     id: "rl",
-    title: "RL - Re-tell Lecture",
-    subtitle: "Template builder",
-    description: "Use a stable framework to structure your summary.",
+    title: "RL - 复述讲座",
+    subtitle: "模板组织表达",
+    description: "用稳定框架组织讲座复述。",
     icon: "rl",
     iconBg: "bg-gradient-to-br from-[#7A1DE6] to-[#BC1CFB]",
     to: "/rl"
   },
   {
     id: "rts",
-    title: "RTS - Respond Situation",
-    subtitle: "Speak in context",
-    description: "Listen to a scenario and respond with the right tone.",
+    title: "RTS - 情景回应",
+    subtitle: "情境沟通",
+    description: "听场景并给出得体回应。",
     icon: "rts",
     iconBg: "bg-[#1B3A6B]",
     to: "/rts"
   },
   {
     id: "we",
-    title: "WE - Write Essay",
-    subtitle: "Structure first",
-    description: "Write with clear intro, body, and conclusion.",
+    title: "WE - 写作",
+    subtitle: "结构优先",
+    description: "清晰写出引言、主体和结论。",
     icon: "we",
     iconBg: "bg-[#00AA45]",
     to: "/we"
   },
   {
     id: "wfd",
-    title: "WFD - Write From Dictation",
-    subtitle: "Accuracy drill",
-    description: "Listen carefully and type complete sentences.",
+    title: "WFD - 听写句子",
+    subtitle: "准确率训练",
+    description: "听清句子并完整拼写。",
     icon: "wfd",
     iconBg: "bg-[#F3054E]",
     to: "/wfd"
