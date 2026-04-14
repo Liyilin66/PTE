@@ -13,6 +13,8 @@
     "wfd:tts:test": "node scripts/test-google-tts.js",
     "wfd:tts:test:rest": "node scripts/test-google-tts-rest.js",
     "wfd:tts:generate": "node scripts/generate-wfd-tts.js",
+    "rts:tts": "node scripts/generate-rts-tts.mjs",
+    "rts:audio:pad": "node scripts/pad-rts-audio-leading-silence.mjs",
     "wfd:audio:upload": "node scripts/upload-wfd-audio-to-supabase.js",
     "wfd:questions:upsert": "node scripts/upsert-wfd-questions.js",
     "wfd:storage:scan": "node scripts/scan-supabase-storage-wfd.js",

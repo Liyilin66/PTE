@@ -21,6 +21,12 @@ const WE_AI_FALLBACK_IMPROVEMENTS = [
   "本次为降级结果，你的作文不一定存在内容不足问题。"
 ];
 const WE_AI_FALLBACK_FINAL_COMMENT = "AI评阅服务暂时不可用，本次已进入降级结果。你的作文不一定存在内容不足问题，请稍后重试。";
+const WE_CLIENT_DEGRADED_REVIEW_LABEL = "AI评阅（客户端降级）";
+const WE_CLIENT_DEGRADED_IMPROVEMENTS = [
+  "当前设备与评阅服务连接不稳定，建议稍后重试。",
+  "先根据结构、论据和语法自行修改，再次提交可获得更准确结果。"
+];
+const SCORE_API_DEV_FALLBACK_PORTS = [3000, 3001];
 
 const TASKS = [
   {
@@ -51,6 +57,15 @@ const TASKS = [
     to: "/rl"
   },
   {
+    id: "rts",
+    title: "RTS - Respond Situation",
+    subtitle: "Speak in context",
+    description: "Listen to a scenario and respond with the right tone.",
+    icon: "rts",
+    iconBg: "bg-[#1B3A6B]",
+    to: "/rts"
+  },
+  {
     id: "we",
     title: "WE - Write Essay",
     subtitle: "Structure first",
@@ -70,6 +85,26 @@ const TASKS = [
   }
 ];
 
+function createDefaultRTSSessionState() {
+  return {
+    phase: "listening",
+    questionId: "",
+    questionIndex: 1,
+    totalQuestions: 0,
+    prepareRemaining: 15,
+    prepareTotal: 15,
+    recordRemaining: 40,
+    recordTotal: 40,
+    listeningProgress: 0,
+    listeningStatus: "idle",
+    listeningLabel: "点击播放场景",
+    listeningRemaining: 0,
+    listeningTotal: 0,
+    selfRating: 0,
+    usedPhraseIds: []
+  };
+}
+
 export const usePracticeStore = defineStore("practice", {
   state: () => ({
     tasks: TASKS,
@@ -84,7 +119,9 @@ export const usePracticeStore = defineStore("practice", {
     result: null,
     wfdResult: null,
 
-    diRecentRecordings: []
+    diRecentRecordings: [],
+    rtsSession: createDefaultRTSSessionState(),
+    rtsRecentRecordings: []
   }),
 
   actions: {
@@ -177,6 +214,164 @@ export const usePracticeStore = defineStore("practice", {
       this.diRecentRecordings = [];
     },
 
+    initRTSSession(payload = {}) {
+      const next = payload && typeof payload === "object" ? payload : {};
+      const defaults = createDefaultRTSSessionState();
+      this.rtsSession = {
+        ...defaults,
+        ...this.rtsSession,
+        ...next,
+        usedPhraseIds: Array.isArray(next.usedPhraseIds)
+          ? [...new Set(next.usedPhraseIds.map((item) => `${item || ""}`.trim()).filter(Boolean))]
+          : Array.isArray(this.rtsSession?.usedPhraseIds)
+            ? [...new Set(this.rtsSession.usedPhraseIds.map((item) => `${item || ""}`.trim()).filter(Boolean))]
+            : []
+      };
+    },
+
+    resetRTSSession() {
+      this.rtsSession = createDefaultRTSSessionState();
+    },
+
+    setRTSPhase(phase) {
+      this.rtsSession = {
+        ...this.rtsSession,
+        phase: `${phase || "listening"}`.trim() || "listening"
+      };
+    },
+
+    setRTSQuestionMeta(payload = {}) {
+      const next = payload && typeof payload === "object" ? payload : {};
+      const nextQuestionIndex = Math.max(1, Math.round(Number(next.questionIndex || this.rtsSession.questionIndex || 1)));
+      const nextTotalQuestions = Math.max(0, Math.round(Number(next.totalQuestions || this.rtsSession.totalQuestions || 0)));
+      this.rtsSession = {
+        ...this.rtsSession,
+        questionId: `${next.questionId || this.rtsSession.questionId || ""}`.trim(),
+        questionIndex: nextQuestionIndex,
+        totalQuestions: nextTotalQuestions
+      };
+    },
+
+    setRTSPrepareTimer(remaining, total = this.rtsSession.prepareTotal || 15) {
+      const normalizedTotal = Math.max(0, Math.round(Number(total || 0)));
+      const normalizedRemaining = Math.max(0, Math.round(Number(remaining || 0)));
+      this.rtsSession = {
+        ...this.rtsSession,
+        prepareRemaining: normalizedRemaining,
+        prepareTotal: normalizedTotal || this.rtsSession.prepareTotal || 15
+      };
+    },
+
+    setRTSRecordTimer(remaining, total = this.rtsSession.recordTotal || 40) {
+      const normalizedTotal = Math.max(0, Math.round(Number(total || 0)));
+      const normalizedRemaining = Math.max(0, Math.round(Number(remaining || 0)));
+      this.rtsSession = {
+        ...this.rtsSession,
+        recordRemaining: normalizedRemaining,
+        recordTotal: normalizedTotal || this.rtsSession.recordTotal || 40
+      };
+    },
+
+    setRTSListeningStatus(payload = {}) {
+      const next = payload && typeof payload === "object" ? payload : {};
+      const progressRaw = Number(next.progress);
+      const progress = Number.isFinite(progressRaw) ? Math.max(0, Math.min(100, Math.round(progressRaw))) : this.rtsSession.listeningProgress;
+      const remainingRaw = Number(next.remaining);
+      const totalRaw = Number(next.total);
+      const listeningRemaining = Number.isFinite(remainingRaw)
+        ? Math.max(0, Math.round(remainingRaw))
+        : this.rtsSession.listeningRemaining;
+      const listeningTotal = Number.isFinite(totalRaw)
+        ? Math.max(0, Math.round(totalRaw))
+        : this.rtsSession.listeningTotal;
+
+      this.rtsSession = {
+        ...this.rtsSession,
+        listeningProgress: progress,
+        listeningStatus: `${next.status || this.rtsSession.listeningStatus || "idle"}`.trim() || "idle",
+        listeningLabel: `${next.label || this.rtsSession.listeningLabel || "点击播放场景"}`.trim() || "点击播放场景",
+        listeningRemaining,
+        listeningTotal
+      };
+    },
+
+    setRTSSelfRating(rating) {
+      const normalized = Math.max(0, Math.min(5, Math.round(Number(rating || 0))));
+      this.rtsSession = {
+        ...this.rtsSession,
+        selfRating: normalized
+      };
+    },
+
+    toggleRTSUsedPhrase(phraseId) {
+      const normalizedId = `${phraseId || ""}`.trim();
+      if (!normalizedId) return;
+
+      const current = Array.isArray(this.rtsSession?.usedPhraseIds) ? this.rtsSession.usedPhraseIds : [];
+      const has = current.includes(normalizedId);
+      const next = has ? current.filter((item) => item !== normalizedId) : [...current, normalizedId];
+      this.rtsSession = {
+        ...this.rtsSession,
+        usedPhraseIds: next
+      };
+    },
+
+    clearRTSUsedPhrases() {
+      this.rtsSession = {
+        ...this.rtsSession,
+        usedPhraseIds: []
+      };
+    },
+
+    pushRTSRecentRecording(record) {
+      const nextRecord = record && typeof record === "object" ? record : null;
+      if (!nextRecord) return;
+
+      const normalizedId = `${nextRecord.id || ""}`.trim() || `rts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const normalized = {
+        id: normalizedId,
+        questionId: `${nextRecord.questionId || ""}`.trim(),
+        blobUrl: `${nextRecord.blobUrl || ""}`.trim(),
+        durationSec: Math.max(0, Number(nextRecord.durationSec || 0)),
+        rating: Math.max(0, Math.min(5, Math.round(Number(nextRecord.rating || 0)))),
+        createdAt: `${nextRecord.createdAt || new Date().toISOString()}`
+      };
+
+      const deduped = this.rtsRecentRecordings.filter((item) => `${item?.id || ""}`.trim() !== normalizedId);
+      const merged = [normalized, ...deduped];
+      const kept = merged.slice(0, 20);
+      const dropped = merged.slice(20);
+
+      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        dropped.forEach((item) => {
+          const url = `${item?.blobUrl || ""}`.trim();
+          if (!url) return;
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // no-op
+          }
+        });
+      }
+
+      this.rtsRecentRecordings = kept;
+    },
+
+    clearRTSRecentRecordings() {
+      if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+        this.rtsRecentRecordings.forEach((item) => {
+          const url = `${item?.blobUrl || ""}`.trim();
+          if (!url) return;
+          try {
+            URL.revokeObjectURL(url);
+          } catch {
+            // no-op
+          }
+        });
+      }
+      this.rtsRecentRecordings = [];
+    },
+
     resetResult() {
       this.result = null;
       this.wfdResult = null;
@@ -246,38 +441,28 @@ export const usePracticeStore = defineStore("practice", {
       }
 
       try {
-        const scoreAbortController = typeof AbortController !== "undefined" ? new AbortController() : null;
-        const timeoutId = scoreAbortController
-          ? setTimeout(() => {
-              scoreAbortController.abort();
-            }, SCORE_API_TIMEOUT_MS)
-          : null;
+        const scoreApiRequestPayload = {
+          taskType,
+          transcript: submittedTranscript,
+          questionContent: this.questionContent,
+          question_id: normalizedQuestionId,
+          request_id: clientRequestId
+        };
 
-        let response;
-        try {
-          response = await fetch(scoreApiUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-              "x-request-id": clientRequestId
-            },
-            body: JSON.stringify({
-              taskType,
-              transcript: submittedTranscript,
-              questionContent: this.questionContent,
-              question_id: normalizedQuestionId,
-              request_id: clientRequestId
-            }),
-            signal: scoreAbortController?.signal
-          });
-        } finally {
-          if (timeoutId) clearTimeout(timeoutId);
-        }
+        const scoreApiAttempt = await fetchScoreApiWithCandidateUrls({
+          primaryUrl: scoreApiUrl,
+          taskType: normalizedTaskType,
+          token,
+          requestId: clientRequestId,
+          payload: scoreApiRequestPayload,
+          timeoutMs: SCORE_API_TIMEOUT_MS
+        });
+        const response = scoreApiAttempt.response;
+        const usedScoreApiUrl = scoreApiAttempt.usedUrl || scoreApiUrl;
 
         scoreApiStatus = Number(response?.status || 0);
         const scoreApiMs = getElapsedMs(scoreApiStartedAt);
-        const responsePayload = await safeReadResponse(response);
+        const responsePayload = scoreApiAttempt.responsePayload || await safeReadResponse(response);
         const data = responsePayload.data;
         const responseRequestId = resolveResponseRequestId({
           responseData: data,
@@ -294,7 +479,8 @@ export const usePracticeStore = defineStore("practice", {
           scoreApiMs,
           scoreErrorCode: "",
           status: scoreApiStatus,
-          request_id: responseRequestId
+          request_id: responseRequestId,
+          scoreApiUrl: usedScoreApiUrl
         });
 
         if (
@@ -459,18 +645,64 @@ export const usePracticeStore = defineStore("practice", {
         });
 
         if (normalizedTaskType === "WE") {
-          this.result = null;
-          this.phase = "idle";
-          return buildWESubmitErrorResult({
-            error: "score_request_failed",
+          const isAuthFailure = scoreErrorCode === "AUTH_SESSION_MISSING" || scoreErrorCode === "AUTH_SESSION_EXPIRED";
+          if (isAuthFailure) {
+            this.result = null;
+            this.phase = "idle";
+            return buildWESubmitErrorResult({
+              error: "score_request_failed",
+              scoreErrorCode,
+              scoreApiMs,
+              status: diagnostics.status,
+              requestId: diagnostics.request_id || clientRequestId,
+              submitSeq,
+              submissionDebug,
+              diagnostics
+            });
+          }
+
+          const degradedResult = buildWEClientDegradedResult({
             scoreErrorCode,
+            diagnostics,
             scoreApiMs,
-            status: diagnostics.status,
-            requestId: diagnostics.request_id || clientRequestId,
-            submitSeq,
             submissionDebug,
-            diagnostics
+            submitSeq
           });
+          this.result = degradedResult;
+          this.phase = "done";
+
+          if (session?.user?.id) {
+            const currentUserId = session.user.id;
+            const currentTranscript = this.transcript;
+            const currentQuestionContent = this.questionContent;
+            const currentResult = this.result;
+
+            void (async () => {
+              const payload = {
+                user_id: currentUserId,
+                task_type: normalizedTaskType,
+                question_id: normalizedQuestionId,
+                transcript: currentTranscript,
+                score_json: buildPracticeLogScoreJson({
+                  taskType: normalizedTaskType,
+                  result: currentResult,
+                  questionId: normalizedQuestionId,
+                  questionContent: currentQuestionContent,
+                  audioMeta: null
+                }),
+                feedback: currentResult?.feedback || ""
+              };
+              const { error: insertError } = await supabase.from("practice_logs").insert(payload);
+              if (insertError) {
+                console.warn("WE degraded practice_logs insert error:", insertError, {
+                  taskType: normalizedTaskType,
+                  questionId: normalizedQuestionId
+                });
+              }
+            })();
+          }
+
+          return this.result;
         }
 
         this.result = {
@@ -1051,6 +1283,215 @@ function buildWESubmitErrorResult({
   };
 }
 
+function buildWEClientDegradedResult({
+  scoreErrorCode = "",
+  diagnostics = {},
+  scoreApiMs = 0,
+  submissionDebug,
+  submitSeq = 0
+} = {}) {
+  const normalizedDiagnostics = normalizeScoreApiDiagnostics(diagnostics, {
+    scoreErrorCode
+  });
+  const submittedWordCount = Number(submissionDebug?.submitted_word_count || 0);
+  const hasEnoughWords = submittedWordCount >= 120;
+  const hasVeryLongEssay = submittedWordCount >= 260;
+  const contentScore = hasEnoughWords ? 4 : submittedWordCount >= 80 ? 3 : 2;
+  const formScore = hasVeryLongEssay ? 1 : 2;
+  const coarseRawTotal = Math.max(0, Math.min(26, contentScore + formScore + 8));
+  const coarseOverall = Math.round((coarseRawTotal / WE_RAW_MAX) * 90);
+  const shortCode = normalizeOptionalText(normalizedDiagnostics.score_error_code);
+  const fallbackCode = shortCode || "SCORE_API_FAILED";
+  const fallbackReason = shortCode || "score_api_unreachable";
+
+  return {
+    error: "score_request_failed",
+    taskType: "WE",
+    status: WE_STATUS_AI_DEGRADED,
+    is_ai_review_degraded: true,
+    is_estimated: true,
+    review_label: WE_CLIENT_DEGRADED_REVIEW_LABEL,
+    raw_total: coarseRawTotal,
+    raw_max: WE_RAW_MAX,
+    overall_estimated: coarseOverall,
+    traits: {
+      content: { score: contentScore, max: 6 },
+      form: { score: formScore, max: 2 },
+      development_structure_coherence: null,
+      grammar: null,
+      general_linguistic_range: null,
+      vocabulary_range: null,
+      spelling: null
+    },
+    gate: {
+      triggered: true,
+      reason_codes: [WE_AI_FALLBACK_REASON_CODE]
+    },
+    provider_used: "client_fallback",
+    fallback_reason: fallbackReason,
+    error_stage: "client_fallback",
+    raw_error_type: fallbackReason,
+    visible_summary: {
+      level: WE_AI_FALLBACK_LEVEL,
+      strengths: submittedWordCount >= 180 ? ["你的内容长度和结构基础较好。"] : [],
+      improvements: [...WE_CLIENT_DEGRADED_IMPROVEMENTS],
+      final_comment: WE_AI_FALLBACK_FINAL_COMMENT
+    },
+    feedback: WE_AI_FALLBACK_FINAL_COMMENT,
+    gate_reason_messages_zh: [mapGateReasonCodeToZh(WE_AI_FALLBACK_REASON_CODE)],
+    submitted_word_count: submittedWordCount,
+    submitted_excerpt: `${submissionDebug?.submitted_excerpt || ""}`.trim(),
+    submitted_text_hash: `${submissionDebug?.submitted_text_hash || ""}`.trim(),
+    reviewed_at: new Date().toISOString(),
+    meta: {
+      scoreApiMs: Math.max(0, Math.round(Number(scoreApiMs || 0))),
+      scoreErrorCode: fallbackCode,
+      status: normalizedDiagnostics.status,
+      statusText: normalizedDiagnostics.statusText,
+      contentType: normalizedDiagnostics.contentType,
+      request_id: normalizedDiagnostics.request_id,
+      submit_seq: Number(submitSeq || 0),
+      failure_type: normalizedDiagnostics.failure_type,
+      is_http_error: normalizedDiagnostics.is_http_error,
+      is_fetch_failed: normalizedDiagnostics.is_fetch_failed,
+      backend_error: normalizedDiagnostics.backend_error,
+      backend_code: normalizedDiagnostics.backend_code,
+      backend_meta: normalizedDiagnostics.backend_meta,
+      fallback_active: true,
+      fallback_reason_code: fallbackCode
+    }
+  };
+}
+
+async function fetchScoreApiWithCandidateUrls({
+  primaryUrl,
+  taskType,
+  token,
+  requestId,
+  payload,
+  timeoutMs = SCORE_API_TIMEOUT_MS
+} = {}) {
+  const candidates = buildScoreApiCandidateUrls(primaryUrl, taskType);
+  let lastError = null;
+
+  for (const candidateUrl of candidates) {
+    const scoreAbortController = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId = scoreAbortController
+      ? setTimeout(() => {
+          scoreAbortController.abort();
+        }, timeoutMs)
+      : null;
+
+    try {
+      const response = await fetch(candidateUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "x-request-id": requestId
+        },
+        body: JSON.stringify(payload || {}),
+        signal: scoreAbortController?.signal
+      });
+      const responsePayload = await safeReadResponse(response);
+      if (shouldTryNextScoreApiCandidateByResponse(response, responsePayload, taskType)) {
+        lastError = createScoreApiCandidateError({
+          status: Number(response?.status || 0),
+          responsePayload,
+          candidateUrl
+        });
+        continue;
+      }
+
+      return {
+        response,
+        responsePayload,
+        usedUrl: candidateUrl
+      };
+    } catch (error) {
+      lastError = error;
+      if (!shouldTryNextScoreApiCandidateByError(error, taskType)) {
+        throw error;
+      }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  if (lastError) throw lastError;
+  throw new Error("Score API request failed without candidate attempt.");
+}
+
+function buildScoreApiCandidateUrls(primaryUrl, taskType) {
+  const candidates = [];
+  const addCandidate = (value) => {
+    const normalized = `${value || ""}`.trim();
+    if (!normalized) return;
+    const key = normalizeUrlKey(normalized);
+    if (!key) return;
+    if (candidates.some((item) => item.key === key)) return;
+    candidates.push({ key, url: normalized });
+  };
+
+  addCandidate(primaryUrl);
+
+  const normalizedTaskType = normalizeTaskType(taskType);
+  if (normalizedTaskType === "WE" && isRuntimeLocalOrigin()) {
+    addCandidate("/api/score");
+
+    const devTarget = normalizeAbsoluteHttpUrl(import.meta.env?.VITE_DEV_API_TARGET);
+    if (devTarget) addCandidate(`${trimTrailingSlash(devTarget)}/api/score`);
+
+    const apiBase = normalizeAbsoluteHttpUrl(import.meta.env?.VITE_API_BASE);
+    if (apiBase) addCandidate(`${trimTrailingSlash(apiBase)}/api/score`);
+
+    SCORE_API_DEV_FALLBACK_PORTS.forEach((port) => {
+      addCandidate(`http://localhost:${port}/api/score`);
+    });
+  }
+
+  return candidates.map((item) => item.url);
+}
+
+function shouldTryNextScoreApiCandidateByResponse(response, responsePayload, taskType) {
+  if (normalizeTaskType(taskType) !== "WE") return false;
+  if (response?.ok) return false;
+
+  const status = Number(response?.status || 0);
+  if (status === 404) return true;
+  if (status >= 502 && status <= 504) return true;
+  if (Boolean(responsePayload?.isHtml)) return true;
+  return false;
+}
+
+function shouldTryNextScoreApiCandidateByError(error, taskType) {
+  if (normalizeTaskType(taskType) !== "WE") return false;
+  const name = `${error?.name || ""}`.toLowerCase();
+  const code = `${error?.code || ""}`.toLowerCase();
+  const message = `${error?.message || ""}`.toLowerCase();
+
+  if (name === "aborterror") return true;
+  if (code.includes("econn") || code.includes("timedout")) return true;
+  if (message.includes("fetch failed") || message.includes("network")) return true;
+  return false;
+}
+
+function createScoreApiCandidateError({ status, responsePayload, candidateUrl } = {}) {
+  const error = new Error(`Score API candidate failed: ${candidateUrl} (${status || 0})`);
+  error.code = getScoreApiErrorCode({
+    status: Number(status || 0),
+    isHtml: Boolean(responsePayload?.isHtml)
+  });
+  error.diagnostics = {
+    status: Number(status || 0),
+    score_error_code: error.code,
+    failure_type: "http_error",
+    response_body_snippet: `${responsePayload?.rawText || ""}`.trim().slice(0, 240),
+    is_html: Boolean(responsePayload?.isHtml)
+  };
+  return error;
+}
+
 function resolveResponseRequestId({ responseData, clientRequestId } = {}) {
   const responseRequestId = `${responseData?.request_id || ""}`.trim();
   if (responseRequestId) return responseRequestId;
@@ -1157,6 +1598,38 @@ function normalizeOptionalText(value) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function trimTrailingSlash(value) {
+  return `${value || ""}`.replace(/\/+$/, "");
+}
+
+function normalizeAbsoluteHttpUrl(value) {
+  const normalized = `${value || ""}`.trim();
+  if (!/^https?:\/\//i.test(normalized)) return "";
+  return normalized;
+}
+
+function isRuntimeLocalOrigin() {
+  if (typeof window === "undefined" || !window.location?.hostname) return false;
+  const host = `${window.location.hostname || ""}`.trim().toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+}
+
+function normalizeUrlKey(url) {
+  const normalized = `${url || ""}`.trim();
+  if (!normalized) return "";
+
+  if (normalized.startsWith("/")) {
+    return `relative:${normalized}`;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.toLowerCase();
+  } catch {
+    return normalized.toLowerCase();
+  }
 }
 
 function buildSubmissionDebugInfo(transcript) {

@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
-import PracticeCard from "@/components/PracticeCard.vue";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { supabase } from "@/lib/supabase";
@@ -18,11 +17,27 @@ const { tasks } = storeToRefs(practiceStore);
 const raTask = computed(() => tasks.value.find((item) => item.id === "ra") || null);
 const weTask = computed(() => tasks.value.find((item) => item.id === "we") || null);
 const wfdTask = computed(() => tasks.value.find((item) => item.id === "wfd") || null);
-const otherTasks = computed(() => tasks.value.filter((item) => item.id !== "ra" && item.id !== "we" && item.id !== "wfd"));
+const rtsTask = computed(() => tasks.value.find((item) => item.id === "rts") || null);
+const otherTaskOrder = {
+  rs: 0,
+  rl: 1
+};
+const otherTasks = computed(() =>
+  tasks.value
+    .filter((item) => item.id !== "ra" && item.id !== "we" && item.id !== "wfd" && item.id !== "rts")
+    .sort((a, b) => {
+      const aOrder = Number.isFinite(otherTaskOrder[a.id]) ? otherTaskOrder[a.id] : 99;
+      const bOrder = Number.isFinite(otherTaskOrder[b.id]) ? otherTaskOrder[b.id] : 99;
+      return aOrder - bOrder;
+    })
+);
 const diEnabled = computed(() => isDIEnabled());
 const showDIFavorites = ref(false);
 const diFavoriteQuestionIds = ref([]);
 const loadingDIFavorites = ref(false);
+const rtsFavoriteQuestionIds = ref([]);
+const loadingRTSFavorites = ref(false);
+const rtsFavoriteCount = computed(() => rtsFavoriteQuestionIds.value.length);
 const diQuestionCatalog = getDIQuestionCatalog();
 const diQuestionMap = new Map(diQuestionCatalog.map((item) => [item.id, item]));
 const diFavoriteQuestions = computed(() =>
@@ -35,12 +50,38 @@ const diFavoriteQuestions = computed(() =>
     .filter(Boolean)
 );
 
-function favoriteLocalStorageKey(userId) {
-  return `kai_kou_di_favorites_${userId}`;
+const buttonBaseClass =
+  "w-full cursor-pointer rounded-[10px] py-3 text-sm font-medium transition-colors duration-150 focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#1B3A6B]";
+const buttonPrimaryClass = `${buttonBaseClass} border-0 bg-[#1B3A6B] text-white hover:bg-[#16326A]`;
+const buttonSecondaryClass = `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-white text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
+const buttonTertiaryClass = `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-white text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
+const buttonFeatureTertiaryClass = `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-[#EBF0FA] text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
+const buttonTertiaryHighlightClass =
+  `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-white text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
+
+const otherTaskSelectPathMap = {
+  rs: "/rs",
+  rl: "/rl"
+};
+
+const otherTaskTertiaryMap = {
+  rs: {
+    label: "句型强化",
+    to: "/rs"
+  },
+  rl: {
+    label: "结构模板",
+    to: "/rl"
+  }
+};
+
+function favoriteLocalStorageKey(userId, taskType = "DI") {
+  const normalizedTaskType = `${taskType || "DI"}`.trim().toLowerCase();
+  return `kai_kou_${normalizedTaskType}_favorites_${userId}`;
 }
 
-function readLocalFavorites(userId) {
-  const key = favoriteLocalStorageKey(userId);
+function readLocalFavorites(userId, taskType = "DI") {
+  const key = favoriteLocalStorageKey(userId, taskType);
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return [];
@@ -52,8 +93,8 @@ function readLocalFavorites(userId) {
   }
 }
 
-function writeLocalFavorites(userId, ids) {
-  const key = favoriteLocalStorageKey(userId);
+function writeLocalFavorites(userId, ids, taskType = "DI") {
+  const key = favoriteLocalStorageKey(userId, taskType);
   try {
     localStorage.setItem(key, JSON.stringify([...ids]));
   } catch {
@@ -89,7 +130,7 @@ async function loadDIFavorites() {
       return;
     }
 
-    const localFavorites = readLocalFavorites(userId);
+    const localFavorites = readLocalFavorites(userId, "DI");
     let orderedIds = [...localFavorites];
 
     try {
@@ -108,7 +149,7 @@ async function loadDIFavorites() {
           .filter(Boolean);
         const merged = [...remoteIds, ...localFavorites];
         orderedIds = [...new Set(merged)];
-        writeLocalFavorites(userId, orderedIds);
+        writeLocalFavorites(userId, orderedIds, "DI");
       }
     } catch {
       // keep local fallback
@@ -120,8 +161,69 @@ async function loadDIFavorites() {
   }
 }
 
+async function loadRTSFavorites() {
+  if (!rtsTask.value) {
+    rtsFavoriteQuestionIds.value = [];
+    return;
+  }
+
+  loadingRTSFavorites.value = true;
+  try {
+    const userId = await resolveCurrentUserId();
+    if (!userId) {
+      rtsFavoriteQuestionIds.value = [];
+      return;
+    }
+
+    const localFavorites = readLocalFavorites(userId, "RTS");
+    let orderedIds = [...localFavorites];
+
+    try {
+      const { data, error } = await supabase
+        .from("favorites")
+        .select("question_id, created_at")
+        .eq("user_id", userId)
+        .eq("task_type", "RTS")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        if (!isMissingFavoritesTableError(error)) throw error;
+      } else {
+        const remoteIds = (Array.isArray(data) ? data : [])
+          .map((item) => `${item?.question_id || ""}`.trim())
+          .filter(Boolean);
+        const merged = [...remoteIds, ...localFavorites];
+        orderedIds = [...new Set(merged)];
+        writeLocalFavorites(userId, orderedIds, "RTS");
+      }
+    } catch {
+      // keep local fallback
+    }
+
+    rtsFavoriteQuestionIds.value = orderedIds;
+  } finally {
+    loadingRTSFavorites.value = false;
+  }
+}
+
 function startDIRandomPractice() {
   router.push("/di");
+}
+
+function startRTSRandomPractice() {
+  router.push("/rts/practice");
+}
+
+function openRTSSelectPractice() {
+  router.push("/rts/list");
+}
+
+function openRTSTemplateLibrary() {
+  router.push("/rts/templates");
+}
+
+function openRTSFavorites() {
+  router.push("/rts/favorites");
 }
 
 function openDIFavoriteQuestion(questionId) {
@@ -133,8 +235,34 @@ function openDIFavoriteQuestion(questionId) {
   });
 }
 
+function openOtherTaskRandom(task) {
+  const to = `${task?.to || ""}`.trim();
+  if (!to) return;
+  router.push(to);
+}
+
+function openOtherTaskSelect(task) {
+  const taskId = `${task?.id || ""}`.trim();
+  const to = `${otherTaskSelectPathMap[taskId] || task?.to || ""}`.trim();
+  if (!to) return;
+  router.push(to);
+}
+
+function otherTaskTertiaryLabel(task) {
+  const taskId = `${task?.id || ""}`.trim();
+  return otherTaskTertiaryMap[taskId]?.label || "";
+}
+
+function openOtherTaskTertiary(task) {
+  const taskId = `${task?.id || ""}`.trim();
+  const to = `${otherTaskTertiaryMap[taskId]?.to || task?.to || ""}`.trim();
+  if (!to) return;
+  router.push(to);
+}
+
 onMounted(() => {
   void loadDIFavorites();
+  void loadRTSFavorites();
 });
 </script>
 
@@ -186,17 +314,17 @@ onMounted(() => {
               <span class="text-sm font-medium text-orange">Read Aloud</span>
             </div>
 
-            <div class="flex gap-2">
+            <div class="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                :class="buttonPrimaryClass"
                 @click="router.push('/ra')"
               >
                 随机练习
               </button>
               <button
                 type="button"
-                class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                :class="buttonSecondaryClass"
                 @click="router.push('/ra/list')"
               >
                 选题练习
@@ -228,17 +356,17 @@ onMounted(() => {
             </div>
 
             <div class="mt-1 flex flex-col gap-2">
-              <div class="flex gap-2">
+              <div class="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  :class="buttonPrimaryClass"
                   @click="router.push('/wfd')"
                 >
                   随机练习
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  :class="buttonSecondaryClass"
                   @click="router.push('/wfd/list')"
                 >
                   选题练习
@@ -246,10 +374,17 @@ onMounted(() => {
               </div>
               <button
                 type="button"
-                class="w-full rounded-lg bg-navy py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                :class="buttonFeatureTertiaryClass"
                 @click="router.push('/wfd/listen')"
               >
-                🎧 磨耳朵模式
+                <span class="inline-flex items-center justify-center gap-1.5">
+                  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
+                    <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
+                    <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span>磨耳朵模式</span>
+                </span>
               </button>
             </div>
           </div>
@@ -274,38 +409,94 @@ onMounted(() => {
 
           <div class="px-4 pb-4">
             <div class="flex flex-col gap-2">
-              <div class="flex gap-2">
+              <div class="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                  :class="buttonPrimaryClass"
                   @click="router.push('/we')"
                 >
                   随机练习
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  :class="buttonSecondaryClass"
                   @click="router.push('/we/select')"
                 >
                   选题练习
                 </button>
               </div>
-              <div class="flex gap-2">
+              <div class="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  :class="buttonTertiaryClass"
                   @click="router.push('/we/templates')"
                 >
                   看模板
                 </button>
                 <button
                   type="button"
-                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
+                  :class="buttonTertiaryClass"
                   @click="router.push('/we/opinions')"
                 >
                   观点句
                 </button>
               </div>
+            </div>
+          </div>
+        </article>
+
+        <article v-if="rtsTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
+          <div class="flex items-center gap-4 p-4">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#1B3A6B] text-white">
+              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 5h14v9H9l-4 4z" />
+                <path d="M12 9h4" />
+                <path d="M8 12h8" />
+              </svg>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <h3 class="text-base font-bold text-[#1A1A2E]">{{ rtsTask.title }}</h3>
+              <p class="text-sm font-medium text-orange">{{ rtsTask.subtitle }}</p>
+              <p class="mt-1 text-sm text-[#6B7280]">{{ rtsTask.description }}</p>
+            </div>
+          </div>
+
+          <div class="px-4 pb-4">
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                :class="buttonPrimaryClass"
+                @click="startRTSRandomPractice"
+              >
+                随机练习
+              </button>
+              <button
+                type="button"
+                :class="buttonSecondaryClass"
+                @click="openRTSSelectPractice"
+              >
+                选题练习
+              </button>
+              <button
+                type="button"
+                :class="buttonFeatureTertiaryClass"
+                @click="openRTSTemplateLibrary"
+              >
+                模版库
+              </button>
+              <button
+                type="button"
+                :class="buttonTertiaryHighlightClass"
+                @click="openRTSFavorites"
+              >
+                <span class="inline-flex items-center justify-center gap-1.5">
+                  <span>RTS 收藏</span>
+                  <span class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#E8845A] px-1.5 py-[1px] text-[11px] font-medium leading-4 text-white">
+                    {{ rtsFavoriteCount }}
+                  </span>
+                </span>
+              </button>
             </div>
           </div>
         </article>
@@ -334,38 +525,39 @@ onMounted(() => {
               <span class="rounded bg-orange/10 px-2 py-0.5 text-orange">提示降级</span>
             </div>
 
-            <div class="flex flex-col gap-2">
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="flex-1 rounded-lg bg-orange py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                  @click="startDIRandomPractice"
-                >
-                  随机练习
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
-                  @click="router.push('/di/select')"
-                >
-                  选题练习
-                </button>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="w-full rounded-lg border border-orange py-2 text-sm font-semibold text-orange transition-colors hover:bg-orange/5"
-                  @click="router.push('/di/templates')"
-                >
-                  模板库
-                </button>
-              </div>
+            <div class="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                class="w-full rounded-lg bg-navy py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                :class="buttonPrimaryClass"
+                @click="startDIRandomPractice"
+              >
+                随机练习
+              </button>
+              <button
+                type="button"
+                :class="buttonSecondaryClass"
+                @click="router.push('/di/select')"
+              >
+                选题练习
+              </button>
+              <button
+                type="button"
+                :class="buttonFeatureTertiaryClass"
+                @click="router.push('/di/templates')"
+              >
+                模板库
+              </button>
+              <button
+                type="button"
+                :class="buttonTertiaryHighlightClass"
                 @click="showDIFavorites = !showDIFavorites"
               >
-                {{ showDIFavorites ? "收起收藏" : `DI 收藏（${diFavoriteQuestions.length}）` }}
+                <span class="inline-flex items-center justify-center gap-1.5">
+                  <span>{{ showDIFavorites ? "收起收藏" : "DI 收藏" }}</span>
+                  <span class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#E8845A] px-1.5 py-[1px] text-[11px] font-medium leading-4 text-white">
+                    {{ diFavoriteQuestions.length }}
+                  </span>
+                </span>
               </button>
             </div>
 
@@ -393,7 +585,49 @@ onMounted(() => {
           </div>
         </article>
 
-        <PracticeCard v-for="task in otherTasks" :key="task.id" :task="task" />
+        <article v-for="task in otherTasks" :key="task.id" class="overflow-hidden rounded-xl border bg-card shadow-card">
+          <div class="flex items-center gap-4 p-4">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white" :class="task.iconBg">
+              <svg v-if="task.icon === 'ra'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2.1">
+                <path d="M12 1v11" />
+                <path d="M8 6v5a4 4 0 0 0 8 0V6" />
+                <path d="M5 11a7 7 0 0 0 14 0" />
+                <path d="M12 18v5" />
+              </svg>
+              <svg v-else-if="task.icon === 'rs'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 6h14v9H9l-4 4z" />
+              </svg>
+              <svg v-else-if="task.icon === 'rl'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 9a6 6 0 0 1 6-6v12a6 6 0 0 1-6-6z" />
+                <path d="M13 8a4 4 0 0 1 0 8" />
+                <path d="M17 6a7 7 0 0 1 0 12" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
+                <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
+                <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <h3 class="text-base font-bold text-[#1A1A2E]">{{ task.title }}</h3>
+              <p class="text-sm font-medium text-orange">{{ task.subtitle }}</p>
+              <p class="mt-1 text-sm text-[#6B7280]">{{ task.description }}</p>
+            </div>
+          </div>
+
+          <div class="px-4 pb-4">
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" :class="buttonPrimaryClass" @click="openOtherTaskRandom(task)">随机练习</button>
+              <button type="button" :class="buttonSecondaryClass" @click="openOtherTaskSelect(task)">选题练习</button>
+            </div>
+            <div v-if="otherTaskTertiaryLabel(task)" class="mt-2">
+              <button type="button" :class="buttonTertiaryClass" @click="openOtherTaskTertiary(task)">
+                {{ otherTaskTertiaryLabel(task) }}
+              </button>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section class="rounded-xl border bg-navy p-6 text-white shadow-card">

@@ -74,6 +74,7 @@ const DI_COLOR_WORDS = [
   "白",
   "灰"
 ];
+const HISTORY_END_SNAP_SECONDS = 0.25;
 
 const loadingQuestions = ref(true);
 const loadingStats = ref(false);
@@ -96,6 +97,9 @@ const latestSavedAt = ref("");
 const playbackTimeSec = ref(0);
 const playbackDurationSec = ref(0);
 const historyAudioRefs = reactive({});
+const historyPlaybackTimes = reactive({});
+const historyPlaybackDurations = reactive({});
+const historyPlayingId = ref("");
 const summaryStats = ref({
   practicedCount: 0,
   totalMinutes: 0,
@@ -857,22 +861,161 @@ function onPlaybackLoadedMetadata(event) {
 function bindHistoryAudioRef(recordId, element) {
   const id = `${recordId || ""}`.trim();
   if (!id) return;
-  if (element) historyAudioRefs[id] = element;
-  else delete historyAudioRefs[id];
+  if (element) {
+    historyAudioRefs[id] = element;
+    if (!historyPlaybackTimes[id]) historyPlaybackTimes[id] = 0;
+  } else {
+    delete historyAudioRefs[id];
+    delete historyPlaybackTimes[id];
+    delete historyPlaybackDurations[id];
+    if (historyPlayingId.value === id) historyPlayingId.value = "";
+  }
+}
+
+function pauseAllHistoryAudio(exceptId = "") {
+  const keepId = `${exceptId || ""}`.trim();
+  Object.entries(historyAudioRefs).forEach(([id, audio]) => {
+    if (!(audio instanceof HTMLAudioElement)) return;
+    if (id === keepId) return;
+    audio.pause();
+  });
+}
+
+function getHistoryCurrentTime(recordId) {
+  const id = `${recordId || ""}`.trim();
+  const time = Number(historyPlaybackTimes[id] || 0);
+  return Number.isFinite(time) && time >= 0 ? time : 0;
+}
+
+function getHistoryDuration(record) {
+  const id = `${record?.id || ""}`.trim();
+  const fromMeta = Number(historyPlaybackDurations[id] || 0);
+  if (Number.isFinite(fromMeta) && fromMeta > 0) return fromMeta;
+  const fallback = Number(record?.durationSec || 0);
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+}
+
+function getHistoryProgressPercent(record) {
+  const duration = getHistoryDuration(record);
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  const current = getHistoryCurrentTimeForRecord(record);
+  const ratio = current / duration;
+  return Math.max(0, Math.min(100, ratio * 100));
+}
+
+function getHistoryCurrentTimeForRecord(record) {
+  const duration = getHistoryDuration(record);
+  const current = getHistoryCurrentTime(record?.id);
+  if (!Number.isFinite(duration) || duration <= 0) return current;
+  if (duration - current <= HISTORY_END_SNAP_SECONDS) return duration;
+  return Math.max(0, Math.min(current, duration));
+}
+
+function getRecordRating(record) {
+  const rating = Number(record?.rating || 0);
+  if (!Number.isFinite(rating)) return 0;
+  return Math.max(0, Math.min(5, Math.round(rating)));
+}
+
+function onHistoryLoadedMetadata(recordId, event) {
+  const id = `${recordId || ""}`.trim();
+  if (!id) return;
+  const audio = event?.target;
+  if (!(audio instanceof HTMLAudioElement)) return;
+  const duration = Number(audio.duration || 0);
+  if (Number.isFinite(duration) && duration > 0) {
+    historyPlaybackDurations[id] = duration;
+  }
+}
+
+function onHistoryTimeUpdate(recordId, event) {
+  const id = `${recordId || ""}`.trim();
+  if (!id) return;
+  const audio = event?.target;
+  if (!(audio instanceof HTMLAudioElement)) return;
+  historyPlaybackTimes[id] = Math.max(0, Number(audio.currentTime || 0));
+}
+
+function onHistoryPlay(recordId) {
+  const id = `${recordId || ""}`.trim();
+  if (!id) return;
+  pauseAllHistoryAudio(id);
+  historyPlayingId.value = id;
+}
+
+function onHistoryPause(recordId, event) {
+  const id = `${recordId || ""}`.trim();
+  if (!id) return;
+  const audio = event?.target;
+  if (audio instanceof HTMLAudioElement) {
+    const duration = Number(audio.duration || historyPlaybackDurations[id] || 0);
+    const current = Number(audio.currentTime || historyPlaybackTimes[id] || 0);
+    if (Number.isFinite(duration) && duration > 0) {
+      historyPlaybackDurations[id] = duration;
+      historyPlaybackTimes[id] = duration - current <= HISTORY_END_SNAP_SECONDS ? duration : Math.max(0, current);
+    }
+  }
+  if (historyPlayingId.value === id) {
+    historyPlayingId.value = "";
+  }
+}
+
+function onHistoryEnded(recordId, event) {
+  const id = `${recordId || ""}`.trim();
+  if (!id) return;
+  const audio = event?.target;
+  const endedDuration = Number(
+    (audio instanceof HTMLAudioElement ? audio.duration : 0) || historyPlaybackDurations[id] || 0
+  );
+  if (Number.isFinite(endedDuration) && endedDuration > 0) {
+    historyPlaybackDurations[id] = endedDuration;
+    historyPlaybackTimes[id] = endedDuration;
+  }
+  if (historyPlayingId.value === id) {
+    historyPlayingId.value = "";
+  }
+}
+
+function onHistorySeek(recordId, event) {
+  const id = `${recordId || ""}`.trim();
+  if (!id) return;
+  const audio = historyAudioRefs[id];
+  if (!(audio instanceof HTMLAudioElement)) return;
+
+  const next = Number(event?.target?.value || 0);
+  if (!Number.isFinite(next) || next < 0) return;
+
+  audio.currentTime = next;
+  historyPlaybackTimes[id] = next;
 }
 
 function playHistoryRecord(record) {
   const id = `${record?.id || ""}`.trim();
   const audio = historyAudioRefs[id];
   if (!(audio instanceof HTMLAudioElement)) return;
-  try {
+
+  const isPlaying = historyPlayingId.value === id && !audio.paused;
+  if (isPlaying) {
+    audio.pause();
+    historyPlayingId.value = "";
+    return;
+  }
+
+  pauseAllHistoryAudio(id);
+
+  if (audio.ended) {
     audio.currentTime = 0;
+    historyPlaybackTimes[id] = 0;
+  }
+
+  try {
     const playback = audio.play();
     if (playback && typeof playback.catch === "function") {
       playback.catch(() => {
         // no-op
       });
     }
+    historyPlayingId.value = id;
   } catch {
     // no-op
   }
@@ -1178,6 +1321,7 @@ watch(
 );
 
 onUnmounted(() => {
+  pauseAllHistoryAudio();
   if (typeof window !== "undefined") {
     window.removeEventListener("keydown", handleWindowKeydown);
   }
@@ -1662,27 +1806,46 @@ onUnmounted(() => {
               <div
                 v-for="record in recentRecordings"
                 :key="record.id"
-                class="rounded-[11px] bg-[#F4F7FB] p-2"
+                class="rounded-[12px] border border-[#E5ECF5] bg-white p-3 shadow-sm"
               >
                 <div class="flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    class="rounded-full bg-[#1B3A6B] px-3 py-1 text-xs text-white"
+                    class="history-play-btn rounded-full px-3 py-1.5 text-xs font-semibold"
                     @click="playHistoryRecord(record)"
                   >
-                    ▶ 播放
+                    {{ historyPlayingId === record.id ? "⏸ 暂停" : "▶ 播放" }}
                   </button>
-                  <p class="text-xs text-[#8CA0C0]">{{ formatSeconds(record.durationSec) }}</p>
+                  <p class="text-xs font-semibold text-[#6F86AD]">
+                    {{ formatSeconds(getHistoryCurrentTimeForRecord(record)) }} / {{ formatSeconds(getHistoryDuration(record)) }}
+                  </p>
                 </div>
-                <p class="mt-1 text-xs text-[#8CA0C0]">{{ formatDateTime(record.createdAt) }}</p>
-                <p class="mt-1 text-sm text-[#FFD166]">
-                  <span v-for="star in 5" :key="`${record.id}-${star}`">{{ star <= record.rating ? "★" : "☆" }}</span>
+                <div class="mt-2 flex items-center gap-2">
+                  <input
+                    type="range"
+                    class="history-slider h-2 w-full cursor-pointer appearance-none rounded-full"
+                    min="0"
+                    :max="Math.max(getHistoryDuration(record), 1)"
+                    :value="Math.min(getHistoryCurrentTimeForRecord(record), Math.max(getHistoryDuration(record), 1))"
+                    :style="{ '--progress': `${getHistoryProgressPercent(record)}%` }"
+                    step="0.1"
+                    @input="onHistorySeek(record.id, $event)"
+                  />
+                </div>
+                <p class="mt-2 text-xs text-[#8CA0C0]">{{ formatDateTime(record.createdAt) }}</p>
+                <p v-if="getRecordRating(record) > 0" class="mt-1 text-sm tracking-[1px] text-[#F5B94B]">
+                  <span v-for="star in getRecordRating(record)" :key="`${record.id}-${star}`">★</span>
                 </p>
                 <audio
                   :ref="(el) => bindHistoryAudioRef(record.id, el)"
                   class="hidden"
                   preload="metadata"
                   :src="record.blobUrl"
+                  @loadedmetadata="onHistoryLoadedMetadata(record.id, $event)"
+                  @timeupdate="onHistoryTimeUpdate(record.id, $event)"
+                  @play="onHistoryPlay(record.id)"
+                  @pause="onHistoryPause(record.id, $event)"
+                  @ended="onHistoryEnded(record.id, $event)"
                 />
               </div>
             </div>
@@ -1775,6 +1938,57 @@ onUnmounted(() => {
 
 .wave-bars span:nth-child(4) {
   animation-delay: 0.42s;
+}
+
+.history-play-btn {
+  background: #1b3a6b;
+  color: #ffffff;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.history-play-btn:hover {
+  background: #16335e;
+}
+
+.history-play-btn:active {
+  transform: translateY(1px);
+}
+
+.history-slider {
+  --progress: 0%;
+  background: linear-gradient(
+    to right,
+    #1b3a6b 0%,
+    #1b3a6b var(--progress),
+    #d7dee9 var(--progress),
+    #d7dee9 100%
+  );
+}
+
+.history-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  background: #1b3a6b;
+  box-shadow: 0 1px 6px rgba(27, 58, 107, 0.35);
+}
+
+.history-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  background: #1b3a6b;
+  box-shadow: 0 1px 6px rgba(27, 58, 107, 0.35);
+}
+
+.history-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: transparent;
 }
 
 @keyframes wave {

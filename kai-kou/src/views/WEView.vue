@@ -24,6 +24,7 @@ const WE_AI_FALLBACK_REASON_CODE = "ai_review_unavailable";
 const WE_AI_FALLBACK_NOTICE = "AI评阅服务暂时不可用，本次已进入降级结果。你的作文不一定存在内容不足问题，请稍后重试。";
 const ACTIVE_TEMPLATE_STORAGE_KEY = "we.activeTemplateId";
 const ACTIVE_OPINION_STORAGE_KEY = "we.activeOpinionId";
+const DIAG_DEV_FALLBACK_PORTS = [3001, 3000];
 
 const defaultQuestion = {
   id: "WE_FALLBACK",
@@ -251,6 +252,14 @@ function goOpinionLibrary() {
   });
 }
 
+function goHistory() {
+  const questionId = String(question.value?.id || "").trim();
+  router.push({
+    path: "/we/history",
+    query: questionId ? { question: questionId } : {}
+  });
+}
+
 function toggleRecommendedOpinions() {
   showRecommendedOpinions.value = !showRecommendedOpinions.value;
 }
@@ -379,6 +388,7 @@ async function submitEssay() {
     const hasRequestError = Boolean(
       !scoreResult
       || scoreResult.error
+      || isClientFallbackResult(scoreResult)
       || scoreResult?.meta?.scoreErrorCode
     );
     if (hasRequestError) {
@@ -426,8 +436,30 @@ function isAiReviewUnavailableResult(scoreResult) {
   return reasonCodes.includes(WE_AI_FALLBACK_REASON_CODE);
 }
 
+function isClientFallbackResult(scoreResult) {
+  const providerUsed = `${scoreResult?.provider_used || ""}`.trim();
+  const errorStage = `${scoreResult?.error_stage || ""}`.trim();
+  return providerUsed === "client_fallback" || errorStage === "client_fallback";
+}
+
 function resolveReviewFailureMessage(scoreResult) {
   const errorCode = `${scoreResult?.meta?.scoreErrorCode || ""}`.trim();
+  if (isClientFallbackResult(scoreResult)) {
+    if (
+      errorCode === "SCORE_API_ROUTE_NOT_FOUND"
+      || errorCode === "SCORE_API_ROUTE_NOT_FOUND_HTML"
+      || errorCode === "SCORE_API_UNEXPECTED_HTML"
+    ) {
+      return "评阅接口路由未命中，请检查 API 端口、Vite 代理或 VITE_API_BASE 配置。";
+    }
+
+    if (errorCode === "SCORE_API_TIMEOUT") {
+      return "评阅接口连接超时，请检查网络或本地 API 服务后重试。";
+    }
+
+    return "评阅接口暂时不可达（网络或路由异常），请稍后重试。";
+  }
+
   if (!errorCode) return "本次评阅失败，请重试。";
 
   if (
@@ -484,24 +516,34 @@ async function runClientFetchDiagnostic() {
   clientFetchDiagMessage.value = "";
 
   try {
-    const response = await fetch("/api/debug/client-fetch", {
+    const {
+      response,
+      payload,
+      envelope,
+      usedUrl
+    } = await requestDiagnosticWithCandidates({
+      path: "/api/debug/client-fetch",
       method: "GET",
       headers: {
         "x-request-id": requestId
       }
     });
-    const payload = await readDiagnosticPayload(response);
 
     if (!response.ok) {
+      const statusText = `${response.statusText || ""}`.trim();
+      const likelyProxyMismatch = Number(response.status || 0) >= 500 && !`${payload?.route || ""}`.trim();
       clientFetchDiagState.value = "failed";
-      clientFetchDiagMessage.value = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+      clientFetchDiagMessage.value = likelyProxyMismatch
+        ? `HTTP ${response.status}${statusText ? ` ${statusText}` : ""}（可能命中错误 API 服务）`
+        : `HTTP ${response.status}${statusText ? ` ${statusText}` : ""}`;
       clientFetchDiagResult.value = {
         request_id: `${payload?.request_id || requestId}`.trim(),
         status: Number(response.status || 0),
         route: `${payload?.route || ""}`.trim(),
         ok: false,
-        error: `${payload?.error || ""}`.trim(),
-        content_type: `${response.headers.get("content-type") || ""}`.trim()
+        error: `${payload?.error || envelope?.raw_text || ""}`.trim(),
+        content_type: `${envelope?.content_type || response.headers.get("content-type") || ""}`.trim(),
+        used_url: `${usedUrl || ""}`.trim()
       };
       console.warn("[we:diag] client_fetch_http_failed", clientFetchDiagResult.value);
       return;
@@ -513,7 +555,8 @@ async function runClientFetchDiagnostic() {
       status: Number(response.status || 0),
       route: `${payload?.route || ""}`.trim(),
       ok: Boolean(payload?.ok),
-      timestamp: `${payload?.timestamp || ""}`.trim()
+      timestamp: `${payload?.timestamp || ""}`.trim(),
+      used_url: `${usedUrl || ""}`.trim()
     };
     console.info("[we:diag] client_fetch_ok", clientFetchDiagResult.value);
   } catch (error) {
@@ -524,7 +567,8 @@ async function runClientFetchDiagnostic() {
       status: 0,
       route: "",
       ok: false,
-      error: `${error?.message || "fetch_failed"}`.trim()
+      error: `${error?.message || "fetch_failed"}`.trim(),
+      used_url: ""
     };
     console.warn("[we:diag] client_fetch_failed", clientFetchDiagResult.value);
   }
@@ -554,22 +598,33 @@ async function runPostProbeDiagnostic() {
       request_id: requestId,
       source: "we-mobile-diagnosis"
     };
-    const response = await fetch("/api/debug/post-probe", {
+    const {
+      response,
+      payload,
+      envelope,
+      usedUrl
+    } = await requestDiagnosticWithCandidates({
+      path: "/api/debug/post-probe",
       method: "POST",
       headers,
       body: JSON.stringify(body)
     });
-    const payload = await readDiagnosticPayload(response);
 
     if (!response.ok) {
+      const statusText = `${response.statusText || ""}`.trim();
+      const likelyProxyMismatch = Number(response.status || 0) >= 500 && !`${payload?.route || ""}`.trim();
       postProbeDiagState.value = "failed";
-      postProbeDiagMessage.value = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+      postProbeDiagMessage.value = likelyProxyMismatch
+        ? `HTTP ${response.status}${statusText ? ` ${statusText}` : ""}（可能命中错误 API 服务）`
+        : `HTTP ${response.status}${statusText ? ` ${statusText}` : ""}`;
       postProbeDiagResult.value = {
         request_id: `${payload?.request_id || requestId}`.trim(),
         status: Number(response.status || 0),
         error_code: `${payload?.error || `HTTP_${response.status}`}`.trim(),
         failure_type: "HTTP error",
-        error_message: `${postProbeDiagMessage.value}`.trim()
+        error_message: `${postProbeDiagMessage.value}`.trim(),
+        content_type: `${envelope?.content_type || response.headers.get("content-type") || ""}`.trim(),
+        used_url: `${usedUrl || ""}`.trim()
       };
       console.warn("[we:diag] post_probe_http_failed", postProbeDiagResult.value);
       return;
@@ -582,7 +637,8 @@ async function runPostProbeDiagnostic() {
       route: `${payload?.route || ""}`.trim(),
       has_authorization: Boolean(payload?.has_authorization),
       content_type: `${payload?.content_type || ""}`.trim(),
-      body_size: Number(payload?.body_size || 0)
+      body_size: Number(payload?.body_size || 0),
+      used_url: `${usedUrl || ""}`.trim()
     };
     console.info("[we:diag] post_probe_ok", postProbeDiagResult.value);
   } catch (error) {
@@ -593,21 +649,173 @@ async function runPostProbeDiagnostic() {
       status: 0,
       error_code: "SCORE_API_FAILED",
       failure_type: "Fetch failed",
-      error_message: `${error?.message || "fetch_failed"}`.trim()
+      error_message: `${error?.message || "fetch_failed"}`.trim(),
+      used_url: ""
     };
     console.warn("[we:diag] post_probe_failed", postProbeDiagResult.value);
   }
 }
 
+async function requestDiagnosticWithCandidates({ path, method = "GET", headers = {}, body = null } = {}) {
+  const candidates = buildDiagnosticCandidateUrls(path);
+  let lastFetchError = null;
+  let lastHttpResult = null;
+
+  for (const url of candidates) {
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        body
+      });
+      const envelope = await readDiagnosticPayload(response);
+      const shouldRetryNext = shouldTryNextDiagnosticCandidate(response, envelope, candidates.length);
+      if (!response.ok && shouldRetryNext) {
+        lastHttpResult = {
+          response,
+          payload: envelope?.payload || null,
+          envelope,
+          usedUrl: url
+        };
+        continue;
+      }
+
+      return {
+        response,
+        payload: envelope?.payload || null,
+        envelope,
+        usedUrl: url
+      };
+    } catch (error) {
+      lastFetchError = error;
+      if (shouldRetryDiagnosticFetchError(error, candidates.length)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (lastHttpResult) return lastHttpResult;
+  if (lastFetchError) throw lastFetchError;
+  throw new Error("diagnostic_request_failed");
+}
+
+function buildDiagnosticCandidateUrls(path) {
+  const normalizedPath = normalizeRelativeApiPath(path);
+  const candidates = [];
+  const addCandidate = (value) => {
+    const normalized = `${value || ""}`.trim();
+    if (!normalized) return;
+    const key = normalizeUrlKey(normalized);
+    if (!key) return;
+    if (candidates.some((item) => item.key === key)) return;
+    candidates.push({ key, url: normalized });
+  };
+
+  addCandidate(normalizedPath);
+  if (isRuntimeLocalOrigin()) {
+    const devTarget = normalizeAbsoluteHttpUrl(import.meta.env?.VITE_DEV_API_TARGET);
+    if (devTarget) addCandidate(`${trimTrailingSlash(devTarget)}${normalizedPath}`);
+
+    const apiBase = normalizeAbsoluteHttpUrl(import.meta.env?.VITE_API_BASE);
+    if (apiBase) addCandidate(`${trimTrailingSlash(apiBase)}${normalizedPath}`);
+
+    DIAG_DEV_FALLBACK_PORTS.forEach((port) => {
+      addCandidate(`http://localhost:${port}${normalizedPath}`);
+    });
+  }
+
+  return candidates.map((item) => item.url);
+}
+
+function shouldTryNextDiagnosticCandidate(response, envelope, candidateCount = 1) {
+  if (candidateCount <= 1) return false;
+  if (response?.ok) return false;
+
+  const status = Number(response?.status || 0);
+  if (status === 404) return true;
+  if (status >= 500) return true;
+  return Boolean(envelope?.is_html);
+}
+
+function shouldRetryDiagnosticFetchError(error, candidateCount = 1) {
+  if (candidateCount <= 1) return false;
+  const name = `${error?.name || ""}`.trim().toLowerCase();
+  const code = `${error?.code || ""}`.trim().toLowerCase();
+  const message = `${error?.message || ""}`.trim().toLowerCase();
+
+  if (name === "aborterror") return true;
+  if (code.includes("econn") || code.includes("timedout")) return true;
+  if (message.includes("fetch failed") || message.includes("network")) return true;
+  return false;
+}
+
 async function readDiagnosticPayload(response) {
+  const contentType = `${response?.headers?.get("content-type") || ""}`.trim().toLowerCase();
   const text = await response.text();
   const trimmed = `${text || ""}`.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return {
+      payload: null,
+      raw_text: "",
+      content_type: contentType,
+      is_html: false
+    };
+  }
 
   try {
-    return JSON.parse(trimmed);
+    return {
+      payload: JSON.parse(trimmed),
+      raw_text: trimmed.slice(0, 500),
+      content_type: contentType,
+      is_html: false
+    };
   } catch {
-    return null;
+    const isHtml = contentType.includes("text/html")
+      || /^<!doctype html/i.test(trimmed)
+      || /^<html/i.test(trimmed)
+      || trimmed.includes("<html");
+    return {
+      payload: null,
+      raw_text: trimmed.slice(0, 500),
+      content_type: contentType,
+      is_html: isHtml
+    };
+  }
+}
+
+function normalizeRelativeApiPath(path) {
+  const normalized = `${path || ""}`.trim();
+  if (!normalized) return "/api/debug/client-fetch";
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
+
+function normalizeAbsoluteHttpUrl(value) {
+  const normalized = `${value || ""}`.trim();
+  if (!/^https?:\/\//i.test(normalized)) return "";
+  return normalized;
+}
+
+function trimTrailingSlash(value) {
+  return `${value || ""}`.replace(/\/+$/, "");
+}
+
+function isRuntimeLocalOrigin() {
+  if (typeof window === "undefined" || !window.location?.hostname) return false;
+  const host = `${window.location.hostname || ""}`.trim().toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+}
+
+function normalizeUrlKey(url) {
+  const normalized = `${url || ""}`.trim();
+  if (!normalized) return "";
+  if (normalized.startsWith("/")) return `relative:${normalized}`;
+
+  try {
+    const parsed = new URL(normalized);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`.toLowerCase();
+  } catch {
+    return normalized.toLowerCase();
   }
 }
 
@@ -648,6 +856,7 @@ onMounted(() => {
           <OrangeButton tone="outline" @click="goTemplateLibrary">看模板</OrangeButton>
           <OrangeButton tone="outline" @click="goOpinionLibrary">观点句</OrangeButton>
           <OrangeButton tone="outline" @click="goSelectPractice">选题练习</OrangeButton>
+          <OrangeButton tone="outline" @click="goHistory">历史提交</OrangeButton>
         </div>
       </div>
 
@@ -861,6 +1070,7 @@ onMounted(() => {
               <p>结果：可达（status {{ clientFetchDiagResult.status }}）</p>
               <p>请求编号：{{ clientFetchDiagResult.request_id || "N/A" }}</p>
               <p>路由：{{ clientFetchDiagResult.route || "client-fetch" }}</p>
+              <p v-if="clientFetchDiagResult.used_url">目标：{{ clientFetchDiagResult.used_url }}</p>
             </div>
 
             <div v-else-if="clientFetchDiagState === 'failed' && clientFetchDiagResult" class="mt-2 space-y-1 text-[11px] text-red-700/90">
@@ -868,6 +1078,8 @@ onMounted(() => {
               <p>请求编号：{{ clientFetchDiagResult.request_id || "N/A" }}</p>
               <p v-if="clientFetchDiagResult.status">状态：{{ clientFetchDiagResult.status }}</p>
               <p v-if="clientFetchDiagResult.error">错误：{{ clientFetchDiagResult.error }}</p>
+              <p v-if="clientFetchDiagResult.content_type">Content-Type：{{ clientFetchDiagResult.content_type }}</p>
+              <p v-if="clientFetchDiagResult.used_url">目标：{{ clientFetchDiagResult.used_url }}</p>
             </div>
 
             <div v-if="postProbeDiagState === 'success' && postProbeDiagResult" class="mt-3 space-y-1 text-[11px] text-red-700/90">
@@ -877,6 +1089,7 @@ onMounted(() => {
               <p>携带授权：{{ postProbeDiagResult.has_authorization ? "true" : "false" }}</p>
               <p>Content-Type：{{ postProbeDiagResult.content_type || "N/A" }}</p>
               <p>Body大小：{{ postProbeDiagResult.body_size ?? 0 }}</p>
+              <p v-if="postProbeDiagResult.used_url">目标：{{ postProbeDiagResult.used_url }}</p>
             </div>
 
             <div v-else-if="postProbeDiagState === 'failed' && postProbeDiagResult" class="mt-3 space-y-1 text-[11px] text-red-700/90">
@@ -885,6 +1098,8 @@ onMounted(() => {
               <p>类型：{{ postProbeDiagResult.failure_type || "Fetch failed" }}</p>
               <p>请求编号：{{ postProbeDiagResult.request_id || "N/A" }}</p>
               <p v-if="postProbeDiagResult.error_message">错误：{{ postProbeDiagResult.error_message }}</p>
+              <p v-if="postProbeDiagResult.content_type">Content-Type：{{ postProbeDiagResult.content_type }}</p>
+              <p v-if="postProbeDiagResult.used_url">目标：{{ postProbeDiagResult.used_url }}</p>
             </div>
           </div>
         </section>
