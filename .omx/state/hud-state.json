@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-14T09:16:35.524Z",
-  "turn_count": 160,
-  "last_agent_output": "RA 和 WFD 是被 `HomeView.vue` 里误删了，我刚给你恢复了。\n\n已恢复内容：\n- 首页 `raTask` / `wfdTask` 计算变量\n- RA 卡片整块（随机练习、选题练习）"
+  "last_turn_at": "2026-04-16T09:12:21.691Z",
+  "turn_count": 211,
+  "last_agent_output": "这些也**不需要提交**（你截图里的 `output/playwright/results/*.json`）。\n\n我已经帮你处理了，在 [.gitignore](d:/PTE/kai-kou/.git"
 }

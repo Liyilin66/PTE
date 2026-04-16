@@ -1,6 +1,9 @@
 import { onUnmounted } from "vue";
 import { usePracticeStore } from "@/stores/practice";
 
+const RTS_PREPARE_SECONDS = 10;
+const RTS_RECORD_SECONDS = 40;
+
 export function useRTSTimer() {
   const practiceStore = usePracticeStore();
   let prepareTimerId = null;
@@ -27,9 +30,9 @@ export function useRTSTimer() {
     clearTimer("record");
   }
 
-  function startPrepareCountdown(seconds = 15, onFinish) {
+  function startPrepareCountdown(seconds = RTS_PREPARE_SECONDS, onFinish) {
     clearTimer("prepare");
-    const total = Math.max(1, Math.round(Number(seconds || 15)));
+    const total = Math.max(1, Math.round(Number(seconds || RTS_PREPARE_SECONDS)));
     let remaining = total;
     practiceStore.setRTSPrepareTimer(remaining, total);
 
@@ -43,9 +46,9 @@ export function useRTSTimer() {
     }, 1000);
   }
 
-  function startRecordCountdown(seconds = 40, onFinish) {
+  function startRecordCountdown(seconds = RTS_RECORD_SECONDS, onFinish) {
     clearTimer("record");
-    const total = Math.max(1, Math.round(Number(seconds || 40)));
+    const total = Math.max(1, Math.round(Number(seconds || RTS_RECORD_SECONDS)));
     let remaining = total;
     practiceStore.setRTSRecordTimer(remaining, total);
 

@@ -1214,7 +1214,7 @@ async function startRecordingNow() {
           </section>
 
           <section class="rounded-xl border bg-white p-4 shadow-card">
-            <RecordingWave v-if="!hasFinalizedRecording" :is-recording="recorder.isRecording" />
+            <RecordingWave v-if="!hasFinalizedRecording" :is-recording="Boolean(recorder.isRecording.value)" />
 
             <div v-if="showAudioPreview" class="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left">
               <p class="mb-2 text-sm font-semibold text-navy">试听录音</p>

@@ -18,6 +18,13 @@ export function useRecorder() {
   let recorderEngine = "";
   let webAudioRecorderHandle = null;
   let audioChunks = [];
+  let lastChunkMimeType = "";
+  let mediaDataEventCount = 0;
+  let mediaNonEmptyDataEventCount = 0;
+  let mediaChunkSizeList = [];
+  let mediaChunkMimeTypeList = [];
+  let mediaChunkTotalBytes = 0;
+  let mediaLastDataAvailableAtMs = 0;
   let stopRequested = false;
   let restartCount = 0;
   let waitReadyResolver = null;
@@ -40,6 +47,12 @@ export function useRecorder() {
   const MEDIARECORDER_START_WATCHDOG_MS = 1700;
   const MEDIARECORDER_START_WATCHDOG_IOS_SAFARI_MS = 2800;
   const AUDIO_PLAYABLE_VALIDATION_TIMEOUT_MS = 4000;
+  const MEDIARECORDER_FINAL_CHUNK_GRACE_MS = 900;
+  const MEDIARECORDER_FINAL_CHUNK_GRACE_IOS_WEBKIT_MS = 2600;
+  const MEDIARECORDER_FINAL_DRAIN_POLL_MS = 90;
+  const MEDIARECORDER_STOP_REQUESTDATA_LEAD_MS_IOS_WEBKIT = 120;
+  const MEDIARECORDER_NO_AUDIO_RETRY_DELAY_MS = 280;
+  const AUDIO_NON_SILENT_ABS_THRESHOLD = 0.01;
   const WEBAUDIO_BUFFER_SIZE = 4096;
   const RECOGNITION_STOP_TIMEOUT_MS = 5000;
   const MEDIA_STOP_TIMEOUT_MS = 8000;
@@ -80,7 +93,19 @@ export function useRecorder() {
       useTimeslice: false
     }
   ];
-  const MEDIARECORDER_START_CANDIDATES_ANDROID = [
+  const MEDIARECORDER_START_CANDIDATES_IOS_SAFARI = [
+    {
+      createMode: "explicit_mime",
+      mimeType: "audio/mp4",
+      startMode: "start_no_timeslice",
+      useTimeslice: false
+    },
+    {
+      createMode: "explicit_mime",
+      mimeType: "audio/mp4",
+      startMode: "start_250",
+      useTimeslice: true
+    },
     {
       createMode: "default_constructor",
       mimeType: "",
@@ -92,12 +117,32 @@ export function useRecorder() {
       mimeType: "",
       startMode: "start_250",
       useTimeslice: true
+    }
+  ];
+  const MEDIARECORDER_START_CANDIDATES_ANDROID = [
+    {
+      createMode: "explicit_mime",
+      mimeType: "audio/webm;codecs=opus",
+      startMode: "start_250",
+      useTimeslice: true
     },
     {
       createMode: "explicit_mime",
       mimeType: "audio/webm",
       startMode: "start_250",
       useTimeslice: true
+    },
+    {
+      createMode: "default_constructor",
+      mimeType: "",
+      startMode: "start_250",
+      useTimeslice: true
+    },
+    {
+      createMode: "default_constructor",
+      mimeType: "",
+      startMode: "start_no_timeslice",
+      useTimeslice: false
     }
   ];
   const KNOWN_AUDIO_MIME_PREFIXES = [
@@ -117,9 +162,29 @@ export function useRecorder() {
     "AUDIO_BLOB_NOT_PLAYABLE"
   ]);
 
+  function isVerboseRecorderDebugEnabled() {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage?.getItem("RTS_RECORDER_DEBUG") === "1";
+    } catch {
+      return false;
+    }
+  }
+
   function devLog(event, payload = {}) {
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env.DEV && !isVerboseRecorderDebugEnabled()) return;
     console.info(`[recorder] ${event}`, payload);
+  }
+
+  function captureChunkStatsSnapshot() {
+    return {
+      dataEventCount: Number(mediaDataEventCount || 0),
+      nonEmptyDataEventCount: Number(mediaNonEmptyDataEventCount || 0),
+      chunkSizeList: Array.isArray(mediaChunkSizeList) ? [...mediaChunkSizeList] : [],
+      chunkMimeTypeList: Array.isArray(mediaChunkMimeTypeList) ? [...mediaChunkMimeTypeList] : [],
+      chunkTotalBytes: Number(mediaChunkTotalBytes || 0),
+      lastDataAvailableAtMs: Number(mediaLastDataAvailableAtMs || 0)
+    };
   }
 
   function createAttemptId() {
@@ -156,6 +221,14 @@ export function useRecorder() {
     return Math.max(0, Math.round(getNowMs() - startAt));
   }
 
+  function waitForMs(ms) {
+    const safeMs = Math.max(0, Number(ms || 0));
+    if (!safeMs) return Promise.resolve();
+    return new Promise((resolve) => {
+      setTimeout(resolve, safeMs);
+    });
+  }
+
   function getSpeechRecognitionCtor() {
     if (typeof window === "undefined") return null;
     return window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -171,6 +244,16 @@ export function useRecorder() {
     const hasAppleWebKit = /AppleWebKit/i.test(ua);
     const isKnownOtherIOSBrowser = /(CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser|GSA|DuckDuckGo)/i.test(ua);
     return Boolean(isIOSDevice && hasSafariToken && hasAppleWebKit && !isKnownOtherIOSBrowser);
+  }
+
+  function isLikelyIOSWebKitRuntime() {
+    if (typeof navigator === "undefined") return false;
+    const ua = `${navigator.userAgent || ""}`;
+    const platform = `${navigator.platform || ""}`;
+    const maxTouchPoints = Number(navigator.maxTouchPoints || 0);
+    const isIOSDevice = /iP(ad|hone|od)/i.test(ua) || (platform === "MacIntel" && maxTouchPoints > 1);
+    const hasAppleWebKit = /AppleWebKit/i.test(ua);
+    return Boolean(isIOSDevice && hasAppleWebKit);
   }
 
   function isAndroidLikeBrowser() {
@@ -196,7 +279,7 @@ export function useRecorder() {
       return {
         platformStrategy: PLATFORM_STRATEGY_IOS_SAFARI,
         startWatchdogMs: MEDIARECORDER_START_WATCHDOG_IOS_SAFARI_MS,
-        mediaRecorderCandidates: MEDIARECORDER_START_CANDIDATES
+        mediaRecorderCandidates: MEDIARECORDER_START_CANDIDATES_IOS_SAFARI
       };
     }
     if (strategy === PLATFORM_STRATEGY_ANDROID) {
@@ -309,6 +392,30 @@ export function useRecorder() {
     const normalizedMimeType = normalizeMimeTypeBase(mimeType);
     if (!normalizedMimeType) return false;
     return KNOWN_AUDIO_MIME_PREFIXES.some((prefix) => normalizedMimeType.startsWith(prefix));
+  }
+
+  function resolveDefaultRecordingMimeType(platformStrategy = PLATFORM_STRATEGY_OTHER) {
+    if (platformStrategy === PLATFORM_STRATEGY_IOS_SAFARI) return "audio/mp4";
+    if (platformStrategy === PLATFORM_STRATEGY_ANDROID) return "audio/webm";
+    return "audio/webm";
+  }
+
+  function resolvePreferredRecordingMimeType({
+    recorderMimeType = "",
+    chunkMimeType = "",
+    startMetaMimeType = "",
+    platformStrategy = PLATFORM_STRATEGY_OTHER
+  } = {}) {
+    const candidates = [
+      normalizeMimeType(recorderMimeType),
+      normalizeMimeType(chunkMimeType),
+      normalizeMimeType(startMetaMimeType)
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      if (isKnownAudioMimeType(candidate)) return candidate;
+    }
+    return resolveDefaultRecordingMimeType(platformStrategy);
   }
 
   function isMimeTypePlayable(mimeType) {
@@ -425,6 +532,14 @@ export function useRecorder() {
             playable: true,
             durationSec,
             errorCode: ""
+          });
+          return;
+        }
+        if (Number(audio.readyState || 0) >= 3) {
+          finalize({
+            playable: true,
+            durationSec: 0,
+            errorCode: "AUDIO_ELEMENT_READYSTATE_ONLY"
           });
         }
       };
@@ -614,14 +729,7 @@ export function useRecorder() {
         errorCode: "AUDIO_BLOB_EMPTY"
       };
     }
-    if (!isMimeTypePlayable(mimeType)) {
-      return {
-        playable: false,
-        method: "none",
-        durationSec: 0,
-        errorCode: "AUDIO_MIME_UNSUPPORTED"
-      };
-    }
+    const mimeTypeLikelyPlayable = isMimeTypePlayable(mimeType);
 
     const elementCheck = await validateBlobPlayableWithAudioElement(blob, attemptId);
     if (elementCheck?.staleAttempt || !isAttemptCurrent(attemptId)) {
@@ -656,7 +764,7 @@ export function useRecorder() {
         playable: false,
         method: elementCheck.method,
         durationSec: 0,
-        errorCode: elementCheck.errorCode || decodeCheck.errorCode || "AUDIO_NOT_PLAYABLE"
+        errorCode: elementCheck.errorCode || decodeCheck.errorCode || (mimeTypeLikelyPlayable ? "AUDIO_NOT_PLAYABLE" : "AUDIO_MIME_UNSUPPORTED")
       };
     }
 
@@ -665,7 +773,7 @@ export function useRecorder() {
         playable: false,
         method: decodeCheck.method,
         durationSec: 0,
-        errorCode: decodeCheck.errorCode || "AUDIO_NOT_PLAYABLE"
+        errorCode: decodeCheck.errorCode || (mimeTypeLikelyPlayable ? "AUDIO_NOT_PLAYABLE" : "AUDIO_MIME_UNSUPPORTED")
       };
     }
 
@@ -673,26 +781,158 @@ export function useRecorder() {
       playable: false,
       method: "none",
       durationSec: 0,
-      errorCode: "PLAYABLE_VALIDATION_UNAVAILABLE"
+      errorCode: mimeTypeLikelyPlayable ? "PLAYABLE_VALIDATION_UNAVAILABLE" : "AUDIO_MIME_UNSUPPORTED"
     };
   }
 
   function isUsableAudioResult({ blob, hasAudio, blobSize, blobIssueCode, mimeType, previewPlayable }) {
     if (!blob || !hasAudio || blobSize <= 0) return false;
+    if (typeof previewPlayable === "boolean" && previewPlayable) return true;
     if (INVALID_AUDIO_BLOB_ISSUES.has(`${blobIssueCode || ""}`)) return false;
     if (!isMimeTypePlayable(mimeType)) return false;
     if (typeof previewPlayable === "boolean") return previewPlayable;
     return true;
   }
 
-  function detectBlobIssue({ blobSize, blobTooLarge, mimeType }) {
+  function detectBlobIssue({ blobSize, blobTooLarge, mimeType, previewPlayable = false }) {
     if (blobTooLarge) return "AUDIO_BLOB_TOO_LARGE";
     if (blobSize <= 0) return "AUDIO_BLOB_EMPTY";
+    if (previewPlayable && blobSize > 0) return "";
     if (blobSize < MIN_AUDIO_BLOB_BYTES) return "AUDIO_BLOB_TOO_SMALL";
 
-    if (!isKnownAudioMimeType(mimeType)) return "AUDIO_MIME_UNSUPPORTED";
+    if (!previewPlayable && !isKnownAudioMimeType(mimeType)) return "AUDIO_MIME_UNSUPPORTED";
 
     return "";
+  }
+
+  function createEmptyAudioAmplitudeStats({
+    sampleRate = 0,
+    channelCount = 0,
+    durationMs = 0
+  } = {}) {
+    return {
+      amplitudeStatsAvailable: false,
+      peakAmplitude: 0,
+      rmsAmplitude: 0,
+      meanAbsAmplitude: 0,
+      nonSilentFrameRatio: 0,
+      sampleRate: Number(sampleRate || 0),
+      channelCount: Number(channelCount || 0),
+      durationMs: Number(durationMs || 0)
+    };
+  }
+
+  function computeAudioAmplitudeStatsFromFloatSamples(
+    floatSamples,
+    { sampleRate = 0, channelCount = 1 } = {}
+  ) {
+    const samples = floatSamples instanceof Float32Array ? floatSamples : new Float32Array(0);
+    const totalSampleCount = Number(samples.length || 0);
+    const safeChannelCount = Math.max(1, Number(channelCount || 1));
+    const safeSampleRate = Math.max(0, Number(sampleRate || 0));
+    if (totalSampleCount <= 0) {
+      return createEmptyAudioAmplitudeStats({
+        sampleRate: safeSampleRate,
+        channelCount: safeChannelCount,
+        durationMs: 0
+      });
+    }
+
+    let peakAmplitude = 0;
+    let sumAbs = 0;
+    let sumSq = 0;
+    let nonSilentCount = 0;
+    for (let i = 0; i < samples.length; i += 1) {
+      const sample = Number(samples[i] || 0);
+      const absValue = Math.abs(sample);
+      if (absValue > peakAmplitude) peakAmplitude = absValue;
+      sumAbs += absValue;
+      sumSq += sample * sample;
+      if (absValue >= AUDIO_NON_SILENT_ABS_THRESHOLD) {
+        nonSilentCount += 1;
+      }
+    }
+    const meanAbsAmplitude = sumAbs / totalSampleCount;
+    const rmsAmplitude = Math.sqrt(sumSq / totalSampleCount);
+    const nonSilentFrameRatio = nonSilentCount / totalSampleCount;
+    const frameCount = Math.max(1, Math.floor(totalSampleCount / safeChannelCount));
+    const durationMs = safeSampleRate > 0
+      ? Math.max(0, Math.round((frameCount / safeSampleRate) * 1000))
+      : 0;
+    return {
+      amplitudeStatsAvailable: true,
+      peakAmplitude: Number(peakAmplitude || 0),
+      rmsAmplitude: Number(rmsAmplitude || 0),
+      meanAbsAmplitude: Number(meanAbsAmplitude || 0),
+      nonSilentFrameRatio: Number(nonSilentFrameRatio || 0),
+      sampleRate: Number(safeSampleRate || 0),
+      channelCount: Number(safeChannelCount || 0),
+      durationMs: Number(durationMs || 0)
+    };
+  }
+
+  async function analyzeBlobAudioAmplitudeStats(blob, attemptId = 0) {
+    if (!blob || Number(blob.size || 0) <= 0) {
+      return createEmptyAudioAmplitudeStats();
+    }
+    if (!isAttemptCurrent(attemptId)) {
+      return createEmptyAudioAmplitudeStats();
+    }
+    const AudioContextCtor = typeof window !== "undefined" ? (window.AudioContext || window.webkitAudioContext) : null;
+    if (!AudioContextCtor || typeof blob.arrayBuffer !== "function") {
+      return createEmptyAudioAmplitudeStats();
+    }
+
+    let audioContext = null;
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      if (!isAttemptCurrent(attemptId)) {
+        return createEmptyAudioAmplitudeStats();
+      }
+      if (!arrayBuffer || arrayBuffer.byteLength <= 0) {
+        return createEmptyAudioAmplitudeStats();
+      }
+
+      audioContext = new AudioContextCtor();
+      const decodedBuffer = await decodeAudioDataCompat(audioContext, arrayBuffer.slice(0));
+      const sampleRate = Number(decodedBuffer?.sampleRate || 0);
+      const channelCount = Math.max(1, Number(decodedBuffer?.numberOfChannels || 1));
+      const frameCount = Math.max(0, Number(decodedBuffer?.length || 0));
+      if (!frameCount) {
+        return createEmptyAudioAmplitudeStats({
+          sampleRate,
+          channelCount,
+          durationMs: 0
+        });
+      }
+
+      const channelData = [];
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        channelData.push(decodedBuffer.getChannelData(channelIndex));
+      }
+      const merged = new Float32Array(frameCount * channelCount);
+      let writeIndex = 0;
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+          merged[writeIndex] = Number(channelData[channelIndex]?.[frameIndex] || 0);
+          writeIndex += 1;
+        }
+      }
+      return computeAudioAmplitudeStatsFromFloatSamples(merged, {
+        sampleRate,
+        channelCount
+      });
+    } catch {
+      return createEmptyAudioAmplitudeStats();
+    } finally {
+      try {
+        if (audioContext?.state !== "closed") {
+          await audioContext?.close?.();
+        }
+      } catch {
+        // no-op
+      }
+    }
   }
 
   function resolveReadyWait() {
@@ -749,6 +989,54 @@ export function useRecorder() {
       audioTrackCount: audioTracks.length,
       firstAudioTrackReadyState: `${firstAudioTrack?.readyState || ""}`,
       firstAudioTrackEnabled: Boolean(firstAudioTrack?.enabled)
+    };
+  }
+
+  function getStreamStopTrackMeta(stream) {
+    const audioTracks = stream?.getAudioTracks?.() || [];
+    const firstAudioTrack = audioTracks[0] || null;
+    const hasMuted = Boolean(firstAudioTrack && ("muted" in firstAudioTrack));
+    return {
+      streamActiveAtStop: Boolean(stream?.active),
+      trackReadyStateAtStop: `${firstAudioTrack?.readyState || ""}`,
+      trackEnabledAtStop: firstAudioTrack ? Boolean(firstAudioTrack.enabled) : false,
+      trackMutedAtStop: hasMuted ? Boolean(firstAudioTrack?.muted) : null
+    };
+  }
+
+  function evaluateStreamUsabilityForWebAudio(stream, { relaxed = false } = {}) {
+    const runtimeMeta = getStreamRuntimeMeta(stream);
+    const normalizedReadyState = `${runtimeMeta.firstAudioTrackReadyState || ""}`.trim().toLowerCase();
+    const hasAudioTrack = Number(runtimeMeta.audioTrackCount || 0) > 0;
+    const strictOk = Boolean(runtimeMeta.streamActive) && hasAudioTrack && normalizedReadyState === "live";
+    if (strictOk) {
+      return {
+        ok: true,
+        relaxed,
+        runtimeMeta: {
+          ...runtimeMeta,
+          firstAudioTrackReadyState: normalizedReadyState || runtimeMeta.firstAudioTrackReadyState
+        }
+      };
+    }
+    if (!relaxed) {
+      return {
+        ok: false,
+        relaxed,
+        runtimeMeta: {
+          ...runtimeMeta,
+          firstAudioTrackReadyState: normalizedReadyState || runtimeMeta.firstAudioTrackReadyState
+        }
+      };
+    }
+    const relaxedOk = hasAudioTrack && normalizedReadyState !== "ended";
+    return {
+      ok: relaxedOk,
+      relaxed,
+      runtimeMeta: {
+        ...runtimeMeta,
+        firstAudioTrackReadyState: normalizedReadyState || runtimeMeta.firstAudioTrackReadyState
+      }
     };
   }
 
@@ -892,9 +1180,31 @@ export function useRecorder() {
 
     recorder.ondataavailable = (event) => {
       if (!isAttemptCurrent(attemptId)) return;
-      if (event.data && event.data.size > 0) {
-        audioChunks.push(event.data);
+      const chunk = event?.data || null;
+      const chunkSize = Math.max(0, Number(chunk?.size || 0));
+      const chunkMimeType = `${chunk?.type || ""}`.trim();
+      mediaDataEventCount += 1;
+      mediaLastDataAvailableAtMs = Date.now();
+      mediaChunkSizeList.push(chunkSize);
+      mediaChunkMimeTypeList.push(chunkMimeType);
+      if (mediaChunkSizeList.length > 120) mediaChunkSizeList = mediaChunkSizeList.slice(-120);
+      if (mediaChunkMimeTypeList.length > 120) mediaChunkMimeTypeList = mediaChunkMimeTypeList.slice(-120);
+
+      if (chunk && chunkSize > 0) {
+        lastChunkMimeType = `${chunk.type || lastChunkMimeType || ""}`.trim();
+        audioChunks.push(chunk);
+        mediaNonEmptyDataEventCount += 1;
+        mediaChunkTotalBytes += chunkSize;
       }
+      devLog("media:dataavailable", {
+        attemptId,
+        chunkSize,
+        chunkMimeType,
+        dataEventCount: Number(mediaDataEventCount || 0),
+        nonEmptyDataEventCount: Number(mediaNonEmptyDataEventCount || 0),
+        chunkCount: Number(audioChunks.length || 0),
+        chunkTotalBytes: Number(mediaChunkTotalBytes || 0)
+      });
     };
 
     recorder.onerror = (event) => {
@@ -902,27 +1212,92 @@ export function useRecorder() {
     };
 
     recorder.onstop = () => {
-      if (!isAttemptCurrent(attemptId)) {
-        resolveMediaStopWait({
-          timedOut: false,
-          skipped: true,
-          staleAttempt: true,
-          chunkCount: 0,
-          blobSize: 0,
-          mimeType: recorder?.mimeType || "audio/webm"
-        }, attemptId);
-        return;
-      }
-      const mimeType = recorder?.mimeType || "audio/webm";
-      audioBlob.value = new Blob(audioChunks, { type: mimeType });
-      const meta = {
-        chunkCount: audioChunks.length,
-        blobSize: audioBlob.value.size,
-        mimeType: audioBlob.value.type || mimeType
-      };
-      devLog("media:stopped", meta);
-      cleanupMediaStream();
-      resolveMediaStopWait({ timedOut: false, ...meta }, attemptId);
+      void (async () => {
+        const platformStrategy = `${lastStartMeta.value?.platformStrategy || resolvePlatformStrategy()}`;
+        const isIOSWebKitLike = platformStrategy === PLATFORM_STRATEGY_IOS_SAFARI || isLikelyIOSWebKitRuntime();
+        const finalDrainWindowMs = isIOSWebKitLike
+          ? MEDIARECORDER_FINAL_CHUNK_GRACE_IOS_WEBKIT_MS
+          : MEDIARECORDER_FINAL_CHUNK_GRACE_MS;
+        const chunkBytesBeforeDrain = Number(mediaChunkTotalBytes || 0);
+        const dataEventsBeforeDrain = Number(mediaDataEventCount || 0);
+        const finalDrainStartedAt = getNowMs();
+        let finalDrainWaitMs = 0;
+        let finalDrainUsed = false;
+        if ((audioChunks.length <= 0 || chunkBytesBeforeDrain <= 0) && finalDrainWindowMs > 0) {
+          finalDrainUsed = true;
+          const drainDeadlineAt = finalDrainStartedAt + finalDrainWindowMs;
+          while (getNowMs() < drainDeadlineAt) {
+            if (audioChunks.length > 0 && Number(mediaChunkTotalBytes || 0) > 0) {
+              break;
+            }
+            await waitForMs(MEDIARECORDER_FINAL_DRAIN_POLL_MS);
+          }
+          finalDrainWaitMs = getElapsedMs(finalDrainStartedAt);
+        }
+
+        const chunkStats = captureChunkStatsSnapshot();
+        const stopTrackMeta = getStreamStopTrackMeta(mediaStream);
+        if (!isAttemptCurrent(attemptId)) {
+          resolveMediaStopWait({
+            timedOut: false,
+            skipped: true,
+            staleAttempt: true,
+            chunkCount: 0,
+            rawChunkCount: Number(audioChunks.length || 0),
+            rawChunkBytes: Number(chunkStats.chunkTotalBytes || 0),
+            blobSize: 0,
+            mimeType: resolvePreferredRecordingMimeType({
+              recorderMimeType: recorder?.mimeType || "",
+              chunkMimeType: lastChunkMimeType,
+              startMetaMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+              platformStrategy
+            }),
+            mediaRecorderMimeType: `${recorder?.mimeType || ""}`,
+            chunkMimeType: `${lastChunkMimeType || ""}`,
+            lastChunkMimeType: `${lastChunkMimeType || ""}`,
+            selectedMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+            mediaRecorderStateAfterStop: `${recorder?.state || "inactive"}`,
+            finalDrainWindowMs: Number(finalDrainWindowMs || 0),
+            finalDrainWaitMs: Number(finalDrainWaitMs || 0),
+            finalDrainUsed: Boolean(finalDrainUsed),
+            chunkBytesBeforeDrain: Number(chunkBytesBeforeDrain || 0),
+            dataEventsBeforeDrain: Number(dataEventsBeforeDrain || 0),
+            ...stopTrackMeta,
+            ...chunkStats
+          }, attemptId);
+          return;
+        }
+
+        const mimeType = resolvePreferredRecordingMimeType({
+          recorderMimeType: recorder?.mimeType || "",
+          chunkMimeType: lastChunkMimeType,
+          startMetaMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+          platformStrategy
+        });
+        audioBlob.value = new Blob(audioChunks, { type: mimeType });
+        const meta = {
+          chunkCount: Number(audioChunks.length || 0),
+          rawChunkCount: Number(audioChunks.length || 0),
+          rawChunkBytes: Number(chunkStats.chunkTotalBytes || 0),
+          blobSize: Number(audioBlob.value?.size || 0),
+          mimeType: audioBlob.value?.type || mimeType,
+          mediaRecorderMimeType: `${recorder?.mimeType || ""}`,
+          chunkMimeType: `${lastChunkMimeType || ""}`,
+          lastChunkMimeType: `${lastChunkMimeType || ""}`,
+          selectedMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+          mediaRecorderStateAfterStop: `${recorder?.state || "inactive"}`,
+          finalDrainWindowMs: Number(finalDrainWindowMs || 0),
+          finalDrainWaitMs: Number(finalDrainWaitMs || 0),
+          finalDrainUsed: Boolean(finalDrainUsed),
+          chunkBytesBeforeDrain: Number(chunkBytesBeforeDrain || 0),
+          dataEventsBeforeDrain: Number(dataEventsBeforeDrain || 0),
+          ...stopTrackMeta,
+          ...chunkStats
+        };
+        devLog("media:stopped", meta);
+        cleanupMediaStream();
+        resolveMediaStopWait({ timedOut: false, ...meta }, attemptId);
+      })();
     };
   }
 
@@ -1034,6 +1409,7 @@ export function useRecorder() {
         pcmChunks,
         totalSampleCount: 0,
         sampleRate: audioContext.sampleRate || 44100,
+        channelCount: 1,
         stopPromise: null,
         finalized: false
       };
@@ -1101,8 +1477,11 @@ export function useRecorder() {
         errorCode: "WEBAUDIO_STOP_HANDLE_MISSING",
         errorMessage: "webaudio_handle_missing",
         chunkCount: 0,
+        totalSampleCount: 0,
+        wavEncodeInputSampleCount: 0,
         blob: null,
-        mimeType: "audio/wav"
+        mimeType: "audio/wav",
+        audioAmplitudeStats: createEmptyAudioAmplitudeStats()
       };
     }
 
@@ -1146,17 +1525,26 @@ export function useRecorder() {
           errorCode: "",
           errorMessage: "",
           chunkCount: handle.pcmChunks.length,
+          totalSampleCount: Number(handle.totalSampleCount || 0),
+          wavEncodeInputSampleCount: Number(mergedPcm.length || 0),
           blob: wavBlob,
-          mimeType: "audio/wav"
+          mimeType: "audio/wav",
+          audioAmplitudeStats: computeAudioAmplitudeStatsFromFloatSamples(mergedPcm, {
+            sampleRate: handle.sampleRate,
+            channelCount: handle.channelCount
+          })
         };
       } catch (err) {
         return {
           ok: false,
           errorCode: "WEBAUDIO_STOP_FAILED",
           errorMessage: err?.message || "webaudio_stop_failed",
-          chunkCount: 0,
+          chunkCount: Number(handle?.pcmChunks?.length || 0),
+          totalSampleCount: Number(handle?.totalSampleCount || 0),
+          wavEncodeInputSampleCount: 0,
           blob: null,
-          mimeType: "audio/wav"
+          mimeType: "audio/wav",
+          audioAmplitudeStats: createEmptyAudioAmplitudeStats()
         };
       }
     })();
@@ -1166,6 +1554,9 @@ export function useRecorder() {
 
   async function tryStartFallbackAudioEngine(stream, attemptId = 0) {
     if (!isAttemptCurrent(attemptId)) return false;
+    const platformStrategy = `${lastStartMeta.value?.platformStrategy || resolvePlatformStrategy()}`;
+    const hasMediaRecorder = Boolean(lastStartMeta.value?.hasMediaRecorder);
+    const allowRelaxedStreamGate = platformStrategy === PLATFORM_STRATEGY_IOS_SAFARI || !hasMediaRecorder;
     applyStartMetaPatch({
       webAudioFallbackTried: true,
       webAudioFallbackOk: false,
@@ -1173,17 +1564,31 @@ export function useRecorder() {
       webAudioFallbackErrorMessage: ""
     });
 
-    const runtimeMeta = getStreamRuntimeMeta(stream);
-    if (!runtimeMeta.streamActive || runtimeMeta.audioTrackCount <= 0 || runtimeMeta.firstAudioTrackReadyState !== "live") {
+    let streamCheck = evaluateStreamUsabilityForWebAudio(stream);
+    if (!streamCheck.ok && allowRelaxedStreamGate) {
+      const firstAudioTrack = stream?.getAudioTracks?.()?.[0] || null;
+      if (firstAudioTrack && firstAudioTrack.enabled === false) {
+        try {
+          firstAudioTrack.enabled = true;
+        } catch {
+          // no-op
+        }
+      }
+      await waitForMs(120);
+      streamCheck = evaluateStreamUsabilityForWebAudio(stream, { relaxed: true });
+    }
+    if (!streamCheck.ok) {
       const code = "WEBAUDIO_STREAM_NOT_LIVE";
       const message = "audio_stream_not_live";
       applyStartMetaPatch({
+        ...streamCheck.runtimeMeta,
         webAudioFallbackOk: false,
         webAudioFallbackErrorCode: code,
         webAudioFallbackErrorMessage: message
       });
       return false;
     }
+    applyStartMetaPatch(streamCheck.runtimeMeta);
 
     const created = await createWebAudioRecorder(stream);
     if (!isAttemptCurrent(attemptId)) {
@@ -1252,6 +1657,12 @@ export function useRecorder() {
         }
         mediaRecorder = recorder;
         audioChunks = [];
+        mediaDataEventCount = 0;
+        mediaNonEmptyDataEventCount = 0;
+        mediaChunkSizeList = [];
+        mediaChunkMimeTypeList = [];
+        mediaChunkTotalBytes = 0;
+        mediaLastDataAvailableAtMs = 0;
         audioBlob.value = null;
         attachRecorderEventHandlers(mediaRecorder, attemptId);
         appendStartAttempt({
@@ -1370,13 +1781,34 @@ export function useRecorder() {
   }
 
   function waitForMediaStop(attemptId = 0) {
+    const platformStrategy = `${lastStartMeta.value?.platformStrategy || resolvePlatformStrategy()}`;
+    const fallbackMimeType = resolvePreferredRecordingMimeType({
+      recorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+      chunkMimeType: `${lastChunkMimeType || ""}`,
+      startMetaMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+      platformStrategy
+    });
+    const chunkStats = captureChunkStatsSnapshot();
+    const stopTrackMeta = getStreamStopTrackMeta(mediaStream);
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
       return Promise.resolve({
         timedOut: false,
         skipped: true,
-        chunkCount: audioChunks.length,
+        chunkCount: Number(audioChunks.length || 0),
+        rawChunkCount: Number(audioChunks.length || 0),
+        rawChunkBytes: Number(chunkStats.chunkTotalBytes || 0),
         blobSize: audioBlob.value?.size || 0,
-        mimeType: audioBlob.value?.type || "audio/webm"
+        mimeType: audioBlob.value?.type || fallbackMimeType,
+        mediaRecorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+        chunkMimeType: `${lastChunkMimeType || ""}`,
+        lastChunkMimeType: `${lastChunkMimeType || ""}`,
+        selectedMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+        mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+        finalDrainWaitMs: 0,
+        finalDrainWindowMs: 0,
+        stopWaitMs: 0,
+        ...stopTrackMeta,
+        ...chunkStats
       });
     }
 
@@ -1386,9 +1818,20 @@ export function useRecorder() {
       mediaStopTimer = setTimeout(() => {
         resolveMediaStopWait({
           timedOut: true,
-          chunkCount: audioChunks.length,
+          chunkCount: Number(audioChunks.length || 0),
+          rawChunkCount: Number(audioChunks.length || 0),
+          rawChunkBytes: Number(captureChunkStatsSnapshot().chunkTotalBytes || 0),
           blobSize: audioBlob.value?.size || 0,
-          mimeType: audioBlob.value?.type || mediaRecorder?.mimeType || "audio/webm"
+          mimeType: audioBlob.value?.type || fallbackMimeType,
+          mediaRecorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+          chunkMimeType: `${lastChunkMimeType || ""}`,
+          lastChunkMimeType: `${lastChunkMimeType || ""}`,
+          selectedMimeType: `${lastStartMeta.value?.selectedMimeType || ""}`,
+          mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+          finalDrainWaitMs: 0,
+          finalDrainWindowMs: 0,
+          ...getStreamStopTrackMeta(mediaStream),
+          ...captureChunkStatsSnapshot()
         }, attemptId);
       }, MEDIA_STOP_TIMEOUT_MS);
     });
@@ -1519,7 +1962,7 @@ export function useRecorder() {
       setStartFailure("INSECURE_CONTEXT", error.value);
       return false;
     }
-    if (!hasGetUserMedia || !hasMediaRecorder) {
+    if (!hasGetUserMedia) {
       isSupported.value = false;
       error.value = "当前浏览器不支持录音功能，请改用 Chrome、Edge 或 Safari。";
       setStartFailure("MEDIA_UNSUPPORTED", error.value);
@@ -1527,6 +1970,11 @@ export function useRecorder() {
     }
 
     isSupported.value = true;
+    if (!hasMediaRecorder) {
+      devLog("media:mediarecorder_unavailable_fallback_only", {
+        attemptId: Number(currentAttemptId.value || 0)
+      });
+    }
 
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1589,6 +2037,13 @@ export function useRecorder() {
     activeStopPromise = null;
     activeStopAttemptId = 0;
     audioChunks = [];
+    lastChunkMimeType = "";
+    mediaDataEventCount = 0;
+    mediaNonEmptyDataEventCount = 0;
+    mediaChunkSizeList = [];
+    mediaChunkMimeTypeList = [];
+    mediaChunkTotalBytes = 0;
+    mediaLastDataAvailableAtMs = 0;
 
     clearStopResolversAndTimers();
     cleanupMediaStream();
@@ -1812,6 +2267,8 @@ export function useRecorder() {
       staleAttempt: true,
       stopReason: stopReason || "manual",
       stopCallCount,
+      recorderEngineAtStart: "",
+      recorderEngineAtStop: "",
       recorderEngine: recorderEngine || "",
       transcript: "",
       blob: null,
@@ -1822,17 +2279,61 @@ export function useRecorder() {
       recognitionStopTimedOut: false,
       chunkCount: 0,
       mimeType: "",
+      mediaRecorderMimeType: "",
+      chunkMimeType: "",
+      selectedMimeType: "",
       mimeTypePlayable: false,
       previewPlayable: false,
       playableValidationMethod: "",
       playableValidationErrorCode: "ATTEMPT_STALE",
       playableDurationSec: 0,
       hasUsableAudio: false,
+      finalRecorderEngine: "",
+      rawChunkCount: 0,
+      rawChunkBytes: 0,
+      lastChunkMimeType: "",
+      fallbackProducedBlob: false,
+      fallbackBlobSize: 0,
+      finalUsableDecision: false,
+      finalUsableReason: "",
+      finalPlaybackUsable: false,
+      finalPlaybackReason: "",
+      finalBlobPlayable: false,
+      finalSilenceWarning: false,
+      playbackUrlCreated: false,
+      stopNoAudioRetryAttempted: false,
+      stopNoAudioRetryRecovered: false,
+      stopNoAudioRetryDelayMs: 0,
+      dataEventCount: 0,
+      nonEmptyDataEventCount: 0,
+      chunkSizeList: [],
+      chunkMimeTypeList: [],
+      chunkTotalBytes: 0,
+      lastDataAvailableAtMs: 0,
+      peakAmplitude: 0,
+      rmsAmplitude: 0,
+      meanAbsAmplitude: 0,
+      nonSilentFrameRatio: 0,
+      sampleRate: 0,
+      channelCount: 0,
+      durationMs: 0,
       stopRecorderMs: 0,
       recognitionStopMs: 0,
       mediaStopMs: 0,
+      stopWaitMs: 0,
+      finalDrainWaitMs: 0,
+      finalDrainWindowMs: 0,
+      mediaRecorderStateAtStopRequest: "inactive",
+      mediaRecorderStateAfterStop: "inactive",
+      streamActiveAtStop: false,
+      trackReadyStateAtStop: "",
+      trackEnabledAtStop: false,
+      trackMutedAtStop: null,
+      webAudioTotalSampleCount: 0,
+      wavEncodeInputSampleCount: 0,
       blobIssueCode: "AUDIO_BLOB_EMPTY",
       stopErrorCode: "ATTEMPT_STALE",
+      stopErrorMessage: "",
       ...patch
     };
   }
@@ -1840,6 +2341,11 @@ export function useRecorder() {
     const stopReason = options.reason || "manual";
     const stopAttemptId = Number(options.attemptId || currentAttemptId.value || 0);
     const skipPlayableValidation = Boolean(options.skipPlayableValidation);
+    const retryNoAudioOnce = options.retryNoAudioOnce !== false;
+    const noAudioRetryDelayMs = Math.max(
+      0,
+      Number(options.noAudioRetryDelayMs || MEDIARECORDER_NO_AUDIO_RETRY_DELAY_MS)
+    );
     if (!stopAttemptId || !isAttemptCurrent(stopAttemptId)) {
       return createStaleStopResult(stopReason, stopAttemptId, {
         stopErrorCode: "ATTEMPT_STALE_BEFORE_STOP"
@@ -1859,8 +2365,13 @@ export function useRecorder() {
     const platformStrategy = `${startMetaSnapshot?.platformStrategy || resolvePlatformStrategy()}`;
     const isAndroidLike = Boolean(startMetaSnapshot?.isAndroidLike);
     const isIOSSafari = Boolean(startMetaSnapshot?.isIOSSafari);
+    const isIOSWebKitLikeStop = platformStrategy === PLATFORM_STRATEGY_IOS_SAFARI || isLikelyIOSWebKitRuntime();
     const webAudioFallbackTried = Boolean(startMetaSnapshot?.webAudioFallbackTried);
     const webAudioFallbackOk = Boolean(startMetaSnapshot?.webAudioFallbackOk);
+    const recorderEngineAtStart = `${startMetaSnapshot?.recorderEngine || ""}`.trim();
+    const recorderEngineAtStop = `${recorderEngine || ""}`.trim();
+    const stopTrackMetaAtRequest = getStreamStopTrackMeta(mediaStream);
+    const mediaRecorderStateAtStopRequest = `${mediaRecorder?.state || "inactive"}`;
     activeStopAttemptId = stopAttemptId;
     activeStopPromise = (async () => {
       stopRequested = true;
@@ -1873,12 +2384,19 @@ export function useRecorder() {
         stopReason,
         stopAttemptId,
         skipPlayableValidation,
+        retryNoAudioOnce,
+        noAudioRetryDelayMs,
         platformStrategy,
         isAndroidLike,
         isIOSSafari,
+        isIOSWebKitLikeStop,
+        recorderEngineAtStart,
         recorderEngine,
-        recorderState: mediaRecorder?.state || "inactive",
-        chunkCountBeforeStop: audioChunks.length
+        recorderState: mediaRecorderStateAtStopRequest,
+        mediaRecorderStateAtStopRequest,
+        ...stopTrackMetaAtRequest,
+        chunkCountBeforeStop: audioChunks.length,
+        chunkStatsBeforeStop: captureChunkStatsSnapshot()
       });
       const recognitionWaitStartedAt = getNowMs();
       const recognitionStopPromise = waitForRecognitionStop(stopAttemptId).then((result) => ({
@@ -1898,8 +2416,19 @@ export function useRecorder() {
               staleAttempt: true,
               waitMs: getElapsedMs(mediaWaitStartedAt),
               chunkCount: 0,
+              rawChunkCount: 0,
+              rawChunkBytes: 0,
               blobSize: 0,
+              blob: null,
               mimeType: "audio/wav",
+              lastChunkMimeType: `${lastChunkMimeType || ""}`,
+              mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+              finalDrainWaitMs: 0,
+              finalDrainWindowMs: 0,
+              ...stopTrackMetaAtRequest,
+              totalSampleCount: 0,
+              wavEncodeInputSampleCount: 0,
+              audioAmplitudeStats: createEmptyAudioAmplitudeStats(),
               webAudioStopError: false,
               stopErrorCode: "ATTEMPT_STALE",
               stopErrorMessage: "attempt_stale"
@@ -1913,8 +2442,19 @@ export function useRecorder() {
               skipped: false,
               waitMs: getElapsedMs(mediaWaitStartedAt),
               chunkCount: Number(stopped?.chunkCount || 0),
+              rawChunkCount: Number(stopped?.chunkCount || 0),
+              rawChunkBytes: 0,
               blobSize: 0,
+              blob: null,
               mimeType: "audio/wav",
+              lastChunkMimeType: `${lastChunkMimeType || ""}`,
+              mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+              finalDrainWaitMs: 0,
+              finalDrainWindowMs: 0,
+              ...stopTrackMetaAtRequest,
+              totalSampleCount: Number(stopped?.totalSampleCount || 0),
+              wavEncodeInputSampleCount: Number(stopped?.wavEncodeInputSampleCount || 0),
+              audioAmplitudeStats: stopped?.audioAmplitudeStats || createEmptyAudioAmplitudeStats(),
               webAudioStopError: true,
               stopErrorCode: stopped?.errorCode || "WEBAUDIO_STOP_FAILED",
               stopErrorMessage: stopped?.errorMessage || "webaudio_stop_failed"
@@ -1927,8 +2467,19 @@ export function useRecorder() {
             skipped: false,
             waitMs: getElapsedMs(mediaWaitStartedAt),
             chunkCount: Number(stopped.chunkCount || 0),
+            rawChunkCount: Number(stopped.chunkCount || 0),
+            rawChunkBytes: Number(stopped.blob?.size || 0),
             blobSize: Number(stopped.blob?.size || 0),
+            blob: stopped.blob,
             mimeType: "audio/wav",
+            lastChunkMimeType: `${lastChunkMimeType || ""}`,
+            mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+            finalDrainWaitMs: 0,
+            finalDrainWindowMs: 0,
+            ...stopTrackMetaAtRequest,
+            totalSampleCount: Number(stopped?.totalSampleCount || 0),
+            wavEncodeInputSampleCount: Number(stopped?.wavEncodeInputSampleCount || 0),
+            audioAmplitudeStats: stopped?.audioAmplitudeStats || createEmptyAudioAmplitudeStats(),
             webAudioStopError: false,
             stopErrorCode: "",
             stopErrorMessage: ""
@@ -1953,36 +2504,75 @@ export function useRecorder() {
         // WebAudio stop is handled inside mediaStopPromise
       } else if (mediaRecorder && mediaRecorder.state !== "inactive") {
         try {
+          let requestDataInvoked = false;
           if (typeof mediaRecorder.requestData === "function") {
             try {
               mediaRecorder.requestData();
+              requestDataInvoked = true;
             } catch {
               // no-op
             }
           }
+          if (isIOSWebKitLikeStop && requestDataInvoked && MEDIARECORDER_STOP_REQUESTDATA_LEAD_MS_IOS_WEBKIT > 0) {
+            await waitForMs(MEDIARECORDER_STOP_REQUESTDATA_LEAD_MS_IOS_WEBKIT);
+          }
           mediaRecorder.stop();
         } catch {
+          const fallbackMimeType = resolvePreferredRecordingMimeType({
+            recorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+            chunkMimeType: `${lastChunkMimeType || ""}`,
+            startMetaMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
+            platformStrategy
+          });
           cleanupMediaStream();
           resolveMediaStopWait({
             timedOut: false,
             skipped: true,
             recorderStopError: true,
-            chunkCount: audioChunks.length,
+            chunkCount: Number(audioChunks.length || 0),
+            rawChunkCount: Number(audioChunks.length || 0),
+            rawChunkBytes: Number(captureChunkStatsSnapshot().chunkTotalBytes || 0),
             blobSize: audioBlob.value?.size || 0,
-            mimeType: audioBlob.value?.type || "audio/webm"
+            mimeType: audioBlob.value?.type || fallbackMimeType,
+            mediaRecorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+            chunkMimeType: `${lastChunkMimeType || ""}`,
+            lastChunkMimeType: `${lastChunkMimeType || ""}`,
+            selectedMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
+            mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+            finalDrainWaitMs: 0,
+            finalDrainWindowMs: 0,
+            ...stopTrackMetaAtRequest,
+            ...captureChunkStatsSnapshot()
           }, stopAttemptId);
         }
       } else {
+        const fallbackMimeType = resolvePreferredRecordingMimeType({
+          recorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+          chunkMimeType: `${lastChunkMimeType || ""}`,
+          startMetaMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
+          platformStrategy
+        });
         if (!audioBlob.value && audioChunks.length > 0) {
-          audioBlob.value = new Blob(audioChunks, { type: "audio/webm" });
+          audioBlob.value = new Blob(audioChunks, { type: fallbackMimeType });
         }
         cleanupMediaStream();
         resolveMediaStopWait({
           timedOut: false,
           skipped: true,
-          chunkCount: audioChunks.length,
+          chunkCount: Number(audioChunks.length || 0),
+          rawChunkCount: Number(audioChunks.length || 0),
+          rawChunkBytes: Number(captureChunkStatsSnapshot().chunkTotalBytes || 0),
           blobSize: audioBlob.value?.size || 0,
-          mimeType: audioBlob.value?.type || "audio/webm"
+          mimeType: audioBlob.value?.type || fallbackMimeType,
+          mediaRecorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+          chunkMimeType: `${lastChunkMimeType || ""}`,
+          lastChunkMimeType: `${lastChunkMimeType || ""}`,
+          selectedMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
+          mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+          finalDrainWaitMs: 0,
+          finalDrainWindowMs: 0,
+          ...stopTrackMetaAtRequest,
+          ...captureChunkStatsSnapshot()
         }, stopAttemptId);
       }
       const [recognitionStopResult, mediaStopResult] = await Promise.all([recognitionStopPromise, mediaStopPromise]);
@@ -1996,11 +2586,44 @@ export function useRecorder() {
       const stopRecorderMs = getElapsedMs(stopStartedAt);
       const recognitionStopMs = Number(recognitionStopResult?.waitMs || 0);
       const mediaStopMs = Number(mediaStopResult?.waitMs || 0);
-      const blob = audioBlob.value;
-      const blobSize = blob?.size || 0;
-      const blobTooLarge = blobSize > MAX_AUDIO_BLOB_BYTES;
-      const hasAudio = blobSize > 0;
-      const mimeType = mediaStopResult?.mimeType || blob?.type || "audio/webm";
+      const stopWaitMs = Number(mediaStopResult?.waitMs || mediaStopMs || 0);
+      let blob = audioBlob.value || mediaStopResult?.blob || null;
+      if (!audioBlob.value && mediaStopResult?.blob) {
+        audioBlob.value = mediaStopResult.blob;
+      }
+      let blobSize = blob?.size || 0;
+      let blobTooLarge = blobSize > MAX_AUDIO_BLOB_BYTES;
+      let hasAudio = blobSize > 0;
+      const mimeType = mediaStopResult?.mimeType || blob?.type || resolvePreferredRecordingMimeType({
+        recorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+        chunkMimeType: `${lastChunkMimeType || ""}`,
+        startMetaMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
+        platformStrategy
+      });
+      let stopNoAudioRetryAttempted = false;
+      let stopNoAudioRetryRecovered = false;
+      const canRetryNoAudio = retryNoAudioOnce
+        && !usingWebAudio
+        && !mediaStopResult?.timedOut
+        && !mediaStopResult?.webAudioStopError;
+      const shouldRetryForMissingData = !hasAudio || blobSize < MIN_AUDIO_BLOB_BYTES;
+      if (canRetryNoAudio && shouldRetryForMissingData && noAudioRetryDelayMs > 0) {
+        stopNoAudioRetryAttempted = true;
+        await waitForMs(noAudioRetryDelayMs);
+        if (!isAttemptCurrent(stopAttemptId)) {
+          return createStaleStopResult(stopReason, stopAttemptId, {
+            stopErrorCode: "ATTEMPT_STALE_AFTER_NO_AUDIO_RETRY"
+          });
+        }
+        if (!audioBlob.value && audioChunks.length > 0) {
+          audioBlob.value = new Blob(audioChunks, { type: mimeType });
+        }
+        blob = audioBlob.value;
+        blobSize = blob?.size || 0;
+        blobTooLarge = blobSize > MAX_AUDIO_BLOB_BYTES;
+        hasAudio = blobSize > 0;
+        stopNoAudioRetryRecovered = hasAudio && blobSize >= MIN_AUDIO_BLOB_BYTES;
+      }
       const playableCheck = skipPlayableValidation
         ? {
             playable: true,
@@ -2014,12 +2637,18 @@ export function useRecorder() {
           stopErrorCode: "ATTEMPT_STALE_AFTER_PLAYABLE_CHECK"
         });
       }
-      let blobIssueCode = detectBlobIssue({ blobSize, blobTooLarge, mimeType });
+      let blobIssueCode = detectBlobIssue({
+        blobSize,
+        blobTooLarge,
+        mimeType,
+        previewPlayable: Boolean(playableCheck.playable)
+      });
       if (!blobIssueCode && !playableCheck.playable) {
         blobIssueCode = "AUDIO_BLOB_NOT_PLAYABLE";
       }
       const mimeTypePlayable = isMimeTypePlayable(mimeType);
-      const hasUsableAudio = isUsableAudioResult({
+      const hasFinalPlayableBlob = Boolean(blob && blobSize > 0 && (playableCheck.playable || mimeTypePlayable));
+      let hasUsableAudio = isUsableAudioResult({
         blob,
         hasAudio,
         blobSize,
@@ -2027,6 +2656,72 @@ export function useRecorder() {
         mimeType,
         previewPlayable: playableCheck.playable
       });
+      if (!hasUsableAudio && hasFinalPlayableBlob) {
+        hasUsableAudio = true;
+      }
+      const finalRecorderEngine = `${usingWebAudio ? "web_audio_wav" : (recorderEngine || "")}`.trim();
+      const fallbackProducedBlob = Boolean(
+        (usingWebAudio || webAudioFallbackTried || webAudioFallbackOk)
+        && blob
+        && blobSize > 0
+      );
+      const fallbackBlobSize = fallbackProducedBlob ? Number(blobSize || 0) : 0;
+      const finalUsableDecision = Boolean(hasUsableAudio || hasFinalPlayableBlob);
+      let finalUsableReason = "";
+      const finalBlobPlayable = Boolean(hasFinalPlayableBlob);
+      const finalPlaybackUsable = Boolean(finalBlobPlayable);
+      let finalPlaybackReason = "";
+      if (finalUsableDecision) {
+        finalUsableReason = hasFinalPlayableBlob
+          ? (playableCheck.playable ? "FINAL_BLOB_PLAYABLE_BY_PROBE" : "FINAL_BLOB_PLAYABLE_BY_MIME")
+          : "FINAL_USABLE_BY_SHARED_LAYER";
+        finalPlaybackReason = hasFinalPlayableBlob
+          ? (playableCheck.playable ? "FINAL_PREVIEW_PLAYABLE_BY_PROBE" : "FINAL_PREVIEW_PLAYABLE_BY_MIME")
+          : "FINAL_PREVIEW_PLAYABLE_BY_SHARED_LAYER";
+        if (INVALID_AUDIO_BLOB_ISSUES.has(`${blobIssueCode || ""}`)) {
+          blobIssueCode = "";
+        }
+      } else if (!blob || blobSize <= 0) {
+        finalUsableReason = "FINAL_BLOB_EMPTY";
+        finalPlaybackReason = "FINAL_PREVIEW_BLOB_EMPTY";
+      } else if (blobTooLarge) {
+        finalUsableReason = "FINAL_BLOB_TOO_LARGE";
+        finalPlaybackReason = "FINAL_PREVIEW_BLOB_TOO_LARGE";
+      } else if (blobIssueCode) {
+        finalUsableReason = `FINAL_${blobIssueCode}`;
+        finalPlaybackReason = `FINAL_PREVIEW_${blobIssueCode}`;
+      } else if (playableCheck?.errorCode) {
+        finalUsableReason = `${playableCheck.errorCode}`;
+        finalPlaybackReason = `${playableCheck.errorCode}`;
+      } else {
+        finalUsableReason = "FINAL_UNUSABLE_UNKNOWN";
+        finalPlaybackReason = "FINAL_PREVIEW_UNUSABLE_UNKNOWN";
+      }
+      let audioAmplitudeStats = mediaStopResult?.audioAmplitudeStats || createEmptyAudioAmplitudeStats();
+      if (!audioAmplitudeStats?.amplitudeStatsAvailable && blob && blobSize > 0) {
+        audioAmplitudeStats = await analyzeBlobAudioAmplitudeStats(blob, stopAttemptId);
+      }
+      if (!isAttemptCurrent(stopAttemptId)) {
+        return createStaleStopResult(stopReason, stopAttemptId, {
+          stopErrorCode: "ATTEMPT_STALE_AFTER_AMPLITUDE_STATS"
+        });
+      }
+      const runtimeChunkStats = captureChunkStatsSnapshot();
+      const rawChunkCount = Number(mediaStopResult?.rawChunkCount ?? mediaStopResult?.chunkCount ?? audioChunks.length);
+      const rawChunkBytes = Number(
+        mediaStopResult?.rawChunkBytes
+        ?? mediaStopResult?.chunkTotalBytes
+        ?? runtimeChunkStats.chunkTotalBytes
+        ?? blobSize
+        ?? 0
+      );
+      const mediaRecorderStateAfterStop = `${mediaStopResult?.mediaRecorderStateAfterStop || mediaRecorder?.state || "inactive"}`;
+      const chunkSizeList = runtimeChunkStats.chunkSizeList.length
+        ? runtimeChunkStats.chunkSizeList
+        : Array.isArray(mediaStopResult?.chunkSizeList) ? mediaStopResult.chunkSizeList : [];
+      const chunkMimeTypeList = runtimeChunkStats.chunkMimeTypeList.length
+        ? runtimeChunkStats.chunkMimeTypeList
+        : Array.isArray(mediaStopResult?.chunkMimeTypeList) ? mediaStopResult.chunkMimeTypeList : [];
       const result = {
         attemptId: stopAttemptId,
         staleAttempt: false,
@@ -2037,6 +2732,8 @@ export function useRecorder() {
         isIOSSafari,
         webAudioFallbackTried,
         webAudioFallbackOk,
+        recorderEngineAtStart,
+        recorderEngineAtStop,
         recorderEngine,
         transcript: transcript.value,
         blob,
@@ -2046,18 +2743,70 @@ export function useRecorder() {
         recorderStopTimedOut: Boolean(mediaStopResult?.timedOut),
         recognitionStopTimedOut: Boolean(recognitionStopResult?.timedOut),
         chunkCount: Number(mediaStopResult?.chunkCount ?? audioChunks.length),
+        rawChunkCount,
+        rawChunkBytes,
         mimeType,
+        mediaRecorderMimeType: `${mediaStopResult?.mediaRecorderMimeType || mediaRecorder?.mimeType || ""}`,
+        chunkMimeType: `${mediaStopResult?.chunkMimeType || lastChunkMimeType || ""}`,
+        lastChunkMimeType: `${mediaStopResult?.lastChunkMimeType || lastChunkMimeType || ""}`,
+        selectedMimeType: `${mediaStopResult?.selectedMimeType || startMetaSnapshot?.selectedMimeType || ""}`,
         mimeTypePlayable,
         previewPlayable: Boolean(playableCheck.playable),
         playableValidationMethod: `${playableCheck.method || ""}`,
         playableValidationErrorCode: `${playableCheck.errorCode || ""}`,
         playableDurationSec: Number(playableCheck.durationSec || 0),
-        hasUsableAudio,
+        hasUsableAudio: finalUsableDecision,
+        finalRecorderEngine,
+        fallbackProducedBlob,
+        fallbackBlobSize,
+        finalUsableDecision,
+        finalUsableReason,
+        finalPlaybackUsable,
+        finalPlaybackReason,
+        finalBlobPlayable,
+        finalSilenceWarning: false,
+        playbackUrlCreated: false,
+        stopNoAudioRetryAttempted,
+        stopNoAudioRetryRecovered,
+        stopNoAudioRetryDelayMs: stopNoAudioRetryAttempted ? noAudioRetryDelayMs : 0,
+        dataEventCount: Number(runtimeChunkStats.dataEventCount || mediaStopResult?.dataEventCount || 0),
+        nonEmptyDataEventCount: Number(runtimeChunkStats.nonEmptyDataEventCount || mediaStopResult?.nonEmptyDataEventCount || 0),
+        chunkSizeList,
+        chunkMimeTypeList,
+        chunkTotalBytes: Number(runtimeChunkStats.chunkTotalBytes || mediaStopResult?.chunkTotalBytes || blobSize || 0),
+        lastDataAvailableAtMs: Number(runtimeChunkStats.lastDataAvailableAtMs || mediaStopResult?.lastDataAvailableAtMs || 0),
+        peakAmplitude: Number(audioAmplitudeStats?.peakAmplitude || 0),
+        rmsAmplitude: Number(audioAmplitudeStats?.rmsAmplitude || 0),
+        meanAbsAmplitude: Number(audioAmplitudeStats?.meanAbsAmplitude || 0),
+        nonSilentFrameRatio: Number(audioAmplitudeStats?.nonSilentFrameRatio || 0),
+        sampleRate: Number(audioAmplitudeStats?.sampleRate || 0),
+        channelCount: Number(audioAmplitudeStats?.channelCount || 0),
+        durationMs: Number(audioAmplitudeStats?.durationMs || 0),
         stopRecorderMs,
         recognitionStopMs,
         mediaStopMs,
+        stopWaitMs,
+        finalDrainWaitMs: Number(mediaStopResult?.finalDrainWaitMs || 0),
+        finalDrainWindowMs: Number(mediaStopResult?.finalDrainWindowMs || 0),
+        mediaRecorderStateAtStopRequest,
+        mediaRecorderStateAfterStop,
+        streamActiveAtStop: Boolean(
+          typeof mediaStopResult?.streamActiveAtStop === "boolean"
+            ? mediaStopResult.streamActiveAtStop
+            : stopTrackMetaAtRequest.streamActiveAtStop
+        ),
+        trackReadyStateAtStop: `${mediaStopResult?.trackReadyStateAtStop || stopTrackMetaAtRequest.trackReadyStateAtStop || ""}`,
+        trackEnabledAtStop: Boolean(
+          typeof mediaStopResult?.trackEnabledAtStop === "boolean"
+            ? mediaStopResult.trackEnabledAtStop
+            : stopTrackMetaAtRequest.trackEnabledAtStop
+        ),
+        trackMutedAtStop: mediaStopResult?.trackMutedAtStop ?? stopTrackMetaAtRequest.trackMutedAtStop ?? null,
+        webAudioTotalSampleCount: Number(mediaStopResult?.totalSampleCount || 0),
+        wavEncodeInputSampleCount: Number(mediaStopResult?.wavEncodeInputSampleCount || 0),
         blobIssueCode,
-        stopErrorCode: ""
+        stopErrorCode: "",
+        stopErrorMessage: ""
       };
       result.stopErrorCode = mediaStopResult?.webAudioStopError
         ? (mediaStopResult?.stopErrorCode || "WEBAUDIO_STOP_FAILED")
@@ -2065,7 +2814,14 @@ export function useRecorder() {
           ? "RECORDER_STOP_TIMEOUT"
           : result.recognitionStopTimedOut
             ? "RECOGNITION_STOP_TIMEOUT"
-            : blobIssueCode;
+            : (finalUsableDecision ? "" : blobIssueCode);
+      result.stopErrorMessage = mediaStopResult?.webAudioStopError
+        ? `${mediaStopResult?.stopErrorMessage || "webaudio_stop_failed"}`
+        : result.recorderStopTimedOut
+          ? "media_stop_timeout"
+          : result.recognitionStopTimedOut
+            ? "recognition_stop_timeout"
+            : (finalUsableDecision ? "" : `${playableCheck?.errorCode || ""}`);
       if (!isAttemptCurrent(stopAttemptId)) {
         return {
           ...result,
@@ -2086,7 +2842,7 @@ export function useRecorder() {
       }
       return result;
     })()
-      .catch((err) => {
+      .catch(async (err) => {
         if (!isAttemptCurrent(stopAttemptId)) {
           return createStaleStopResult(stopReason, stopAttemptId, {
             stopErrorCode: "ATTEMPT_STALE_ON_EXCEPTION"
@@ -2094,13 +2850,20 @@ export function useRecorder() {
         }
         const failedBlobSize = audioBlob.value?.size || 0;
         const failedBlobTooLarge = failedBlobSize > MAX_AUDIO_BLOB_BYTES;
-        const failedMimeType = audioBlob.value?.type || mediaRecorder?.mimeType || "audio/webm";
+        const failedMimeType = audioBlob.value?.type || resolvePreferredRecordingMimeType({
+          recorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+          chunkMimeType: `${lastChunkMimeType || ""}`,
+          startMetaMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
+          platformStrategy
+        });
         const failedBlobIssueCode = detectBlobIssue({
           blobSize: failedBlobSize,
           blobTooLarge: failedBlobTooLarge,
-          mimeType: failedMimeType
+          mimeType: failedMimeType,
+          previewPlayable: false
         });
         const failedMimeTypePlayable = isMimeTypePlayable(failedMimeType);
+        const failedChunkStats = captureChunkStatsSnapshot();
         const failedHasUsableAudio = isUsableAudioResult({
           blob: audioBlob.value,
           hasAudio: failedBlobSize > 0,
@@ -2109,6 +2872,9 @@ export function useRecorder() {
           mimeType: failedMimeType,
           previewPlayable: false
         });
+        const failedAudioAmplitudeStats = failedBlobSize > 0
+          ? await analyzeBlobAudioAmplitudeStats(audioBlob.value, stopAttemptId)
+          : createEmptyAudioAmplitudeStats();
         const failedResult = {
           attemptId: stopAttemptId,
           staleAttempt: false,
@@ -2119,6 +2885,8 @@ export function useRecorder() {
           isIOSSafari,
           webAudioFallbackTried,
           webAudioFallbackOk,
+          recorderEngineAtStart,
+          recorderEngineAtStop,
           recorderEngine,
           transcript: buildFinalTranscript(),
           blob: audioBlob.value,
@@ -2128,18 +2896,66 @@ export function useRecorder() {
           recorderStopTimedOut: false,
           recognitionStopTimedOut: false,
           chunkCount: audioChunks.length,
+          rawChunkCount: Number(audioChunks.length || 0),
+          rawChunkBytes: Number(failedChunkStats.chunkTotalBytes || failedBlobSize || 0),
           mimeType: failedMimeType,
+          mediaRecorderMimeType: `${mediaRecorder?.mimeType || ""}`,
+          chunkMimeType: `${lastChunkMimeType || ""}`,
+          lastChunkMimeType: `${lastChunkMimeType || ""}`,
+          selectedMimeType: `${startMetaSnapshot?.selectedMimeType || ""}`,
           mimeTypePlayable: failedMimeTypePlayable,
           previewPlayable: false,
           playableValidationMethod: "",
           playableValidationErrorCode: "STOP_EXCEPTION",
           playableDurationSec: 0,
           hasUsableAudio: failedHasUsableAudio,
+          finalRecorderEngine: `${recorderEngine || ""}`.trim(),
+          fallbackProducedBlob: false,
+          fallbackBlobSize: 0,
+          finalUsableDecision: Boolean(failedHasUsableAudio),
+          finalUsableReason: failedHasUsableAudio
+            ? "FINAL_USABLE_BY_SHARED_LAYER"
+            : `${failedBlobIssueCode || "FINAL_EXCEPTION"}`,
+          finalPlaybackUsable: Boolean(failedHasUsableAudio && failedBlobSize > 0),
+          finalPlaybackReason: failedHasUsableAudio
+            ? "FINAL_PREVIEW_PLAYABLE_BY_SHARED_LAYER"
+            : `${failedBlobIssueCode || "FINAL_PREVIEW_EXCEPTION"}`,
+          finalBlobPlayable: Boolean(failedHasUsableAudio && failedBlobSize > 0),
+          finalSilenceWarning: false,
+          playbackUrlCreated: false,
+          stopNoAudioRetryAttempted: false,
+          stopNoAudioRetryRecovered: false,
+          stopNoAudioRetryDelayMs: 0,
+          dataEventCount: Number(failedChunkStats.dataEventCount || 0),
+          nonEmptyDataEventCount: Number(failedChunkStats.nonEmptyDataEventCount || 0),
+          chunkSizeList: failedChunkStats.chunkSizeList,
+          chunkMimeTypeList: failedChunkStats.chunkMimeTypeList,
+          chunkTotalBytes: Number(failedChunkStats.chunkTotalBytes || failedBlobSize || 0),
+          lastDataAvailableAtMs: Number(failedChunkStats.lastDataAvailableAtMs || 0),
+          peakAmplitude: Number(failedAudioAmplitudeStats?.peakAmplitude || 0),
+          rmsAmplitude: Number(failedAudioAmplitudeStats?.rmsAmplitude || 0),
+          meanAbsAmplitude: Number(failedAudioAmplitudeStats?.meanAbsAmplitude || 0),
+          nonSilentFrameRatio: Number(failedAudioAmplitudeStats?.nonSilentFrameRatio || 0),
+          sampleRate: Number(failedAudioAmplitudeStats?.sampleRate || 0),
+          channelCount: Number(failedAudioAmplitudeStats?.channelCount || 0),
+          durationMs: Number(failedAudioAmplitudeStats?.durationMs || 0),
           stopRecorderMs: getElapsedMs(stopStartedAt),
           recognitionStopMs: 0,
           mediaStopMs: 0,
+          stopWaitMs: 0,
+          finalDrainWaitMs: 0,
+          finalDrainWindowMs: 0,
+          mediaRecorderStateAtStopRequest,
+          mediaRecorderStateAfterStop: `${mediaRecorder?.state || "inactive"}`,
+          streamActiveAtStop: Boolean(stopTrackMetaAtRequest.streamActiveAtStop),
+          trackReadyStateAtStop: `${stopTrackMetaAtRequest.trackReadyStateAtStop || ""}`,
+          trackEnabledAtStop: Boolean(stopTrackMetaAtRequest.trackEnabledAtStop),
+          trackMutedAtStop: stopTrackMetaAtRequest.trackMutedAtStop ?? null,
+          webAudioTotalSampleCount: 0,
+          wavEncodeInputSampleCount: 0,
           blobIssueCode: failedBlobIssueCode,
           stopErrorCode: "RECORDER_STOP_EXCEPTION",
+          stopErrorMessage: `${err?.message || "stop_failed"}`,
           stopError: err?.message || "stop_failed"
         };
         lastStopMeta.value = failedResult;

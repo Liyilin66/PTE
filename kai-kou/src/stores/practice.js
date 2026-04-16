@@ -91,8 +91,8 @@ function createDefaultRTSSessionState() {
     questionId: "",
     questionIndex: 1,
     totalQuestions: 0,
-    prepareRemaining: 15,
-    prepareTotal: 15,
+    prepareRemaining: 10,
+    prepareTotal: 10,
     recordRemaining: 40,
     recordTotal: 40,
     listeningProgress: 0,
@@ -252,13 +252,13 @@ export const usePracticeStore = defineStore("practice", {
       };
     },
 
-    setRTSPrepareTimer(remaining, total = this.rtsSession.prepareTotal || 15) {
+    setRTSPrepareTimer(remaining, total = this.rtsSession.prepareTotal || 10) {
       const normalizedTotal = Math.max(0, Math.round(Number(total || 0)));
       const normalizedRemaining = Math.max(0, Math.round(Number(remaining || 0)));
       this.rtsSession = {
         ...this.rtsSession,
         prepareRemaining: normalizedRemaining,
-        prepareTotal: normalizedTotal || this.rtsSession.prepareTotal || 15
+        prepareTotal: normalizedTotal || this.rtsSession.prepareTotal || 10
       };
     },
 

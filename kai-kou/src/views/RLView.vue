@@ -425,7 +425,7 @@ onUnmounted(() => {
           </section>
 
           <section class="rounded-xl border bg-white p-4 shadow-card">
-            <RecordingWave :is-recording="recorder.isRecording" />
+            <RecordingWave :is-recording="Boolean(recorder.isRecording.value)" />
             <div class="mt-4 flex gap-3">
               <button
                 type="button"

@@ -1,15 +1,15 @@
 {
   "version": 1,
   "active": true,
-  "skill": "cancel",
-  "keyword": "abort",
+  "skill": "code-review",
+  "keyword": "code review",
   "phase": "planning",
-  "activated_at": "2026-04-14T06:48:27.860Z",
-  "updated_at": "2026-04-14T07:01:41.569Z",
+  "activated_at": "2026-04-16T08:10:09.195Z",
+  "updated_at": "2026-04-16T08:37:43.591Z",
   "source": "keyword-detector",
   "session_id": "",
-  "thread_id": "019d8abf-656b-7b43-8295-d989a45eadfe",
-  "turn_id": "019d8abf-6642-7f52-9749-8bbcdfec733d",
-  "iteration": 13,
-  "last_turn_at": "2026-04-14T09:16:35.519Z"
+  "thread_id": "019d9556-cc66-76d1-93b0-b1694164b888",
+  "turn_id": "019d956c-a9ea-7171-ab6e-98a66d7a2c2e",
+  "iteration": 3,
+  "last_turn_at": "2026-04-16T09:12:21.682Z"
 }

@@ -8,8 +8,9 @@ const hasSupabaseConfig =
 
 const RTS_AUDIO_BUCKET = "question-audio";
 const RTS_AUDIO_FOLDER = "rts";
-const DYNAMIC_TEMPLATE_CACHE_KEY = "RTS_DYNAMIC_TEMPLATE_CACHE_V3";
-const DYNAMIC_TEMPLATE_PREFIX = "Hi, [name], sorry to bother you.";
+const DYNAMIC_TEMPLATE_GENERATOR_VERSION = "v5";
+const DYNAMIC_TEMPLATE_CACHE_KEY = "RTS_DYNAMIC_TEMPLATE_CACHE_V5";
+const LEGACY_DYNAMIC_TEMPLATE_CACHE_KEYS = ["RTS_DYNAMIC_TEMPLATE_CACHE_V4", "RTS_DYNAMIC_TEMPLATE_CACHE_V3"];
 
 const TONE_LABEL_MAP = {
   formal: "正式语气",
@@ -81,6 +82,68 @@ const INFORMAL_HINTS = [
   "sam",
   "guys"
 ];
+
+const DYNAMIC_INTENT_HINTS = {
+  advice: ["advice", "recommend", "suggest", "calm down", "encourage"],
+  report: ["report", "not working", "broken", "damaged", "missing", "locked", "run out of battery", "repair"],
+  reschedule: ["alternative arrangement", "extension", "change the time", "double booked", "late", "missed the deadline", "at the same time"],
+  boundary: ["too noisy", "disappearing", "copy your", "dirty common areas", "keeps talking", "without asking"],
+  initiative: ["volunteer", "interested in", "participating", "enroll", "research project"],
+  decline: ["cannot attend", "cannot join", "can't attend", "can't join", "cannot commit"],
+  correction: ["made a mistake", "correct this information", "wrong address", "actually at"],
+  coordination: ["group assignment", "what you can do", "switch rooms", "hasn't sent", "has not finished", "check back"],
+  help: ["help", "borrow", "lend", "guidance", "notes"]
+};
+
+const TEMPLATE_OPENER_BANK = {
+  formal: [
+    "Hello, could I talk to you for a minute?",
+    "Excuse me, may I explain my situation briefly?",
+    "Hi, I need to discuss a small problem with you."
+  ],
+  informal: [
+    "Hi [name], can we talk for a minute?",
+    "Hey [name], do you have a minute?",
+    "Hi, I need your help with something."
+  ],
+  "semi-formal": [
+    "Hi [name], could we talk for a minute?",
+    "Hello, I need to explain this situation.",
+    "Hi, could I explain this quickly?"
+  ]
+};
+
+const TEMPLATE_REQUEST_BANK = {
+  advice: "Could you try one small step first and see how it goes?",
+  report: "Could you please check this and tell me what I should do next?",
+  reschedule: "Could we change to another time, or can I have a short extension?",
+  boundary: "Could we set one clear rule so this does not happen again?",
+  initiative: "Could you tell me the start time and what I need to prepare?",
+  decline: "I cannot join this time. Can I help in another way?",
+  correction: "Please use the correct information and ignore my last message.",
+  coordination: "Can we confirm the new plan and who will do each part?",
+  help: "Could you please help me with this when you have a moment?",
+  general: "Could we talk about the best next step?"
+};
+
+const TEMPLATE_SUPPORT_BANK = {
+  advice: "I hope this can help you feel more confident.",
+  report: "This is affecting my study, so I hope it can be fixed soon.",
+  reschedule: "I still want to finish the task well and on time.",
+  boundary: "I want to solve this politely and keep a good relationship.",
+  initiative: "I am ready to join and do my part.",
+  decline: "I really appreciate the invitation and hope you understand.",
+  correction: "I wanted to fix this right away so there is no confusion.",
+  coordination: "I want us to stay on the same plan and finish on time.",
+  help: "I am asking early so we can solve this faster.",
+  general: "I am happy to follow any reasonable arrangement."
+};
+
+const TEMPLATE_CLOSING_BANK = {
+  formal: "Thank you for your understanding and support.",
+  informal: "Thanks a lot for understanding.",
+  "semi-formal": "Thank you for understanding and helping out."
+};
 
 const EN_STOPWORDS = new Set([
   "the",
@@ -218,7 +281,14 @@ function sentenceCase(text) {
 function polishGeneratedEnglish(text) {
   return sentenceCase(text)
     .replace(/\bfollow the schedule to complete housework\b/gi, "follow the cleaning schedule")
-    .replace(/\bfor making this call\b/gi, "for this call");
+    .replace(/\bfor making this call\b/gi, "for this call")
+    .replace(/\bone of them are\b/gi, "one of them is")
+    .replace(/\bmy phone run out of battery\b/gi, "my phone ran out of battery")
+    .replace(/\bin fridge\b/gi, "in the fridge")
+    .replace(/\btwo pages has been\b/gi, "two pages have been")
+    .replace(/\binfluences my sleep\b/gi, "affects my sleep")
+    .replace(/\bsome saving\b/gi, "some savings")
+    .replace(/\bvisitor of my roommate\b/gi, "my roommate's visitor");
 }
 
 function normalizeTopic(value) {
@@ -335,13 +405,27 @@ function stripQuestionTail(content) {
 
 function toFirstPersonNarration(text) {
   return normalizeWhitespace(text)
+    .replace(/\b[Yy]ou\'ve\b/g, "I've")
+    .replace(/\b[Yy]ou\'re\b/g, "I'm")
     .replace(/\b[Yy]ou are\b/g, "I am")
     .replace(/\b[Yy]ou were\b/g, "I was")
     .replace(/\b[Yy]ou have\b/g, "I have")
-    .replace(/\b[Yy]ou\'ve\b/g, "I've")
-    .replace(/\b[Yy]ou\'re\b/g, "I'm")
+    .replace(/\b[Yy]ou need to\b/g, "I need to")
+    .replace(/\b[Yy]ou need\b/g, "I need")
+    .replace(/\b[Yy]ou want to\b/g, "I want to")
+    .replace(/\b[Yy]ou want\b/g, "I want")
+    .replace(/\b[Yy]ou can\b/g, "I can")
+    .replace(/\b[Yy]ou cannot\b/g, "I cannot")
+    .replace(/\b[Yy]ou should\b/g, "I should")
+    .replace(/\b[Yy]ou must\b/g, "I must")
+    .replace(/\b[Yy]ou just\b/g, "I just")
     .replace(/\b[Yy]our\b/g, "my")
-    .replace(/\b[Yy]ou\b/g, "I")
+    .replace(/\bhelp you\b/gi, "help me")
+    .replace(/\bfor you\b/gi, "for me")
+    .replace(/\bwith you\b/gi, "with me")
+    .replace(/\bto you\b/gi, "to me")
+    .replace(/^you\b/i, "I")
+    .replace(/^I and my ([a-z][a-z\s'-]+?) have\b/i, "My $1 and I have")
     .replace(/\b[Ii]\s+decide to\b/g, "I decide to")
     .replace(/\b[Ii]\s+want to\s+ask\b/g, "I want to ask")
     .replace(/\b[Ii]\s+need to\s+call\b/g, "I need to call")
@@ -356,8 +440,160 @@ function isInstructionSentence(text) {
 function cleanScenarioLines(lines = []) {
   return lines
     .map((line) => polishGeneratedEnglish(line))
+    .map((line) => line.replace(/\bI and my ([a-z][a-z\s'-]+?)\b/gi, "my $1 and I"))
+    .map((line) => line.replace(/^[,;:\-\s]+/, "").replace(/[,:;-\s]+$/, ""))
     .filter(Boolean)
     .filter((line) => !isInstructionSentence(line));
+}
+
+function normalizeSentenceKey(text) {
+  return normalizeWhitespace(text).toLowerCase().replace(/[^a-z0-9\s]/g, "");
+}
+
+function sentenceTokenSet(text) {
+  return new Set(normalizeSentenceKey(text).split(/\s+/).filter(Boolean));
+}
+
+function sentenceSimilarity(a, b) {
+  const aTokens = sentenceTokenSet(a);
+  const bTokens = sentenceTokenSet(b);
+  if (!aTokens.size || !bTokens.size) return 0;
+
+  let overlap = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) overlap += 1;
+  }
+
+  return overlap / Math.max(aTokens.size, bTokens.size);
+}
+
+function dedupeSentences(list, limit = 5) {
+  const output = [];
+  for (const line of list) {
+    const sentence = ensureSentence(line);
+    if (!sentence) continue;
+    const key = normalizeSentenceKey(sentence);
+    if (!key) continue;
+    if (output.some((existing) => sentenceSimilarity(existing, sentence) >= 0.84)) continue;
+    output.push(sentence);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function splitScenarioClauses(text) {
+  const normalized = normalizeWhitespace(text)
+    .replace(/[“”]/g, "\"")
+    .replace(/[’]/g, "'")
+    .replace(/[!?]+/g, ".")
+    .replace(/\s*;\s*/g, ". ")
+    .replace(/\s*,\s*(but|and|so|because|while|however|which)\b/gi, ". ");
+
+  return normalized
+    .split(/(?<=[.])\s+|\.\s+/)
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+}
+
+function inferIntent(content) {
+  const lower = toLower(content);
+  for (const [intent, hints] of Object.entries(DYNAMIC_INTENT_HINTS)) {
+    if (hints.some((hint) => lower.includes(hint))) return intent;
+  }
+  return "general";
+}
+
+function buildTemplateSeed(content, tone, intent) {
+  const source = `${normalizeWhitespace(content)}|${tone}|${intent}`;
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash << 5) - hash + source.charCodeAt(index);
+    hash |= 0; // keep 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+function pickBySeed(list, seed = 0) {
+  if (!Array.isArray(list) || !list.length) return "";
+  const safeSeed = Math.abs(Number(seed || 0));
+  return list[safeSeed % list.length];
+}
+
+function buildOpenerLine(tone, seed) {
+  return pickBySeed(TEMPLATE_OPENER_BANK[tone] || TEMPLATE_OPENER_BANK["semi-formal"], seed)
+    || TEMPLATE_OPENER_BANK["semi-formal"][0];
+}
+
+function buildContextLine(scenarioLines, intent) {
+  const preferMatchers = {
+    report: /\b(broken|not working|damaged|missing|locked|battery|problem)\b/i,
+    reschedule: /\b(conflict|double booked|late|deadline|same time|meeting|competition)\b/i,
+    boundary: /\b(noisy|talking|dirty|without asking|copy|disappearing)\b/i,
+    correction: /\b(mistake|wrong|correct|actually)\b/i,
+    initiative: /\b(interested|volunteer|join|project|enroll)\b/i,
+    decline: /\b(cannot|can't|cannot attend|cannot join|final year)\b/i,
+    coordination: /\b(group|deadline|hasn'?t sent|not finished|switch rooms)\b/i,
+    help: /\b(help|borrow|lend|notes|guidance)\b/i
+  };
+
+  const matcher = preferMatchers[intent];
+  const picked = scenarioLines.find((line) => matcher && matcher.test(line))
+    || scenarioLines[0]
+    || "I have a situation that needs a quick solution";
+
+  const normalized = normalizeWhitespace(picked)
+    .replace(/^(and|but|so|because)\s+/i, "")
+    .replace(/^I\s+am\s+calling\s+to\s+say\s+/i, "I am calling because ");
+
+  return normalized.startsWith("I ") || normalized.startsWith("I'm")
+    ? normalized
+    : `I am calling because ${normalized}`;
+}
+
+function buildSecondContextLine(scenarioLines, primaryLine = "") {
+  const candidate = scenarioLines.find((line) => sentenceSimilarity(line, primaryLine) < 0.7 && line.split(/\s+/).length >= 4);
+  if (!candidate) return "";
+
+  const normalized = normalizeWhitespace(candidate).replace(/^(and|but|so|because)\s+/i, "");
+  if (!normalized) return "";
+
+  if (normalized.startsWith("I ") || normalized.startsWith("I'm")) return normalized;
+  return `Also, ${normalized}`;
+}
+
+function buildRequestLine(intent) {
+  return TEMPLATE_REQUEST_BANK[intent] || TEMPLATE_REQUEST_BANK.general;
+}
+
+function buildSupportLine(intent) {
+  return TEMPLATE_SUPPORT_BANK[intent] || TEMPLATE_SUPPORT_BANK.general;
+}
+
+function buildActionLine(content) {
+  const source = normalizeWhitespace(content);
+  const patterns = [
+    /\byou need to\s+([^.!?]+)/i,
+    /\byou want to\s+([^.!?]+)/i,
+    /\byou have to\s+([^.!?]+)/i,
+    /\byou decide to\s+([^.!?]+)/i,
+    /\byou are planning to\s+([^.!?]+)/i,
+    /\byou are interested in\s+([^.!?]+)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (!match?.[1]) continue;
+
+    const phrase = toFirstPersonNarration(match[1])
+      .replace(/^I\s+/i, "")
+      .replace(/\s*[,;:]\s*$/g, "")
+      .trim();
+
+    if (!phrase) continue;
+    return ensureSentence(truncateWords(`I need to ${phrase}`, 20));
+  }
+
+  return "";
 }
 
 function inferAudience(content, fallbackRole = "") {
@@ -386,72 +622,35 @@ function extractKeywords(content, limit = 6) {
   return uniqueList(words, limit);
 }
 
-function extractRequestAction(content, scenarioLines = []) {
-  const source = normalizeWhitespace(content);
-  const patterns = [
-    /\byou need to\s+([^.!?]+)/i,
-    /\byou want to\s+([^.!?]+)/i,
-    /\byou should\s+([^.!?]+)/i,
-    /\byou decide to\s+([^.!?]+)/i,
-    /\byou are planning to\s+([^.!?]+)/i,
-    /\byou are interested in\s+([^.!?]+)/i
-  ];
-
-  for (const pattern of patterns) {
-    const matched = source.match(pattern);
-    if (!matched?.[1]) continue;
-    const action = toFirstPersonNarration(matched[1]).replace(/^I\s+/i, "");
-    if (!action) continue;
-    return `Could you please ${action}?`;
-  }
-
-  const fromScenario = scenarioLines.find((item) => /\b(need|want|ask|report|request|suggest|borrow|return|help|change|invite|apologize)\b/i.test(item));
-  if (fromScenario) {
-    const cleaned = toFirstPersonNarration(fromScenario)
-      .replace(/^I\s+(need|want)\s+to\s+/i, "")
-      .replace(/^I\s+/i, "");
-    if (cleaned) return `Could you please ${cleaned}?`;
-  }
-
-  return "Could you please help me with this situation?";
-}
-
 function buildTemplateFromQuestion(content, tone) {
+  const intent = inferIntent(content);
   const scenarioText = stripQuestionTail(content);
   const firstPersonText = toFirstPersonNarration(scenarioText);
-  const scenarioLines = cleanScenarioLines(splitSentences(firstPersonText));
+  const scenarioLines = cleanScenarioLines(splitScenarioClauses(firstPersonText));
+  const seed = buildTemplateSeed(content, tone, intent);
+  const opener = ensureSentence(buildOpenerLine(tone, seed));
+  const detail = buildContextLine(scenarioLines, intent);
+  const detailTwo = buildSecondContextLine(scenarioLines, detail);
+  const action = buildActionLine(content);
+  const request = buildRequestLine(intent);
+  const support = buildSupportLine(intent);
+  const closing = TEMPLATE_CLOSING_BANK[tone] || TEMPLATE_CLOSING_BANK["semi-formal"];
 
-  const fallbackOpening = {
-    formal: "Hello, I am calling to explain my situation.",
-    informal: "Hi, I want to talk to you about something.",
-    "semi-formal": "Hi, I need to explain this situation."
-  };
-
-  const baseOpener = ensureSentence(scenarioLines[0] || fallbackOpening[tone] || fallbackOpening["semi-formal"]);
-  const opener = ensureSentence(`${ensureSentence(DYNAMIC_TEMPLATE_PREFIX)} ${baseOpener}`.trim());
-  const detail = ensureSentence(scenarioLines[1] || scenarioLines[0] || "I want to explain this clearly so we can solve it quickly.");
-  const request = ensureSentence(extractRequestAction(content, scenarioLines));
-
-  const closing = tone === "formal"
-    ? "Thank you for your understanding and support."
-    : tone === "informal"
-      ? "Thanks for understanding and helping me out."
-      : "Thank you for understanding and helping me with this.";
-
-  const full = [
+  const full = dedupeSentences([
     opener,
     detail,
+    detailTwo,
+    action,
     request,
+    support,
     closing
-  ]
-    .map((line) => ensureSentence(truncateWords(line, 28)))
-    .filter(Boolean)
-    .join(" ");
+  ], 6).join(" ");
 
   return {
     opener,
     full,
-    scenarioLines
+    scenarioLines,
+    intent
   };
 }
 
@@ -531,12 +730,24 @@ function getLocalStorage() {
   }
 }
 
+function purgeLegacyDynamicTemplateCaches(storage) {
+  if (!storage) return;
+  for (const key of LEGACY_DYNAMIC_TEMPLATE_CACHE_KEYS) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // ignore storage removal errors
+    }
+  }
+}
+
 function loadDynamicTemplateCache() {
   if (dynamicTemplateCache && typeof dynamicTemplateCache === "object") return dynamicTemplateCache;
   dynamicTemplateCache = {};
 
   const storage = getLocalStorage();
   if (!storage) return dynamicTemplateCache;
+  purgeLegacyDynamicTemplateCaches(storage);
 
   try {
     const raw = storage.getItem(DYNAMIC_TEMPLATE_CACHE_KEY);
@@ -563,15 +774,17 @@ function persistDynamicTemplateCache(cache) {
 }
 
 function buildTemplateSignature(content) {
-  return toLower(content);
+  return `${DYNAMIC_TEMPLATE_GENERATOR_VERSION}:${toLower(content)}`;
 }
 
-function getCachedDynamicKeyPoints(questionId) {
+function getCachedDynamicKeyPoints(questionId, signature) {
   const key = toSafeString(questionId);
-  if (!key) return null;
+  if (!key || !signature) return null;
   const cache = loadDynamicTemplateCache();
   const item = toObject(cache[key]);
   if (!item) return null;
+  if (toSafeString(item.signature) !== signature) return null;
+  if (toSafeString(item.generatorVersion) !== DYNAMIC_TEMPLATE_GENERATOR_VERSION) return null;
   return toObject(item.keyPoints);
 }
 
@@ -581,6 +794,7 @@ function saveDynamicKeyPoints(questionId, signature, keyPoints) {
   const cache = loadDynamicTemplateCache();
   cache[key] = {
     signature,
+    generatorVersion: DYNAMIC_TEMPLATE_GENERATOR_VERSION,
     updatedAt: new Date().toISOString(),
     keyPoints
   };
@@ -590,7 +804,7 @@ function saveDynamicKeyPoints(questionId, signature, keyPoints) {
 
 function buildDynamicKeyPoints({ questionId, content, topic, baseKeyPoints }) {
   const signature = buildTemplateSignature(content);
-  const cached = getCachedDynamicKeyPoints(questionId);
+  const cached = getCachedDynamicKeyPoints(questionId, signature);
   if (cached) return cached;
 
   const tone = inferTone(content, topic, baseKeyPoints?.tone);

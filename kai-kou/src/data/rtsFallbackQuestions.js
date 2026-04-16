@@ -369,15 +369,27 @@ function truncateWords(text, maxWords) {
 
 function toFirstPerson(text) {
   return cleanContent(text)
+    .replace(/\b[Yy]our\b/g, "my")
+    .replace(/\b[Yy]ou're\b/g, "I'm")
+    .replace(/\b[Yy]ou've\b/g, "I've")
     .replace(/^You are\b/i, "I am")
     .replace(/^You were\b/i, "I was")
     .replace(/^You have\b/i, "I have")
     .replace(/^You just\b/i, "I just")
-    .replace(/^You\b/i, "I")
-    .replace(/^Your\b/i, "My")
-    .replace(/\byour\b/gi, "my")
-    .replace(/\byou're\b/gi, "I'm")
-    .replace(/\byou've\b/gi, "I've");
+    .replace(/\b[Yy]ou are\b/g, "I am")
+    .replace(/\b[Yy]ou were\b/g, "I was")
+    .replace(/\b[Yy]ou have\b/g, "I have")
+    .replace(/\b[Yy]ou need to\b/g, "I need to")
+    .replace(/\b[Yy]ou need\b/g, "I need")
+    .replace(/\b[Yy]ou want to\b/g, "I want to")
+    .replace(/\b[Yy]ou want\b/g, "I want")
+    .replace(/\b[Yy]ou can\b/g, "I can")
+    .replace(/\b[Yy]ou cannot\b/g, "I cannot")
+    .replace(/\b[Yy]ou should\b/g, "I should")
+    .replace(/\bhelp you\b/gi, "help me")
+    .replace(/\bfor you\b/gi, "for me")
+    .replace(/\bwith you\b/gi, "with me")
+    .replace(/^You\b/i, "I");
 }
 
 function pickRotating(list, count, seed) {
@@ -388,6 +400,25 @@ function pickRotating(list, count, seed) {
     output.push(list[(offset + i) % list.length]);
   }
   return [...new Set(output)].slice(0, count);
+}
+
+function splitScenarioClauses(text) {
+  const normalized = cleanContent(text)
+    .replace(/[!?]+/g, ".")
+    .replace(/\s*;\s*/g, ". ")
+    .replace(/\s*,\s*(but|and|so|because|while|however|which)\b/gi, ". ");
+
+  return normalized
+    .split(/(?<=[.])\s+|\.\s+/)
+    .map((line) => cleanContent(line))
+    .filter(Boolean);
+}
+
+function buildScenarioSummary(scenario) {
+  const clauses = splitScenarioClauses(toFirstPerson(scenario)).filter(Boolean);
+
+  const best = clauses[0] || toFirstPerson(scenario) || "I need to explain a quick situation";
+  return truncateWords(best, 22);
 }
 
 function buildDirections(intent, scenario) {
@@ -474,7 +505,7 @@ function buildTemplateOpener(tone, index) {
 
 function buildTemplateFull({ tone, intent, scenario, index }) {
   const opener = buildTemplateOpener(tone, index);
-  const scenarioLine = toFirstPerson(truncateWords(scenario, 28));
+  const scenarioLine = buildScenarioSummary(scenario);
 
   const impactMap = {
     advice: "I know this can feel overwhelming, so I want to give practical support that is easy to follow.",
