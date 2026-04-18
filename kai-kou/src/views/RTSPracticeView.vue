@@ -5,9 +5,21 @@ import RecordingWave from "@/components/RecordingWave.vue";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useUIStore } from "@/stores/ui";
+import {
+  buildRTSAudioSignalsPayload,
+  buildRTSQuestionMetaPayload,
+  createPendingRTSAiReviewJob
+} from "@/lib/rts-ai-review";
 import { supabase } from "@/lib/supabase";
 import { useRecorder } from "@/composables/useRecorder";
-import { RTS_TOPIC_META, useRTSData } from "@/composables/useRTSData";
+import {
+  applyRTSAudioRetentionForUser,
+  getRTSPlaybackUrl,
+  isValidRTSRemoteHistoryRecord,
+  RTS_TOPIC_META,
+  uploadRTSAudio,
+  useRTSData
+} from "@/composables/useRTSData";
 import { useRTSTimer } from "@/composables/useRTSTimer";
 
 const PHASE = {
@@ -42,6 +54,29 @@ const RTS_SILENT_FALLBACK_MIN_SEC = 1;
 const RTS_SILENT_WAV_SAMPLE_RATE = 16000;
 const RTS_RECORDER_STATS_STORAGE_KEY = "RTS_RECORDER_STATS_V1";
 const RTS_RECORDER_STATS_MAX_RECENT = 30;
+const RTS_HISTORY_LIMIT = 20;
+const RTS_HOME_REFRESH_HINT_KEY = "RTS_HOME_REFRESH_HINT_V1";
+const RTS_PRACTICE_DEBUG_ENABLED = Boolean(import.meta.env.DEV);
+const RTS_SCORE_API_TIMEOUT_MS = 15000;
+const RTS_SCORE_STATUS_SCORED = "scored";
+const RTS_SCORE_STATUS_RULE_GATED = "rule_gated";
+const RTS_SCORE_STATUS_DEGRADED = "ai_review_degraded";
+const RTS_DISPLAY_MIN_SCORE = 10;
+const RTS_DISPLAY_MAX_SCORE = 90;
+const RTS_CONTENT_RAW_MAX = 3;
+const RTS_PRONUNCIATION_RAW_MAX = 5;
+const RTS_FLUENCY_RAW_MAX = 5;
+const RTS_SCORE_REASON_MESSAGE_MAP = {
+  appropriacy_zero_off_topic: "回应内容与场景不匹配。",
+  appropriacy_zero_goal_not_met: "回应没有完成情境目标。",
+  appropriacy_zero_template_like: "表达过于模板化，缺少情境针对性。",
+  appropriacy_zero_context_incoherent: "语境信息不连贯，影响理解。",
+  appropriacy_zero_register_mismatch: "语气或语域与场景不匹配。",
+  appropriacy_zero_too_short: "回应过短，无法完成任务。",
+  transcript_empty: "未识别到有效转写文本。",
+  audio_not_usable: "录音可用性不足，无法稳定评阅。",
+  ai_review_unavailable: "AI评阅服务暂时不可用。"
+};
 
 const route = useRoute();
 const router = useRouter();
@@ -50,7 +85,13 @@ const practiceStore = usePracticeStore();
 const uiStore = useUIStore();
 const recorder = useRecorder();
 const timer = useRTSTimer();
-const { loadQuestions, getQuestionById, getRandomQuestion, getUserRTSStats } = useRTSData();
+const {
+  loadQuestions,
+  getQuestionById,
+  getRandomQuestion,
+  getUserRTSStats,
+  getRTSRecentAudioHistory
+} = useRTSData();
 
 const loading = ref(true);
 const questionPool = ref([]);
@@ -65,9 +106,30 @@ const playbackAudioRef = ref(null);
 const playbackDurationSec = ref(0);
 const nextQuestionBusy = ref(false);
 const isAdvancingQuestion = ref(false);
+const submitPending = ref(false);
 const recordingFinalizePending = ref(false);
 const todayStats = ref({ practicedCount: 0, practiceMinutes: 0, averageRating: 0 });
 const remoteRecentHistory = ref([]);
+const historyPlaybackStateMap = ref({});
+const lastPersistedPracticeKey = ref("");
+const lastPersistedPracticeMeta = ref({
+  key: "",
+  userId: "",
+  logId: "",
+  transcript: "",
+  scoreJson: null
+});
+const submittedPracticeKey = ref("");
+const submitFeedbackState = ref({
+  key: "",
+  status: "idle",
+  uploadOk: false,
+  insertOk: false,
+  hasRemoteAudioMeta: false
+});
+const latestRTSAiReview = ref(null);
+const latestRTSAiReviewLoading = ref(false);
+const latestRTSAiReviewError = ref("");
 const isFavorite = ref(false);
 const favoriteBusy = ref(false);
 const favoriteSource = ref("remote");
@@ -134,6 +196,16 @@ const sceneAudioPauseToggleVisible = computed(() => (
   currentPhase.value === PHASE.LISTENING
   && (listeningStatus.value === "playing" || listeningStatus.value === "paused")
 ));
+const sceneAudioSkipVisible = computed(() => (
+  currentPhase.value === PHASE.LISTENING
+  && (
+    audioPreparing.value
+    || listeningStatus.value === "loading"
+    || listeningStatus.value === "playing"
+    || listeningStatus.value === "paused"
+    || listeningStatus.value.startsWith("autoplay_")
+  )
+));
 const sceneAudioPauseToggleLabel = computed(() => (
   sceneAudioPaused.value || listeningStatus.value === "paused" ? "▶ 继续播放" : "⏸ 暂停播放"
 ));
@@ -163,6 +235,40 @@ const selfRating = computed(() => Math.max(0, Number(practiceStore.rtsSession?.s
 const usedPhraseIds = computed(() => new Set(practiceStore.rtsSession?.usedPhraseIds || []));
 const hasUsableAudio = computed(() => isUsableAudioRecord(recordingStopResult.value));
 const hasPlaybackUsableAudio = computed(() => isPlaybackUsableRecord(recordingStopResult.value));
+const currentPracticeSubmitKey = computed(() => buildPracticeSubmitKey(
+  resolveCurrentQuestionId(),
+  resolveAttemptId(recordingStopResult.value)
+));
+const isCurrentPracticeSubmitted = computed(() => (
+  Boolean(currentPracticeSubmitKey.value)
+  && currentPracticeSubmitKey.value === submittedPracticeKey.value
+));
+const showSubmitButton = computed(() => (
+  currentPhase.value === PHASE.PLAYBACK
+  && hasPlaybackUsableAudio.value
+  && Boolean(`${playbackUrl.value || ""}`.trim())
+));
+const submitButtonDisabled = computed(() => (
+  !showSubmitButton.value
+  || submitPending.value
+  || nextQuestionBusy.value
+  || isAdvancingQuestion.value
+  || recordingFinalizePending.value
+  || isCurrentPracticeSubmitted.value
+));
+const submitButtonLabel = computed(() => {
+  if (submitPending.value) return "提交中...";
+  if (isCurrentPracticeSubmitted.value) return "已提交";
+  return "提交";
+});
+const submitStatusMessage = computed(() => {
+  const feedback = submitFeedbackState.value;
+  if (!feedback || feedback.key !== currentPracticeSubmitKey.value) return "";
+  if (submitPending.value) return "提交中，请稍候...";
+  if (feedback.status === "success") return "提交成功，正在跳转结果页...";
+  if (feedback.status === "failed") return "提交失败，请重试。";
+  return "";
+});
 const hasSilenceWarningFlag = computed(() => hasSilenceWarning(recordingStopResult.value));
 const recorderFailure = computed(() => resolveRecorderFailureWithPlayback({
   stopResult: recordingStopResult.value,
@@ -276,39 +382,51 @@ const timerInfo = computed(() => {
   };
 });
 const historyItems = computed(() => {
-  const locals = (practiceStore.rtsRecentRecordings || []).slice(0, 2).map((item) => ({
-    id: item.id,
-    questionId: item.questionId,
-    durationSec: Number(item.durationSec || 0),
-    rating: Number(item.rating || 0),
-    createdAt: item.createdAt,
-    blobUrl: item.blobUrl,
-    summary: resolveQuestionSummaryById(item.questionId),
-    source: "local",
-    hasAudio: Boolean(item.blobUrl)
-  }));
-
-  if (locals.length >= 2) return locals;
-
-  const seen = new Set(locals.map((item) => item.questionId));
-  const append = remoteRecentHistory.value
-    .filter((item) => !seen.has(item.questionId))
-    .slice(0, 2 - locals.length)
-    .map((item) => ({
-      id: item.id,
-      questionId: item.questionId,
-      durationSec: Number(item.durationSec || 0),
-      rating: Number(item.rating || 0),
-      createdAt: item.createdAt,
+  return (Array.isArray(remoteRecentHistory.value) ? remoteRecentHistory.value : [])
+    .map((item) => {
+    const state = getHistoryPlaybackState(item?.id);
+    return {
+      id: `${item?.id || ""}`.trim(),
+      taskType: `${item?.taskType || item?.task_type || "RTS"}`.trim() || "RTS",
+      questionId: `${item?.questionId || ""}`.trim(),
+      durationSec: Number(item?.durationSec || 0),
+      rating: Number(item?.rating || 0),
+      createdAt: `${item?.createdAt || ""}`.trim(),
+      playbackUrl: resolveHistoryPlaybackUrl(item),
       blobUrl: "",
-      summary: item.summary,
+      audioMeta: item?.audioMeta || null,
+      summary: `${item?.summary || ""}`.trim(),
       source: "remote",
-      hasAudio: false
-    }));
-
-  return [...locals, ...append];
+      hasAudio: isValidRTSRemoteHistoryRecord(item),
+      playbackError: `${state?.error || ""}`.trim(),
+      playbackLoading: Boolean(state?.loading)
+    };
+    })
+    .filter((item) => isValidRTSRemoteHistoryRecord(item))
+    .slice(0, RTS_HISTORY_LIMIT);
 });
+
+function markRTSHomeRefreshHint() {
+  if (typeof window === "undefined" || !window.sessionStorage) return;
+  const questionId = `${currentQuestion.value?.id || practiceStore.rtsSession?.questionId || ""}`.trim();
+  if (!questionId) return;
+
+  try {
+    window.sessionStorage.setItem(
+      RTS_HOME_REFRESH_HINT_KEY,
+      JSON.stringify({
+        questionId,
+        at: Date.now()
+      })
+    );
+  } catch {
+    // ignore sessionStorage write failures
+  }
+}
+
 function goHome() {
+  if (submitPending.value) return;
+  markRTSHomeRefreshHint();
   router.push("/rts");
 }
 
@@ -366,6 +484,56 @@ function formatDateTime(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "-";
   return `${date.getMonth() + 1}/${date.getDate()} ${`${date.getHours()}`.padStart(2, "0")}:${`${date.getMinutes()}`.padStart(2, "0")}`;
+}
+
+function getHistoryPlaybackState(id) {
+  const normalizedId = `${id || ""}`.trim();
+  if (!normalizedId) return { url: "", loading: false, error: "" };
+  return historyPlaybackStateMap.value[normalizedId] || { url: "", loading: false, error: "" };
+}
+
+function updateHistoryPlaybackState(id, patch = {}) {
+  const normalizedId = `${id || ""}`.trim();
+  if (!normalizedId) return;
+  const prev = getHistoryPlaybackState(normalizedId);
+  historyPlaybackStateMap.value = {
+    ...historyPlaybackStateMap.value,
+    [normalizedId]: {
+      ...prev,
+      ...(patch || {})
+    }
+  };
+}
+
+function resolveHistoryPlaybackUrl(item) {
+  const state = getHistoryPlaybackState(item?.id);
+  return `${state?.url || item?.playbackUrl || ""}`.trim();
+}
+
+async function ensureHistoryPlayback(item, { force = false } = {}) {
+  if (!isValidRTSRemoteHistoryRecord(item)) return "";
+  const state = getHistoryPlaybackState(item?.id);
+  if (!force && `${state?.url || item?.playbackUrl || ""}`.trim()) {
+    return `${state?.url || item?.playbackUrl || ""}`.trim();
+  }
+  if (state.loading) return "";
+
+  updateHistoryPlaybackState(item.id, { loading: true, error: "" });
+  const signedUrl = await getRTSPlaybackUrl(item.audioMeta, 60 * 20);
+  if (!signedUrl) {
+    updateHistoryPlaybackState(item.id, {
+      loading: false,
+      error: "回放链接获取失败，请重试。"
+    });
+    return "";
+  }
+
+  updateHistoryPlaybackState(item.id, {
+    url: signedUrl,
+    loading: false,
+    error: ""
+  });
+  return signedUrl;
 }
 
 function phraseId(group, index, text) {
@@ -578,6 +746,15 @@ function buildPracticeRouteQuery(questionId = "") {
   if (isRecorderDebugEnabled()) {
     query.debugRecorder = "1";
   }
+  return query;
+}
+
+function buildResultRouteQuery({ logId = "", questionId = "" } = {}) {
+  const query = {};
+  const normalizedLogId = `${logId || ""}`.trim();
+  const normalizedQuestionId = `${questionId || ""}`.trim();
+  if (normalizedLogId) query.logId = normalizedLogId;
+  if (normalizedQuestionId) query.id = normalizedQuestionId;
   return query;
 }
 
@@ -1257,15 +1434,6 @@ function logUnavailableIfNeeded(trigger) {
   });
 }
 
-function resolveQuestionSummaryById(questionId) {
-  const normalized = `${questionId || ""}`.trim();
-  const found = questionPool.value.find((item) => item.id === normalized);
-  if (!found) return normalized || "RTS Question";
-  const content = `${found.content || ""}`.replace(/\s+/g, " ").trim();
-  if (content.length <= 64) return content;
-  return `${content.slice(0, 61)}...`;
-}
-
 function clearAutoPlayTimer({ resolvePending = true, reason = "cleared" } = {}) {
   if (resolvePending && typeof autoPlayCountdownCancel === "function") {
     const cancel = autoPlayCountdownCancel;
@@ -1500,6 +1668,55 @@ function resolveCurrentQuestionId() {
   return `${currentQuestion.value?.id || ""}`.trim();
 }
 
+function resolveAttemptId(stopResult = recordingStopResult.value) {
+  return Math.max(0, Number(stopResult?.attemptId || 0));
+}
+
+function buildPracticeSubmitKey(questionId, attemptId) {
+  const normalizedQuestionId = `${questionId || ""}`.trim();
+  if (!normalizedQuestionId) return "";
+  return `${normalizedQuestionId}|${Math.max(0, Number(attemptId || 0))}`;
+}
+
+function resetCurrentPracticeSubmitState() {
+  submitPending.value = false;
+  submittedPracticeKey.value = "";
+  lastPersistedPracticeKey.value = "";
+  latestRTSAiReview.value = null;
+  latestRTSAiReviewLoading.value = false;
+  latestRTSAiReviewError.value = "";
+  submitFeedbackState.value = {
+    key: "",
+    status: "idle",
+    uploadOk: false,
+    insertOk: false,
+    hasRemoteAudioMeta: false
+  };
+  lastPersistedPracticeMeta.value = {
+    key: "",
+    userId: "",
+    logId: "",
+    transcript: "",
+    scoreJson: null
+  };
+}
+
+function updateSubmitFeedbackState({
+  key = "",
+  status = "idle",
+  uploadOk = false,
+  insertOk = false,
+  hasRemoteAudioMeta = false
+} = {}) {
+  submitFeedbackState.value = {
+    key: `${key || ""}`.trim(),
+    status: `${status || "idle"}`.trim() || "idle",
+    uploadOk: Boolean(uploadOk),
+    insertOk: Boolean(insertOk),
+    hasRemoteAudioMeta: Boolean(hasRemoteAudioMeta)
+  };
+}
+
 function isPlaybackTokenActive(token, questionId = resolveCurrentQuestionId()) {
   const normalizedQuestionId = `${questionId || ""}`.trim();
   if (!normalizedQuestionId) return false;
@@ -1632,20 +1849,6 @@ function revokePlaybackUrl({ reason = "manual_revoke" } = {}) {
   playbackTimeupdateLogKey = "";
   resetPreviewPlaybackDiag(`revoke:${reason}`);
   logRecorderDebug("playback_url_revoked", {
-    reason,
-    revokedUrlKind: target.startsWith("blob:") ? "blob" : "non_blob"
-  });
-}
-
-function revokeBlobObjectUrl(url, { reason = "manual_revoke_target" } = {}) {
-  const target = `${url || ""}`.trim();
-  if (!target || typeof URL === "undefined" || typeof URL.revokeObjectURL !== "function") return;
-  try {
-    URL.revokeObjectURL(target);
-  } catch {
-    // no-op
-  }
-  logRecorderDebug("playback_target_url_revoked", {
     reason,
     revokedUrlKind: target.startsWith("blob:") ? "blob" : "non_blob"
   });
@@ -2834,6 +3037,26 @@ async function toggleSceneAudioPause() {
   }
 }
 
+function skipSceneAudio() {
+  if (currentPhase.value !== PHASE.LISTENING) return;
+  const questionId = resolveCurrentQuestionId();
+  if (!questionId) return;
+
+  stopSceneAudioPlayback({ invalidateToken: true, reason: "manual_skip_audio" });
+  sceneAudioManualResumeRequired.value = false;
+  sceneAudioPaused.value = false;
+  setSceneAudioError("");
+  startPreparePhase();
+
+  if (RTS_PRACTICE_DEBUG_ENABLED) {
+    console.info("[rts-listening:skip-audio]", {
+      questionId,
+      listeningStatus: listeningStatus.value,
+      audioPreparing: Boolean(audioPreparing.value)
+    });
+  }
+}
+
 function startPreparePhase() {
   clearRecordingStopReadyTimer();
   recordingStartPending.value = false;
@@ -3415,41 +3638,313 @@ async function loadTodayStatsPanel() {
   if (!userId) {
     todayStats.value = { practicedCount: 0, practiceMinutes: 0, averageRating: 0 };
     remoteRecentHistory.value = [];
+    historyPlaybackStateMap.value = {};
     return;
   }
 
-  const stats = await getUserRTSStats(userId, { recentLimit: 2, logsLimit: 400 });
+  const stats = await getUserRTSStats(userId, {
+    logsLimit: 400,
+    currentQuestionId: resolveCurrentQuestionId()
+  });
+  const recentAudioHistory = await getRTSRecentAudioHistory(userId, {
+    limit: RTS_HISTORY_LIMIT,
+    includePlaybackUrls: false
+  });
   todayStats.value = {
     practicedCount: Number(stats.todayPracticed || 0),
     practiceMinutes: Number(stats.todayMinutes || 0),
     averageRating: Number(stats.averageRating || 0)
   };
-  remoteRecentHistory.value = stats.recentLogs || [];
+  remoteRecentHistory.value = Array.isArray(recentAudioHistory) ? recentAudioHistory : [];
+  historyPlaybackStateMap.value = {};
+  if (RTS_PRACTICE_DEBUG_ENABLED) {
+    console.info("[rts-practice:history-load]", {
+      remoteRecentHistoryLength: Number(remoteRecentHistory.value.length || 0),
+      hasLocalFallback: false,
+      localRecentRecordingCount: Number(practiceStore.rtsRecentRecordings?.length || 0)
+    });
+  }
 }
 
-async function persistCurrentPractice() {
+function createPersistOutcome(overrides = {}) {
+  return {
+    attemptId: 0,
+    userId: "",
+    uploadOk: false,
+    insertOk: false,
+    hasRemoteAudioMeta: false,
+    savedLogId: "",
+    transcript: "",
+    scoreJson: null,
+    feedback: "",
+    audioBucket: "",
+    audioPath: "",
+    ...overrides
+  };
+}
+
+async function persistCurrentPractice({
+  stopResult: stopResultOverride = null,
+  question: questionOverride = null,
+  durationSec: durationSecOverride = null,
+  rating: ratingOverride = null
+} = {}) {
+  const effectiveStopResult = stopResultOverride || recordingStopResult.value || null;
+  const attemptId = Math.max(0, Number(effectiveStopResult?.attemptId || 0));
   const userId = await resolveCurrentUserId();
-  if (!userId || !currentQuestion.value) return;
+  const effectiveQuestion = questionOverride || currentQuestion.value || null;
+  if (!userId || !effectiveQuestion) {
+    const missingContextOutcome = createPersistOutcome({ attemptId });
+    if (RTS_PRACTICE_DEBUG_ENABLED) {
+      console.info("[rts-practice:persist]", missingContextOutcome);
+    }
+    return missingContextOutcome;
+  }
+
+  const effectiveDurationSec = durationSecOverride == null ? Number(playbackDurationSec.value || 0) : Number(durationSecOverride || 0);
+  const effectiveRating = ratingOverride == null ? Number(selfRating.value || 0) : Number(ratingOverride || 0);
+  const persistKey = `${effectiveQuestion.id || ""}|${attemptId}|${effectiveRating}|${effectiveDurationSec}`;
+  if (persistKey === lastPersistedPracticeKey.value) {
+    const persistedMeta = lastPersistedPracticeMeta.value || {};
+    const skippedOutcome = createPersistOutcome({
+      attemptId,
+      userId: `${persistedMeta.userId || userId}`.trim(),
+      uploadOk: true,
+      insertOk: true,
+      hasRemoteAudioMeta: true,
+      savedLogId: `${persistedMeta.logId || ""}`.trim(),
+      transcript: `${persistedMeta.transcript || ""}`.trim(),
+      scoreJson: toObjectValue(persistedMeta.scoreJson),
+      feedback: ""
+    });
+    if (RTS_PRACTICE_DEBUG_ENABLED) {
+      console.info("[rts-practice:persist]", skippedOutcome);
+    }
+    return skippedOutcome;
+  }
+
+  const stopBlob = effectiveStopResult?.blob || null;
+  const stopBlobSize = Number(effectiveStopResult?.blobSize ?? stopBlob?.size ?? 0);
+  const stopBlobIssueCode = `${effectiveStopResult?.blobIssueCode || ""}`.trim();
+  const stopSilentFallback = Boolean(effectiveStopResult?.rtsSilentFallback) || stopBlobIssueCode === "RTS_SILENT_FALLBACK";
+
+  let playbackBlob = null;
+  if (!stopSilentFallback && stopBlob && stopBlobSize > 0) {
+    playbackBlob = stopBlob;
+  } else if (practiceStore.audioBlob && Number(practiceStore.audioBlob?.size || 0) > 0) {
+    playbackBlob = practiceStore.audioBlob;
+  }
+
+  const audioMeta = await uploadRTSAudio({
+    userId,
+    questionId: effectiveQuestion.id,
+    attemptId,
+    blob: playbackBlob
+  });
+  const uploadOk = Boolean(audioMeta?.bucket && audioMeta?.path);
+  if (!uploadOk) {
+    const failedUploadOutcome = createPersistOutcome({
+      attemptId,
+      userId,
+      uploadOk: false,
+      insertOk: false,
+      hasRemoteAudioMeta: false,
+      savedLogId: "",
+      audioBucket: "",
+      audioPath: ""
+    });
+    if (RTS_PRACTICE_DEBUG_ENABLED) {
+      console.info("[rts-practice:persist]", failedUploadOutcome);
+    }
+    return failedUploadOutcome;
+  }
+  const normalizedAttemptId = Math.max(0, Number(attemptId || 0));
+  const transcriptText = `${effectiveStopResult?.transcript || recorder.transcript.value || ""}`.trim();
+  const audioPayload = {
+    ...audioMeta,
+    attemptId: normalizedAttemptId,
+    status: "ready"
+  };
 
   const payload = {
     user_id: userId,
     task_type: "RTS",
-    question_id: currentQuestion.value.id,
-    transcript: "",
+    question_id: effectiveQuestion.id,
+    transcript: transcriptText,
     score_json: {
-      self_rating: Number(selfRating.value || 0),
-      duration_sec: Number(playbackDurationSec.value || 0),
-      topic: currentQuestion.value.topic,
-      tone: currentQuestion.value?.key_points?.tone || ""
+      self_rating: effectiveRating,
+      duration_sec: effectiveDurationSec,
+      topic: effectiveQuestion.topic,
+      tone: effectiveQuestion?.key_points?.tone || "",
+      question_content: `${effectiveQuestion?.content || ""}`.trim(),
+      question_meta: buildRTSQuestionMetaPayload(effectiveQuestion),
+      audio_signals: buildRTSAudioSignalsPayload(effectiveStopResult, effectiveDurationSec),
+      ai_review_job: createPendingRTSAiReviewJob(),
+      audio: audioPayload
     },
     feedback: "",
     created_at: new Date().toISOString()
   };
 
-  const { error } = await supabase.from("practice_logs").insert(payload);
+  const { data: insertedRow, error } = await supabase
+    .from("practice_logs")
+    .insert(payload)
+    .select("id, task_type, score_json, transcript, feedback")
+    .single();
   if (error) {
+    if (audioMeta?.bucket && audioMeta?.path) {
+      try {
+        const { error: removeError } = await supabase.storage
+          .from(audioMeta.bucket)
+          .remove([audioMeta.path]);
+        if (removeError) {
+          console.warn("RTS uploaded audio compensation remove failed:", removeError, {
+            questionId: effectiveQuestion.id,
+            path: audioMeta.path
+          });
+        }
+      } catch (removeException) {
+        console.warn("RTS uploaded audio compensation remove failed:", removeException, {
+          questionId: effectiveQuestion.id,
+          path: audioMeta.path
+        });
+      }
+    }
     console.warn("RTS practice_logs insert failed:", error, { questionId: currentQuestion.value.id });
+    lastPersistedPracticeMeta.value = {
+      key: "",
+      userId: "",
+      logId: "",
+      transcript: "",
+      scoreJson: null
+    };
+    const failedOutcome = createPersistOutcome({
+      attemptId,
+      userId,
+      uploadOk,
+      insertOk: false,
+      hasRemoteAudioMeta: false,
+      savedLogId: "",
+      audioBucket: `${audioMeta?.bucket || ""}`.trim(),
+      audioPath: `${audioMeta?.path || ""}`.trim()
+    });
+    if (RTS_PRACTICE_DEBUG_ENABLED) {
+      console.info("[rts-practice:persist]", failedOutcome);
+    }
+    return failedOutcome;
   }
+
+  const savedLogId = `${insertedRow?.id || ""}`.trim();
+  const insertedScoreJson = toObjectValue(insertedRow?.score_json) || toObjectValue(payload.score_json);
+  const insertedTranscript = `${insertedRow?.transcript || payload.transcript || ""}`.trim();
+  const insertedFeedback = `${insertedRow?.feedback || payload.feedback || ""}`.trim();
+  const remoteAudioMetaReady = Boolean(
+    uploadOk
+    && isValidRTSRemoteHistoryRecord({
+      task_type: `${insertedRow?.task_type || "RTS"}`.trim(),
+      score_json: insertedScoreJson || payload.score_json
+    })
+  );
+  lastPersistedPracticeMeta.value = {
+    key: persistKey,
+    userId,
+    logId: savedLogId,
+    transcript: insertedTranscript,
+    scoreJson: insertedScoreJson || null
+  };
+  if (remoteAudioMetaReady) {
+    try {
+      await applyRTSAudioRetentionForUser(userId, {
+        keepCount: RTS_HISTORY_LIMIT
+      });
+    } catch (retentionError) {
+      console.warn("RTS retention run failed:", retentionError, {
+        userId,
+        logId: savedLogId,
+        keepCount: RTS_HISTORY_LIMIT
+      });
+    }
+    lastPersistedPracticeKey.value = persistKey;
+  }
+  const successOutcome = createPersistOutcome({
+    attemptId,
+    userId,
+    uploadOk,
+    insertOk: true,
+    hasRemoteAudioMeta: remoteAudioMetaReady,
+    savedLogId,
+    transcript: insertedTranscript,
+    scoreJson: insertedScoreJson || null,
+    feedback: insertedFeedback,
+    audioBucket: `${audioMeta?.bucket || ""}`.trim(),
+    audioPath: `${audioMeta?.path || ""}`.trim()
+  });
+  if (RTS_PRACTICE_DEBUG_ENABLED) {
+    console.info("[rts-practice:persist]", successOutcome);
+  }
+  return successOutcome;
+}
+
+function toObjectValue(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function normalizeTextValue(value) {
+  return `${value || ""}`.trim();
+}
+
+function normalizeTraitScore(value, min, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return min;
+  return Math.max(min, Math.min(max, Math.round(num)));
+}
+
+function mapRTSRawToDisplay(rawScore, rawMax) {
+  const boundedRaw = normalizeTraitScore(rawScore, 0, rawMax);
+  if (rawMax <= 0) return RTS_DISPLAY_MIN_SCORE;
+  return normalizeTraitScore(
+    Math.round(RTS_DISPLAY_MIN_SCORE + (boundedRaw / rawMax) * (RTS_DISPLAY_MAX_SCORE - RTS_DISPLAY_MIN_SCORE)),
+    RTS_DISPLAY_MIN_SCORE,
+    RTS_DISPLAY_MAX_SCORE
+  );
+}
+
+function composeRTSDisplayOverall(content, pronunciation, fluency) {
+  return normalizeTraitScore(
+    Math.round(
+      Number(content || 0) * 0.5
+      + Number(pronunciation || 0) * 0.25
+      + Number(fluency || 0) * 0.25
+    ),
+    RTS_DISPLAY_MIN_SCORE,
+    RTS_DISPLAY_MAX_SCORE
+  );
+}
+
+function buildRTSDisplayScoresFromRaw({
+  contentRaw = 0,
+  pronunciationRaw = 0,
+  fluencyRaw = 0,
+  gateTriggered = false
+} = {}) {
+  if (gateTriggered) {
+    return {
+      content: RTS_DISPLAY_MIN_SCORE,
+      pronunciation: RTS_DISPLAY_MIN_SCORE,
+      fluency: RTS_DISPLAY_MIN_SCORE,
+      overall: RTS_DISPLAY_MIN_SCORE
+    };
+  }
+
+  const content = mapRTSRawToDisplay(contentRaw, RTS_CONTENT_RAW_MAX);
+  const pronunciation = mapRTSRawToDisplay(pronunciationRaw, RTS_PRONUNCIATION_RAW_MAX);
+  const fluency = mapRTSRawToDisplay(fluencyRaw, RTS_FLUENCY_RAW_MAX);
+  return {
+    content,
+    pronunciation,
+    fluency,
+    overall: composeRTSDisplayOverall(content, pronunciation, fluency)
+  };
 }
 
 async function applyQuestion(nextQuestion, { syncRoute = true, autoPlay = true } = {}) {
@@ -3502,6 +3997,7 @@ async function applyQuestion(nextQuestion, { syncRoute = true, autoPlay = true }
   sceneAudioManualResumeRequired.value = false;
   setSceneAudioError("");
   recordingStopResult.value = null;
+  resetCurrentPracticeSubmitState();
   playbackDurationSec.value = 0;
   revokePlaybackUrl({ reason: "next_question_apply" });
 
@@ -3571,6 +4067,7 @@ async function resolveQuestionByRoute() {
 }
 
 function beginQuestionAdvanceTransition({ keepPlaybackUrl = true } = {}) {
+  submitPending.value = false;
   recordingFinalizePending.value = false;
   recordingStartPending.value = false;
   recordingStopReady.value = false;
@@ -3588,74 +4085,194 @@ function beginQuestionAdvanceTransition({ keepPlaybackUrl = true } = {}) {
   lastUnavailableDebugKey = "";
 }
 
+async function handleSubmitPractice() {
+  if (submitPending.value || nextQuestionBusy.value || isAdvancingQuestion.value || !currentQuestion.value) return;
+  const questionId = resolveCurrentQuestionId();
+  const attemptId = resolveAttemptId(recordingStopResult.value);
+  const hasPlayableAudio = Boolean(hasPlaybackUsableAudio.value && `${playbackUrl.value || ""}`.trim());
+  const submitKey = buildPracticeSubmitKey(questionId, attemptId);
+  if (!submitKey || !hasPlayableAudio || isCurrentPracticeSubmitted.value) return;
+
+  updateSubmitFeedbackState({
+    key: submitKey,
+    status: "submitting",
+    uploadOk: false,
+    insertOk: false,
+    hasRemoteAudioMeta: false
+  });
+  latestRTSAiReviewError.value = "";
+  latestRTSAiReview.value = null;
+  submitPending.value = true;
+  const analyzingPendingQuery = {
+    ...buildResultRouteQuery({
+      questionId
+    }),
+    pendingSubmit: "1"
+  };
+  void router.push({
+    path: "/rts/analyzing",
+    query: analyzingPendingQuery
+  }).catch(() => {});
+  if (RTS_PRACTICE_DEBUG_ENABLED) {
+    console.info("[rts-submit:start]", {
+      questionId,
+      attemptId,
+      hasPlaybackUsableAudio: hasPlayableAudio,
+      uploadOk: false,
+      insertOk: false,
+      hasRemoteAudioMeta: false
+    });
+  }
+
+  try {
+    const persistOutcome = await persistCurrentPractice({
+      stopResult: recordingStopResult.value,
+      question: currentQuestion.value,
+      durationSec: Number(playbackDurationSec.value || 0),
+      rating: Number(selfRating.value || 0)
+    });
+    const uploadOk = Boolean(persistOutcome?.uploadOk);
+    const insertOk = Boolean(persistOutcome?.insertOk);
+    const hasRemoteAudioMeta = Boolean(persistOutcome?.hasRemoteAudioMeta);
+    const submitSucceeded = Boolean(
+      insertOk
+      && hasRemoteAudioMeta
+      && normalizeTextValue(persistOutcome?.savedLogId)
+      && normalizeTextValue(persistOutcome?.userId)
+    );
+
+    if (!submitSucceeded) {
+      updateSubmitFeedbackState({
+        key: submitKey,
+        status: "failed",
+        uploadOk,
+        insertOk,
+        hasRemoteAudioMeta
+      });
+      if (RTS_PRACTICE_DEBUG_ENABLED) {
+        console.warn("[rts-submit:failed]", {
+          questionId,
+          attemptId,
+          hasPlaybackUsableAudio: hasPlayableAudio,
+          uploadOk,
+          insertOk,
+          hasRemoteAudioMeta
+        });
+      }
+      void router.replace({
+        path: "/rts/analyzing",
+        query: {
+          ...buildResultRouteQuery({
+            questionId
+          }),
+          submitFailed: "1"
+        }
+      }).catch(() => {});
+      return;
+    }
+
+    updateSubmitFeedbackState({
+      key: submitKey,
+      status: "success",
+      uploadOk,
+      insertOk,
+      hasRemoteAudioMeta
+    });
+    submittedPracticeKey.value = submitKey;
+    if (RTS_PRACTICE_DEBUG_ENABLED) {
+      console.info("[rts-submit:success]", {
+        questionId,
+        attemptId,
+        hasPlaybackUsableAudio: hasPlayableAudio,
+        uploadOk,
+        insertOk,
+        hasRemoteAudioMeta,
+        reviewStatus: "pending"
+      });
+    }
+    const resultLogId = normalizeTextValue(persistOutcome?.savedLogId);
+    if (resultLogId) {
+      void router.replace({
+        path: "/rts/analyzing",
+        query: buildResultRouteQuery({
+          logId: resultLogId,
+          questionId
+        })
+      }).catch(() => {});
+      return;
+    }
+    await loadTodayStatsPanel();
+  } catch (error) {
+    updateSubmitFeedbackState({
+      key: submitKey,
+      status: "failed",
+      uploadOk: false,
+      insertOk: false,
+      hasRemoteAudioMeta: false
+    });
+    if (RTS_PRACTICE_DEBUG_ENABLED) {
+      console.warn("[rts-submit:failed]", {
+        questionId,
+        attemptId,
+        hasPlaybackUsableAudio: hasPlayableAudio,
+        uploadOk: false,
+        insertOk: false,
+        hasRemoteAudioMeta: false,
+        error
+      });
+    }
+    void router.replace({
+      path: "/rts/analyzing",
+      query: {
+        ...buildResultRouteQuery({
+          questionId
+        }),
+        submitFailed: "1"
+      }
+    }).catch(() => {});
+  } finally {
+    submitPending.value = false;
+  }
+}
+
 async function handleNextQuestion() {
-  if (nextQuestionBusy.value || isAdvancingQuestion.value || !currentQuestion.value) return;
+  if (submitPending.value || nextQuestionBusy.value || isAdvancingQuestion.value || !currentQuestion.value) return;
   const fromQuestionId = resolveCurrentQuestionId();
-  const sourceQuestionId = `${currentQuestion.value?.id || ""}`.trim();
   const sourceStopResult = recordingStopResult.value;
-  const sourcePlaybackUrl = `${playbackUrl.value || ""}`.trim();
-  const sourceBlob = sourceStopResult?.blob || null;
-  const sourceDurationSec = Number(playbackDurationSec.value || 0);
-  const sourceRating = Number(selfRating.value || 0);
-  const sourceHasPlayback = Boolean(sourcePlaybackUrl && isPlaybackUsableRecord(sourceStopResult));
-  const shouldPersist = currentPhase.value === PHASE.PLAYBACK;
+  const attemptId = resolveAttemptId(sourceStopResult);
+  const hasPlaybackUsableAudio = Boolean(isPlaybackUsableRecord(sourceStopResult) && `${playbackUrl.value || ""}`.trim());
+  const submitted = isCurrentPracticeSubmitted.value;
   logSceneAudio("next_question_clicked", {
     fromQuestionId,
     phase: currentPhase.value,
     hasUsableAudio: Boolean(hasUsableAudio.value),
-    hasPlaybackUsableAudio: Boolean(sourceHasPlayback),
-    playbackUrlReady: Boolean(sourcePlaybackUrl),
+    hasPlaybackUsableAudio,
+    playbackUrlReady: Boolean(`${playbackUrl.value || ""}`.trim()),
+    submitted,
     audioState: collectAudioLifecycleSnapshot()
   });
   isAdvancingQuestion.value = true;
   nextQuestionBusy.value = true;
-  beginQuestionAdvanceTransition({ keepPlaybackUrl: true });
   try {
-    if (shouldPersist) {
-      await persistCurrentPractice();
-
-      if (sourceHasPlayback) {
-        let historyBlobUrl = sourcePlaybackUrl;
-        let historyUsesDedicatedUrl = false;
-        if (
-          sourceBlob
-          && Number(sourceBlob.size || 0) > 0
-          && typeof URL !== "undefined"
-          && typeof URL.createObjectURL === "function"
-        ) {
-          try {
-            historyBlobUrl = URL.createObjectURL(sourceBlob);
-            historyUsesDedicatedUrl = true;
-          } catch {
-            historyBlobUrl = sourcePlaybackUrl;
-            historyUsesDedicatedUrl = false;
-          }
-        }
-        practiceStore.pushRTSRecentRecording({
-          questionId: sourceQuestionId || currentQuestion.value.id,
-          blobUrl: historyBlobUrl,
-          durationSec: sourceDurationSec,
-          rating: sourceRating,
-          createdAt: new Date().toISOString()
-        });
-        if (historyUsesDedicatedUrl) {
-          revokeBlobObjectUrl(sourcePlaybackUrl, {
-            reason: "next_question_revoke_active_playback_url"
-          });
-        }
-        logRecorderDebug("next_question_preserve_history_audio", {
-          questionId: fromQuestionId,
-          sourcePlaybackUrlKind: sourcePlaybackUrl.startsWith("blob:") ? "blob" : "non_blob",
-          sourcePlaybackUrlLength: Number(sourcePlaybackUrl.length || 0),
-          historyBlobUrlKind: historyBlobUrl.startsWith("blob:") ? "blob" : "non_blob",
-          historyBlobUrlLength: Number(historyBlobUrl.length || 0),
-          historyUsesDedicatedUrl
-        });
-      }
-
-      await loadTodayStatsPanel();
+    if (currentPhase.value === PHASE.PLAYBACK && !submitted && RTS_PRACTICE_DEBUG_ENABLED) {
+      console.info("[rts-next:skip-persist]", {
+        questionId: fromQuestionId,
+        attemptId,
+        hasPlaybackUsableAudio,
+        uploadOk: false,
+        insertOk: false,
+        hasRemoteAudioMeta: false
+      });
+      updateSubmitFeedbackState({
+        key: buildPracticeSubmitKey(fromQuestionId, attemptId),
+        status: "idle",
+        uploadOk: false,
+        insertOk: false,
+        hasRemoteAudioMeta: false
+      });
     }
 
+    beginQuestionAdvanceTransition({ keepPlaybackUrl: true });
     const candidates = questionPool.value.filter((item) => item.id !== currentQuestion.value.id);
     const nextQuestion = (candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : currentQuestion.value) || null;
     if (!nextQuestion) return;
@@ -3671,8 +4288,12 @@ async function handleNextQuestion() {
   }
 }
 
-function replayHistory(item) {
-  if (item?.source === "local" && item?.blobUrl) return;
+async function replayHistory(item) {
+  if (!item) return;
+  if (item?.hasAudio) {
+    const url = await ensureHistoryPlayback(item);
+    if (url) return;
+  }
   if (!item?.questionId) return;
   router.push({ path: "/rts/practice", query: buildPracticeRouteQuery(item.questionId) });
 }
@@ -3848,7 +4469,17 @@ onUnmounted(() => {
             <div class="rounded-[11px] border border-[#E8EDF5] bg-white p-3">
               <div class="mb-2 flex items-center justify-between">
                 <p class="text-xs text-[#8CA0C0]">{{ timerInfo.label }}</p>
-                <p class="text-xs font-semibold text-[#1B3A6B]">{{ timerInfo.remaining }}s</p>
+                <div class="flex items-center gap-2">
+                  <button
+                    v-if="sceneAudioSkipVisible"
+                    type="button"
+                    class="rounded-full border border-[#E8EDF5] bg-[#F8FAFD] px-2.5 py-1 text-[11px] font-semibold text-[#1B3A6B] transition-colors hover:bg-white"
+                    @click="skipSceneAudio"
+                  >
+                    跳过音频
+                  </button>
+                  <p class="text-xs font-semibold text-[#1B3A6B]">{{ timerInfo.remaining }}s</p>
+                </div>
               </div>
               <div class="h-2 overflow-hidden rounded-full bg-[#E8EDF5]">
                 <div class="h-full bg-[#E8845A] transition-all" :style="{ width: `${timerInfo.progress}%` }" />
@@ -3895,17 +4526,10 @@ onUnmounted(() => {
                   </p>
                   <button
                     type="button"
-                    class="w-full rounded-[11px] bg-[#E8845A] px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+                    class="w-full rounded-[11px] bg-[#1B3A6B] px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
                     @click="startRecordingPhase"
                   >
-                    准备完毕，开始回应
-                  </button>
-                  <button
-                    type="button"
-                    class="w-full rounded-[11px] border border-[#E8EDF5] bg-white px-4 py-3 text-sm font-semibold text-[#8CA0C0] hover:bg-[#F8FAFD]"
-                    @click="playSceneAudio"
-                  >
-                    再听一遍场景
+                    开始回应
                   </button>
                 </div>
               </template>
@@ -4026,8 +4650,11 @@ onUnmounted(() => {
                     </div>
                   </section>
 
-                  <p v-if="nextQuestionBusy || isAdvancingQuestion" class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-2 text-xs text-[#8CA0C0]">
-                    提交中，正在进入下一题...
+                  <p v-if="submitPending" class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-2 text-xs text-[#8CA0C0]">
+                    提交中，请稍候...
+                  </p>
+                  <p v-else-if="nextQuestionBusy || isAdvancingQuestion" class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-2 text-xs text-[#8CA0C0]">
+                    正在进入下一题...
                   </p>
                   <p v-else-if="recordingFinalizePending" class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-2 text-xs text-[#8CA0C0]">
                     正在生成录音回放，请稍候...
@@ -4080,12 +4707,39 @@ onUnmounted(() => {
               </template>
 
               <button
+                v-if="showSubmitButton"
+                type="button"
+                class="mt-3 w-full rounded-[11px] border border-[#1B3A6B] bg-white px-4 py-3 text-sm font-semibold text-[#1B3A6B] transition-colors hover:bg-[#F8FAFD] disabled:cursor-not-allowed disabled:border-[#E8EDF5] disabled:bg-[#F8FAFD] disabled:text-[#8CA0C0]"
+                :disabled="submitButtonDisabled"
+                @click="handleSubmitPractice"
+              >
+                {{ submitButtonLabel }}
+              </button>
+              <p
+                v-if="submitStatusMessage"
+                class="mt-2 rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-2 text-xs text-[#8CA0C0]"
+              >
+                {{ submitStatusMessage }}
+              </p>
+              <p
+                v-if="latestRTSAiReviewLoading"
+                class="mt-2 rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-2 text-xs text-[#8CA0C0]"
+              >
+                AI评分处理中，完成后将跳转结果页...
+              </p>
+              <p
+                v-else-if="latestRTSAiReviewError"
+                class="mt-2 rounded-[11px] border border-[#F2D6D3] bg-[#FFF7F6] px-3 py-2 text-xs text-[#D92D20]"
+              >
+                {{ latestRTSAiReviewError }}
+              </p>
+              <button
                 type="button"
                 class="mt-3 w-full rounded-[11px] bg-[#E8845A] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="nextQuestionBusy || isAdvancingQuestion"
+                :disabled="submitPending || nextQuestionBusy || isAdvancingQuestion"
                 @click="handleNextQuestion"
               >
-                {{ (nextQuestionBusy || isAdvancingQuestion) ? "跳转中..." : "下一题 →" }}
+                {{ (submitPending || nextQuestionBusy || isAdvancingQuestion) ? "处理中..." : "下一题 →" }}
               </button>
             </div>
           </section>
@@ -4202,7 +4856,7 @@ onUnmounted(() => {
           </article>
 
           <article class="rounded-[14px] border border-[#E8EDF5] bg-white p-4">
-            <p class="text-sm font-semibold text-[#1B3A6B]">历史录音（最近2条）</p>
+            <p class="text-sm font-semibold text-[#1B3A6B]">历史录音（最近20条）</p>
             <div v-if="!historyItems.length" class="mt-3 rounded-[11px] bg-[#F8FAFD] p-3 text-xs text-[#8CA0C0]">
               还没有可展示的录音记录。
             </div>
@@ -4214,9 +4868,24 @@ onUnmounted(() => {
                 </div>
                 <p class="mt-1 text-xs text-[#8CA0C0]">{{ formatDateTime(item.createdAt) }} · {{ formatDuration(item.durationSec) }}</p>
                 <div class="mt-2">
-                  <audio v-if="item.hasAudio" class="w-full" :src="item.blobUrl" controls preload="metadata" />
+                  <audio
+                    v-if="item.hasAudio && item.playbackUrl"
+                    class="w-full"
+                    :src="item.playbackUrl"
+                    controls
+                    preload="metadata"
+                  />
                   <button
-                    v-else
+                    v-else-if="item.hasAudio"
+                    type="button"
+                    class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#8CA0C0] hover:bg-[#F8FAFD]"
+                    @click="replayHistory(item)"
+                  >
+                    {{ item.playbackLoading ? "加载中..." : "加载并播放录音" }}
+                  </button>
+                  <p v-if="item.playbackError" class="mt-1 text-xs text-[#D92D20]">{{ item.playbackError }}</p>
+                  <button
+                    v-if="!item.hasAudio"
                     type="button"
                     class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#8CA0C0] hover:bg-[#F8FAFD]"
                     @click="replayHistory(item)"

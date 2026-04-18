@@ -8,9 +8,15 @@ const hasSupabaseConfig =
 
 const RTS_AUDIO_BUCKET = "question-audio";
 const RTS_AUDIO_FOLDER = "rts";
+const PRACTICE_AUDIO_BUCKET = "practice-audio";
+const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 30;
 const DYNAMIC_TEMPLATE_GENERATOR_VERSION = "v5";
 const DYNAMIC_TEMPLATE_CACHE_KEY = "RTS_DYNAMIC_TEMPLATE_CACHE_V5";
 const LEGACY_DYNAMIC_TEMPLATE_CACHE_KEYS = ["RTS_DYNAMIC_TEMPLATE_CACHE_V4", "RTS_DYNAMIC_TEMPLATE_CACHE_V3"];
+const RTS_HISTORY_DEBUG_ENABLED = Boolean(import.meta.env.DEV);
+const RTS_RETENTION_KEEP_COUNT = 20;
+const RTS_RETENTION_PAGE_SIZE = 200;
+const RTS_RETENTION_DEBUG_ENABLED = Boolean(import.meta.env.DEV);
 
 const TONE_LABEL_MAP = {
   formal: "正式语气",
@@ -238,6 +244,11 @@ const EN_STOPWORDS = new Set([
 let cachedQuestions = null;
 let cachedSource = "mock";
 let dynamicTemplateCache = null;
+let lastRTSRecentAudioHistoryDebug = {
+  fetchedCount: 0,
+  validRemoteAudioCount: 0,
+  topAudioMeta: []
+};
 
 function toObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
@@ -262,6 +273,51 @@ function parseJsonLike(value) {
     }
   }
   return toObject(value);
+}
+
+function normalizeTaskType(value) {
+  return toSafeString(value).toUpperCase();
+}
+
+function resolveHistoryRecordTaskType(record) {
+  const source = toObject(record) || {};
+  const direct = normalizeTaskType(source?.taskType || source?.task_type);
+  if (direct) return direct;
+  const scoreJson = parseScoreJson(source?.score_json);
+  return normalizeTaskType(scoreJson?.taskType || scoreJson?.task_type);
+}
+
+function summarizeHistoryAudioMeta(record) {
+  const source = toObject(record) || {};
+  const audioMeta = normalizeAudioMeta(
+    source?.audioMeta
+    || source?.audio
+    || source?.score_json?.audio
+  );
+  return {
+    id: toSafeString(source?.id),
+    questionId: toSafeString(source?.questionId || source?.question_id),
+    bucket: toSafeString(audioMeta?.bucket),
+    path: toSafeString(audioMeta?.path)
+  };
+}
+
+function updateRecentAudioHistoryDebug({ fetchedCount = 0, validRemoteAudioCount = 0, topAudioMeta = [] } = {}) {
+  lastRTSRecentAudioHistoryDebug = {
+    fetchedCount: Math.max(0, Number(fetchedCount || 0)),
+    validRemoteAudioCount: Math.max(0, Number(validRemoteAudioCount || 0)),
+    topAudioMeta: Array.isArray(topAudioMeta) ? topAudioMeta.slice(0, 3) : []
+  };
+}
+
+export function getLastRTSRecentAudioHistoryDebug() {
+  return {
+    fetchedCount: Math.max(0, Number(lastRTSRecentAudioHistoryDebug?.fetchedCount || 0)),
+    validRemoteAudioCount: Math.max(0, Number(lastRTSRecentAudioHistoryDebug?.validRemoteAudioCount || 0)),
+    topAudioMeta: Array.isArray(lastRTSRecentAudioHistoryDebug?.topAudioMeta)
+      ? [...lastRTSRecentAudioHistoryDebug.topAudioMeta]
+      : []
+  };
 }
 
 function normalizeWhitespace(text) {
@@ -896,6 +952,166 @@ function parseScoreJson(rawValue) {
   return toObject(parsed) || {};
 }
 
+function normalizeRTSAudioPath(pathValue) {
+  const raw = toSafeString(pathValue);
+  if (!raw) return "";
+
+  const withoutHash = raw.split("#")[0];
+  const withoutQuery = withoutHash.split("?")[0];
+  const normalized = withoutQuery.replace(/^\/+/, "");
+  if (!normalized) return "";
+
+  if (normalized.startsWith(`${PRACTICE_AUDIO_BUCKET}/`)) {
+    return normalized.slice(PRACTICE_AUDIO_BUCKET.length + 1);
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    const rtsMarkerIndex = normalized.toLowerCase().indexOf("/rts/");
+    if (rtsMarkerIndex >= 0) {
+      return normalized.slice(rtsMarkerIndex + 1);
+    }
+  }
+
+  return normalized;
+}
+
+function resolveRTSAudioBucket(bucketValue, pathValue) {
+  const direct = toSafeString(bucketValue);
+  if (direct) return direct;
+
+  const path = normalizeRTSAudioPath(pathValue);
+  if (path.startsWith("rts/")) return PRACTICE_AUDIO_BUCKET;
+  return "";
+}
+
+function normalizeAudioMeta(audio) {
+  if (typeof audio === "string") {
+    const pathFromString = normalizeRTSAudioPath(audio);
+    const inferredBucket = resolveRTSAudioBucket("", pathFromString);
+    if (!inferredBucket || !pathFromString) return null;
+    return {
+      bucket: inferredBucket,
+      path: pathFromString,
+      mimeType: "",
+      size: 0,
+      uploadedAt: "",
+      attemptId: 0,
+      status: ""
+    };
+  }
+
+  const value = toObject(audio);
+  if (!value) return null;
+
+  const path = normalizeRTSAudioPath(
+    value?.path
+    || value?.storagePath
+    || value?.storage_path
+    || value?.objectPath
+    || value?.object_path
+    || value?.filePath
+    || value?.file_path
+  );
+  const bucket = resolveRTSAudioBucket(
+    value?.bucket
+    || value?.bucketId
+    || value?.bucket_id
+    || value?.storageBucket
+    || value?.storage_bucket,
+    path
+  );
+  if (!bucket || !path) return null;
+
+  return {
+    bucket,
+    path,
+    mimeType: toSafeString(value?.mimeType || value?.mime_type || value?.contentType || value?.content_type),
+    size: Math.max(0, Number(value?.size || value?.bytes || value?.fileSize || value?.file_size || 0)),
+    uploadedAt: toSafeString(value?.uploadedAt || value?.uploaded_at || value?.createdAt || value?.created_at),
+    attemptId: Math.max(0, Number(value?.attemptId || value?.attempt_id || 0)),
+    status: toSafeString(value?.status || value?.uploadStatus || value?.upload_status)
+  };
+}
+
+function extractRTSAudioMeta(scoreJson) {
+  return normalizeAudioMeta(
+    scoreJson?.audio
+    || scoreJson?.audio_meta
+    || scoreJson?.audioMeta
+    || scoreJson?.recording
+    || scoreJson?.recording_audio
+  );
+}
+
+export function hasRTSHistoryAudioMeta(itemOrAudioMeta) {
+  const normalizedAudio = normalizeAudioMeta(
+    itemOrAudioMeta?.audioMeta
+    || itemOrAudioMeta?.audio
+    || itemOrAudioMeta?.score_json?.audio
+    || itemOrAudioMeta
+  );
+  return Boolean(normalizedAudio?.bucket && normalizedAudio?.path);
+}
+
+export function isValidRTSRemoteHistoryRecord(record) {
+  const source = toObject(record);
+  if (!source) return false;
+  if (resolveHistoryRecordTaskType(source) !== "RTS") return false;
+  const normalizedAudio = normalizeAudioMeta(
+    source?.audioMeta
+    || source?.audio
+    || source?.score_json?.audio
+  );
+  return Boolean(normalizedAudio?.bucket && normalizedAudio?.path);
+}
+
+function isReplayableRTSAudioMeta(audioMeta) {
+  const normalizedAudio = normalizeAudioMeta(audioMeta);
+  if (!hasRTSHistoryAudioMeta(normalizedAudio)) return false;
+  if (normalizedAudio.bucket !== PRACTICE_AUDIO_BUCKET) return false;
+  return normalizedAudio.path.startsWith("rts/");
+}
+
+function sanitizePathSegment(value) {
+  const cleaned = toSafeString(value)
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
+  return cleaned || "unknown";
+}
+
+function sanitizeAttemptId(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return "0";
+  return `${Math.floor(parsed)}`;
+}
+
+function normalizeMimeType(value) {
+  return toSafeString(value).toLowerCase();
+}
+
+function getAudioExtByMimeType(mimeType) {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  if (mimeType.includes("aac")) return "aac";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+function normalizeSignedUrlTtl(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SIGNED_URL_TTL_SECONDS;
+  return Math.max(30, Math.min(60 * 60 * 24, Math.floor(parsed)));
+}
+
+function normalizeRecentLimit(value, fallback = 20, max = 200) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(max, Math.floor(parsed)));
+}
+
 function resolveSelfRating(scoreJson) {
   const value = Number(scoreJson?.self_rating);
   if (!Number.isFinite(value)) return 0;
@@ -925,23 +1141,122 @@ function buildQuestionMap(list) {
   return map;
 }
 
-function buildRecentLogs(logRows, questionMap, limit = 3) {
-  return logRows.slice(0, limit).map((row) => {
-    const scoreJson = parseScoreJson(row?.score_json);
-    const questionId = toSafeString(row?.question_id);
-    const matched = questionMap.get(questionId) || null;
-    const content = toSafeString(matched?.content || row?.transcript || "");
-    const topic = normalizeTopic(matched?.topic || "daily");
-    return {
-      id: `${row?.id || ""}`.trim(),
-      questionId,
-      topic,
-      summary: resolveQuestionSummary(content),
-      rating: resolveSelfRating(scoreJson),
-      durationSec: resolveDurationSec(scoreJson),
-      createdAt: toSafeString(row?.created_at)
-    };
+function buildRecentLog(row, questionMap) {
+  const scoreJson = parseScoreJson(row?.score_json);
+  const questionId = toSafeString(row?.question_id);
+  const matched = questionMap.get(questionId) || null;
+  const content = toSafeString(matched?.content || row?.transcript || "");
+  const topic = normalizeTopic(matched?.topic || scoreJson?.topic || "daily");
+  const audioMeta = extractRTSAudioMeta(scoreJson);
+  const taskType = normalizeTaskType(row?.task_type || "RTS") || "RTS";
+  const hasAudioMeta = isValidRTSRemoteHistoryRecord({
+    task_type: taskType,
+    audio: audioMeta
   });
+  return {
+    id: `${row?.id || ""}`.trim(),
+    taskType,
+    questionId,
+    topic,
+    summary: resolveQuestionSummary(content),
+    rating: resolveSelfRating(scoreJson),
+    durationSec: resolveDurationSec(scoreJson),
+    createdAt: toSafeString(row?.created_at),
+    audioMeta,
+    hasAudioMeta,
+    hasAudio: hasAudioMeta,
+    canLoadPlayback: isReplayableRTSAudioMeta(audioMeta),
+    playbackUrl: ""
+  };
+}
+
+function buildRecentLogs(logRows, questionMap, limit = 3) {
+  return logRows.slice(0, limit).map((row) => buildRecentLog(row, questionMap));
+}
+
+function buildRecentAudioHistory(logRows, questionMap, limit = 20) {
+  const safeRows = Array.isArray(logRows) ? logRows : [];
+  const safeLimit = normalizeRecentLimit(limit, 20, 200);
+  return safeRows
+    .map((row) => buildRecentLog(row, questionMap))
+    .filter((item) => isValidRTSRemoteHistoryRecord(item))
+    .slice(0, safeLimit);
+}
+
+function buildCurrentQuestionLatestLog(logRows, questionMap, currentQuestionId = "") {
+  const normalizedQuestionId = toSafeString(currentQuestionId);
+  if (normalizedQuestionId) {
+    const targetRow = logRows.find((row) => toSafeString(row?.question_id) === normalizedQuestionId);
+    if (targetRow) return buildRecentLog(targetRow, questionMap);
+    return null;
+  }
+  const fallbackRow = logRows[0] || null;
+  if (!fallbackRow) return null;
+  return buildRecentLog(fallbackRow, questionMap);
+}
+
+function getLatestQuestionId(logRows) {
+  const latest = logRows[0];
+  return toSafeString(latest?.question_id);
+}
+
+async function getCurrentUserId() {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn("RTS session read failed:", error);
+      return "";
+    }
+    return toSafeString(data?.session?.user?.id);
+  } catch (error) {
+    console.warn("RTS session read failed:", error);
+    return "";
+  }
+}
+
+async function createRTSPlaybackUrlForUser(audioMeta, userId, expiresIn = DEFAULT_SIGNED_URL_TTL_SECONDS) {
+  const normalizedUserId = toSafeString(userId);
+  if (!normalizedUserId) return "";
+
+  const normalizedAudio = normalizeAudioMeta(audioMeta);
+  if (!normalizedAudio) return "";
+  if (normalizedAudio.bucket !== PRACTICE_AUDIO_BUCKET) return "";
+  if (!normalizedAudio.path.startsWith(`rts/${normalizedUserId}/`)) return "";
+
+  const ttl = normalizeSignedUrlTtl(expiresIn);
+  const { data, error } = await supabase
+    .storage
+    .from(normalizedAudio.bucket)
+    .createSignedUrl(normalizedAudio.path, ttl);
+
+  if (error) {
+    console.warn("RTS playback signed URL failed:", error, {
+      bucket: normalizedAudio.bucket,
+      path: normalizedAudio.path
+    });
+    return "";
+  }
+
+  return toSafeString(data?.signedUrl);
+}
+
+async function enrichRecentLogsWithPlaybackUrls(logs, userId, playbackUrlTtl = DEFAULT_SIGNED_URL_TTL_SECONDS) {
+  const safeLogs = Array.isArray(logs) ? logs : [];
+  const normalizedUserId = toSafeString(userId);
+  if (!safeLogs.length || !normalizedUserId) return safeLogs;
+
+  const enriched = await Promise.all(
+    safeLogs.map(async (item) => {
+      if (!item?.hasAudioMeta) return { ...item, playbackUrl: "" };
+      const playbackUrl = await createRTSPlaybackUrlForUser(item.audioMeta, normalizedUserId, playbackUrlTtl);
+      return {
+        ...item,
+        playbackUrl
+      };
+    })
+  );
+
+  return enriched;
 }
 
 function buildQuestionPracticeCountMap(logRows) {
@@ -953,17 +1268,24 @@ function buildQuestionPracticeCountMap(logRows) {
   }, {});
 }
 
-async function fetchUserLogs(userId, limit = 300) {
+async function fetchUserLogs(userId, { limit = 300, questionId = "" } = {}) {
   const normalizedUserId = toSafeString(userId);
   if (!normalizedUserId) return [];
+  const normalizedQuestionId = toSafeString(questionId);
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("practice_logs")
-      .select("id, question_id, score_json, transcript, created_at")
+      .select("id, task_type, question_id, score_json, transcript, created_at")
       .eq("user_id", normalizedUserId)
       .eq("task_type", "RTS")
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (normalizedQuestionId) {
+      query = query.eq("question_id", normalizedQuestionId);
+    }
+
+    const { data, error } = await query
       .limit(Math.max(1, Math.min(1000, Number(limit || 300))));
 
     if (error) {
@@ -976,6 +1298,293 @@ async function fetchUserLogs(userId, limit = 300) {
     console.warn("RTS logs load failed:", error);
     return [];
   }
+}
+
+function normalizeRetentionKeepCount(value) {
+  return normalizeRecentLimit(value, RTS_RETENTION_KEEP_COUNT, 200);
+}
+
+function isStorageObjectMissingError(error) {
+  const code = toSafeString(error?.statusCode || error?.status || error?.code).toLowerCase();
+  const message = toSafeString(error?.message).toLowerCase();
+  return (
+    code === "404"
+    || code === "not_found"
+    || message.includes("not found")
+    || message.includes("does not exist")
+    || message.includes("no such")
+  );
+}
+
+async function fetchAllRTSLogsForRetention(userId) {
+  const normalizedUserId = toSafeString(userId);
+  if (!normalizedUserId) return [];
+
+  const rows = [];
+  let from = 0;
+  while (true) {
+    const to = from + RTS_RETENTION_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("practice_logs")
+      .select("id, task_type, question_id, score_json, created_at")
+      .eq("user_id", normalizedUserId)
+      .eq("task_type", "RTS")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.warn("RTS retention logs load failed:", error, { userId: normalizedUserId, from, to });
+      break;
+    }
+
+    const chunk = Array.isArray(data) ? data : [];
+    if (!chunk.length) break;
+    rows.push(...chunk);
+    if (chunk.length < RTS_RETENTION_PAGE_SIZE) break;
+    from += RTS_RETENTION_PAGE_SIZE;
+  }
+
+  return rows;
+}
+
+function buildRTSRemoteAudioRecordsForRetention(logRows) {
+  const safeRows = Array.isArray(logRows) ? logRows : [];
+  return safeRows
+    .map((row) => {
+      const scoreJson = parseScoreJson(row?.score_json);
+      const audioMeta = extractRTSAudioMeta(scoreJson);
+      if (!isValidRTSRemoteHistoryRecord({
+        task_type: row?.task_type || "RTS",
+        audio: audioMeta
+      })) {
+        return null;
+      }
+      return {
+        id: toSafeString(row?.id),
+        questionId: toSafeString(row?.question_id),
+        scoreJson,
+        audioMeta
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildRetentionClearedScoreJson(scoreJson) {
+  const base = toObject(scoreJson) || {};
+  return {
+    ...base,
+    audio: {
+      status: "deleted_by_retention"
+    }
+  };
+}
+
+export async function applyRTSAudioRetentionForUser(
+  userId,
+  { keepCount = RTS_RETENTION_KEEP_COUNT } = {}
+) {
+  const normalizedUserId = toSafeString(userId);
+  const safeKeepCount = normalizeRetentionKeepCount(keepCount);
+
+  const emptySummary = {
+    totalRemoteAudioCount: 0,
+    keepCount: safeKeepCount,
+    deleteCount: 0,
+    deletedStorageCount: 0,
+    clearedLogCount: 0,
+    failedCount: 0
+  };
+  if (!normalizedUserId || !hasSupabaseConfig) return emptySummary;
+
+  const allLogs = await fetchAllRTSLogsForRetention(normalizedUserId);
+  const remoteAudioLogs = buildRTSRemoteAudioRecordsForRetention(allLogs);
+  const staleAudioLogs = remoteAudioLogs.slice(safeKeepCount);
+  const summary = {
+    totalRemoteAudioCount: remoteAudioLogs.length,
+    keepCount: safeKeepCount,
+    deleteCount: staleAudioLogs.length,
+    deletedStorageCount: 0,
+    clearedLogCount: 0,
+    failedCount: 0
+  };
+
+  if (RTS_RETENTION_DEBUG_ENABLED) {
+    console.info("[rts-retention:start]", {
+      userId: normalizedUserId,
+      totalRemoteAudioCount: summary.totalRemoteAudioCount,
+      keepCount: summary.keepCount,
+      deleteCount: summary.deleteCount
+    });
+  }
+
+  for (const item of staleAudioLogs) {
+    const logId = toSafeString(item?.id);
+    const questionId = toSafeString(item?.questionId);
+    const audioBucket = toSafeString(item?.audioMeta?.bucket);
+    const audioPath = toSafeString(item?.audioMeta?.path);
+
+    if (RTS_RETENTION_DEBUG_ENABLED) {
+      console.info("[rts-retention:delete-item]", {
+        logId,
+        questionId,
+        audioBucket,
+        audioPath
+      });
+    }
+
+    let shouldClearLog = false;
+    let storageRemoved = false;
+    try {
+      const { error: removeError } = await supabase.storage
+        .from(audioBucket)
+        .remove([audioPath]);
+
+      if (removeError) {
+        if (isStorageObjectMissingError(removeError)) {
+          shouldClearLog = true;
+        } else {
+          summary.failedCount += 1;
+          console.warn("RTS retention storage remove failed:", removeError, {
+            userId: normalizedUserId,
+            logId,
+            questionId,
+            audioBucket,
+            audioPath
+          });
+          continue;
+        }
+      } else {
+        storageRemoved = true;
+        shouldClearLog = true;
+        summary.deletedStorageCount += 1;
+      }
+    } catch (removeException) {
+      if (isStorageObjectMissingError(removeException)) {
+        shouldClearLog = true;
+      } else {
+        summary.failedCount += 1;
+        console.warn("RTS retention storage remove failed:", removeException, {
+          userId: normalizedUserId,
+          logId,
+          questionId,
+          audioBucket,
+          audioPath
+        });
+        continue;
+      }
+    }
+
+    if (!shouldClearLog) continue;
+
+    const nextScoreJson = buildRetentionClearedScoreJson(item?.scoreJson);
+    try {
+      const { error: updateError } = await supabase
+        .from("practice_logs")
+        .update({ score_json: nextScoreJson })
+        .eq("id", logId)
+        .eq("user_id", normalizedUserId)
+        .eq("task_type", "RTS");
+
+      if (updateError) {
+        summary.failedCount += 1;
+        const warnMessage = storageRemoved
+          ? "RTS retention log clear failed after storage remove:"
+          : "RTS retention log clear failed:";
+        console.warn(warnMessage, updateError, {
+          userId: normalizedUserId,
+          logId,
+          questionId,
+          audioBucket,
+          audioPath
+        });
+        continue;
+      }
+      summary.clearedLogCount += 1;
+    } catch (updateException) {
+      summary.failedCount += 1;
+      const warnMessage = storageRemoved
+        ? "RTS retention log clear failed after storage remove:"
+        : "RTS retention log clear failed:";
+      console.warn(warnMessage, updateException, {
+        userId: normalizedUserId,
+        logId,
+        questionId,
+        audioBucket,
+        audioPath
+      });
+    }
+  }
+
+  if (RTS_RETENTION_DEBUG_ENABLED) {
+    console.info("[rts-retention:end]", {
+      deletedStorageCount: summary.deletedStorageCount,
+      clearedLogCount: summary.clearedLogCount,
+      failedCount: summary.failedCount
+    });
+  }
+
+  return summary;
+}
+
+export async function uploadRTSAudio({ userId, questionId, attemptId, blob } = {}) {
+  const normalizedUserId = toSafeString(userId);
+  if (!normalizedUserId) return null;
+  if (!blob || Number(blob?.size || 0) <= 0) return null;
+
+  const mimeType = normalizeMimeType(blob?.type);
+  const ext = getAudioExtByMimeType(mimeType);
+  const safeQuestionId = sanitizePathSegment(questionId || "unknown");
+  const safeAttemptId = sanitizeAttemptId(attemptId);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const path = `rts/${normalizedUserId}/${safeQuestionId}/${safeAttemptId}-${timestamp}.${ext}`;
+
+  try {
+    const { error } = await supabase.storage.from(PRACTICE_AUDIO_BUCKET).upload(path, blob, {
+      contentType: mimeType || "application/octet-stream",
+      upsert: false
+    });
+
+    if (error) {
+      console.warn("RTS audio upload failed:", error, {
+        path,
+        mimeType,
+        size: Number(blob?.size || 0)
+      });
+      return null;
+    }
+
+    return {
+      bucket: PRACTICE_AUDIO_BUCKET,
+      path,
+      mimeType: mimeType || "",
+      size: Number(blob?.size || 0),
+      uploadedAt: new Date().toISOString(),
+      attemptId: Number(safeAttemptId),
+      status: "ready"
+    };
+  } catch (error) {
+    console.warn("RTS audio upload error:", error, {
+      path,
+      mimeType,
+      size: Number(blob?.size || 0)
+    });
+    return null;
+  }
+}
+
+export async function getRTSPlaybackUrl(logOrAudioMeta, expiresIn = DEFAULT_SIGNED_URL_TTL_SECONDS) {
+  const userId = await getCurrentUserId();
+  if (!userId) return "";
+
+  const audioMeta = normalizeAudioMeta(
+    logOrAudioMeta?.audioMeta
+    || logOrAudioMeta?.audio
+    || logOrAudioMeta?.score_json?.audio
+    || logOrAudioMeta
+  );
+  if (!audioMeta) return "";
+
+  return createRTSPlaybackUrlForUser(audioMeta, userId, expiresIn);
 }
 
 export function useRTSData() {
@@ -1031,16 +1640,45 @@ export function useRTSData() {
     });
   }
 
-  async function getUserRTSStats(userId, { recentLimit = 3, logsLimit = 300 } = {}) {
+  async function getUserRTSStats(
+    userId,
+    {
+      recentLimit = 3,
+      logsLimit = 300,
+      currentQuestionId = "",
+      includePlaybackUrls = false,
+      playbackUrlTtl = DEFAULT_SIGNED_URL_TTL_SECONDS
+    } = {}
+  ) {
+    const normalizedUserId = toSafeString(userId);
     const list = await loadQuestions();
     const questionMap = buildQuestionMap(list);
-    const logs = await fetchUserLogs(userId, logsLimit);
+    const logs = await fetchUserLogs(normalizedUserId, {
+      limit: logsLimit
+    });
     const nowDateKey = resolveDateKey(new Date().toISOString());
     const todayLogs = logs.filter((item) => resolveDateKey(item?.created_at) === nowDateKey);
     const ratingValues = logs
       .map((item) => resolveSelfRating(parseScoreJson(item?.score_json)))
       .filter((rating) => rating > 0);
     const todayDurationSec = todayLogs.reduce((sum, item) => sum + resolveDurationSec(parseScoreJson(item?.score_json)), 0);
+    let recentLogs = buildRecentLogs(logs, questionMap, recentLimit);
+    let currentQuestionLatestLog = buildCurrentQuestionLatestLog(logs, questionMap, currentQuestionId);
+
+    if (includePlaybackUrls && normalizedUserId) {
+      recentLogs = await enrichRecentLogsWithPlaybackUrls(recentLogs, normalizedUserId, playbackUrlTtl);
+      if (currentQuestionLatestLog?.hasAudio) {
+        const playbackUrl = await createRTSPlaybackUrlForUser(
+          currentQuestionLatestLog.audioMeta,
+          normalizedUserId,
+          playbackUrlTtl
+        );
+        currentQuestionLatestLog = {
+          ...currentQuestionLatestLog,
+          playbackUrl
+        };
+      }
+    }
 
     return {
       todayPracticed: todayLogs.length,
@@ -1049,9 +1687,95 @@ export function useRTSData() {
         ? Number((ratingValues.reduce((sum, rating) => sum + rating, 0) / ratingValues.length).toFixed(1))
         : 0,
       totalQuestions: list.length,
-      recentLogs: buildRecentLogs(logs, questionMap, recentLimit),
+      recentLogs,
+      currentQuestionLatestLog,
+      latestQuestionId: getLatestQuestionId(logs),
       questionPracticeCountMap: buildQuestionPracticeCountMap(logs)
     };
+  }
+
+  async function getRTSCurrentQuestionLatestPractice(
+    userId,
+    questionId,
+    {
+      includePlaybackUrl = false,
+      playbackUrlTtl = DEFAULT_SIGNED_URL_TTL_SECONDS
+    } = {}
+  ) {
+    const normalizedUserId = toSafeString(userId);
+    const normalizedQuestionId = toSafeString(questionId);
+    if (!normalizedUserId || !normalizedQuestionId) return null;
+
+    const list = await loadQuestions();
+    const questionMap = buildQuestionMap(list);
+    const logs = await fetchUserLogs(normalizedUserId, {
+      limit: 1,
+      questionId: normalizedQuestionId
+    });
+    const latest = logs[0] || null;
+    if (!latest) return null;
+
+    let output = buildRecentLog(latest, questionMap);
+    if (includePlaybackUrl && output?.hasAudio) {
+      const playbackUrl = await createRTSPlaybackUrlForUser(
+        output.audioMeta,
+        normalizedUserId,
+        playbackUrlTtl
+      );
+      output = {
+        ...output,
+        playbackUrl
+      };
+    }
+    return output;
+  }
+
+  async function getRTSRecentAudioHistory(
+    userId,
+    {
+      limit = 20,
+      includePlaybackUrls = false,
+      playbackUrlTtl = DEFAULT_SIGNED_URL_TTL_SECONDS
+    } = {}
+  ) {
+    const normalizedUserId = toSafeString(userId);
+    if (!normalizedUserId) {
+      updateRecentAudioHistoryDebug({
+        fetchedCount: 0,
+        validRemoteAudioCount: 0,
+        topAudioMeta: []
+      });
+      return [];
+    }
+
+    const safeLimit = normalizeRecentLimit(limit, 20, 200);
+    const queryLimit = Math.max(safeLimit, Math.min(1000, Math.max(120, safeLimit * 12)));
+    const list = await loadQuestions();
+    const questionMap = buildQuestionMap(list);
+    const logs = await fetchUserLogs(normalizedUserId, {
+      limit: queryLimit
+    });
+    let historyLogs = buildRecentAudioHistory(logs, questionMap, safeLimit);
+
+    if (includePlaybackUrls) {
+      historyLogs = await enrichRecentLogsWithPlaybackUrls(
+        historyLogs,
+        normalizedUserId,
+        playbackUrlTtl
+      );
+    }
+
+    const debugPayload = {
+      fetchedCount: logs.length,
+      validRemoteAudioCount: historyLogs.length,
+      topAudioMeta: historyLogs.slice(0, 3).map((item) => summarizeHistoryAudioMeta(item))
+    };
+    updateRecentAudioHistoryDebug(debugPayload);
+    if (RTS_HISTORY_DEBUG_ENABLED) {
+      console.info("[rts-data:recent-history]", debugPayload);
+    }
+
+    return historyLogs;
   }
 
   return {
@@ -1063,6 +1787,8 @@ export function useRTSData() {
     getRandomQuestion,
     getTopicStats,
     getUserRTSStats,
+    getRTSCurrentQuestionLatestPractice,
+    getRTSRecentAudioHistory,
     resolveQuestionSummary
   };
 }

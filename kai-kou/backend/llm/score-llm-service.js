@@ -7,15 +7,15 @@ const WE_DEFAULT_PRIMARY_TIMEOUT_MS = 3500;
 const WE_DEFAULT_FALLBACK_TIMEOUT_MS = 3500;
 const GEMINI_PLACEHOLDER_KEY = "YOUR_GEMINI_API_KEY";
 
-export async function generateScoreTextWithFallback({ prompt, taskType } = {}) {
+export async function generateScoreTextWithFallback({ prompt, taskType, structuredOutput = null } = {}) {
   const normalizedTaskType = normalizeTaskType(taskType);
   if (normalizedTaskType === "WE") {
     return generateWEScoreTextWithFallback({ prompt });
   }
-  return generateDefaultScoreTextWithFallback({ prompt });
+  return generateDefaultScoreTextWithFallback({ prompt, structuredOutput });
 }
 
-async function generateDefaultScoreTextWithFallback({ prompt } = {}) {
+async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput = null } = {}) {
   const startedAt = nowMs();
   const geminiApiKey = `${process.env.GEMINI_API_KEY || ""}`.trim();
   const fallbackApiKey = getGroqApiKeyFromEnv();
@@ -28,7 +28,8 @@ async function generateDefaultScoreTextWithFallback({ prompt } = {}) {
         stage: "primary",
         prompt,
         apiKey: fallbackApiKey,
-        providerAttempts
+        providerAttempts,
+        structuredOutput
       });
       return {
         raw_text: fallback.result.raw_text,
@@ -63,7 +64,8 @@ async function generateDefaultScoreTextWithFallback({ prompt } = {}) {
       stage: "primary",
       prompt,
       apiKey: geminiApiKey,
-      providerAttempts
+      providerAttempts,
+      structuredOutput
     });
     primaryLatencyMs = primary.duration_ms;
     return {
@@ -111,7 +113,8 @@ async function generateDefaultScoreTextWithFallback({ prompt } = {}) {
         stage: "fallback",
         prompt,
         apiKey: fallbackApiKey,
-        providerAttempts
+        providerAttempts,
+        structuredOutput
       });
       return {
         raw_text: fallback.result.raw_text,
@@ -256,7 +259,8 @@ async function callProviderWithAttempt({
   prompt,
   apiKey,
   timeoutMs,
-  providerAttempts
+  providerAttempts,
+  structuredOutput = null
 } = {}) {
   const startTs = Date.now();
   const attemptBase = {
@@ -269,7 +273,12 @@ async function callProviderWithAttempt({
   try {
     const result = provider === "groq"
       ? await callGroq({ prompt, apiKey, timeoutMs })
-      : await callGemini({ prompt, apiKey, timeoutMs });
+      : await callGemini({
+        prompt,
+        apiKey,
+        timeoutMs,
+        generationConfig: structuredOutput
+      });
     const endTs = Date.now();
     const durationMs = Math.max(0, endTs - startTs);
     providerAttempts.push({

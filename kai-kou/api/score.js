@@ -1,7 +1,13 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import { generateScoreTextWithFallback } from "../backend/llm/score-llm-service.js";
 import { getGroqApiKeyFromEnv } from "../backend/llm/providers/groq.js";
+import { buildRTSPrompt, buildRTSResponseJsonSchema } from "../backend/rts/rts-prompt.js";
 import { analyzeWEEssayForm } from "../backend/we/form-gate-rules.js";
+import {
+  buildRTSAiFallbackResult,
+  finalizeRTSScorePayload,
+  normalizeRTSFallbackReasonCode
+} from "../backend/rts/normalize-rts-score.js";
 import {
   buildWEAiFallbackResult,
   buildWEFormGateResult,
@@ -66,8 +72,15 @@ export default async function handler(req, res) {
   const { taskType, transcript, questionContent } = req.body || {};
   const normalizedTaskType = normalizeTaskType(taskType);
   const safeTranscript = typeof transcript === "string" ? transcript : "";
+  const safeQuestionContent = typeof questionContent === "string" ? questionContent : "";
   const trimmedTranscript = safeTranscript.trim();
   const weFormAnalysis = normalizedTaskType === "WE" ? analyzeWEEssayForm(safeTranscript) : null;
+  const rtsQuestionMeta = normalizedTaskType === "RTS"
+    ? normalizeRTSQuestionMeta(req.body?.question_meta)
+    : null;
+  const rtsAudioSignals = normalizedTaskType === "RTS"
+    ? normalizeRTSAudioSignals(req.body?.audio_signals)
+    : null;
 
   if (!trimmedTranscript) {
     if (normalizedTaskType === "RA") {
@@ -75,7 +88,7 @@ export default async function handler(req, res) {
         { responseType: "silence" },
         {
           transcript: safeTranscript,
-          questionContent
+          questionContent: safeQuestionContent
         }
       );
       return res.status(200).json({
@@ -93,6 +106,23 @@ export default async function handler(req, res) {
       });
     }
 
+    if (normalizedTaskType === "RTS") {
+      return res.status(200).json({
+        ...buildRTSAiFallbackResult({
+          transcript: safeTranscript,
+          questionContent: safeQuestionContent,
+          questionMeta: rtsQuestionMeta,
+          audioSignals: rtsAudioSignals,
+          providerUsed: "none",
+          fallbackReason: "transcript_empty",
+          errorStage: "precheck_transcript",
+          rawErrorType: "transcript_empty",
+          reasonCodes: ["transcript_empty"]
+        }),
+        request_id: requestId
+      });
+    }
+
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
@@ -102,7 +132,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (normalizedTaskType !== "RA" && normalizedTaskType !== "WE" && trimmedTranscript.length < 3) {
+  if (normalizedTaskType !== "RA" && normalizedTaskType !== "WE" && normalizedTaskType !== "RTS" && trimmedTranscript.length < 3) {
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
@@ -155,6 +185,25 @@ export default async function handler(req, res) {
     const hasGeminiApiKey = hasConfiguredGeminiApiKey();
     const hasGroqApiKey = hasConfiguredGroqApiKey();
     if (!hasGeminiApiKey && !hasGroqApiKey) {
+      if (normalizedTaskType === "RTS") {
+        return res.status(200).json(
+          {
+            ...buildRTSAiFallbackResult({
+              transcript: safeTranscript,
+              questionContent: safeQuestionContent,
+              questionMeta: rtsQuestionMeta,
+              audioSignals: rtsAudioSignals,
+              providerUsed: "none",
+              fallbackReason: "llm_api_keys_missing",
+              errorStage: "precheck_missing_all_keys",
+              rawErrorType: "llm_api_keys_missing",
+              reasonCodes: ["ai_review_unavailable"]
+            }),
+            request_id: requestId
+          }
+        );
+      }
+
       if (normalizedTaskType === "WE") {
         return res.status(200).json(
           {
@@ -180,10 +229,20 @@ export default async function handler(req, res) {
       });
     }
 
-    const prompt = buildPrompt(normalizedTaskType, safeTranscript, questionContent, weFormAnalysis);
+    const prompt = buildPrompt(
+      normalizedTaskType,
+      safeTranscript,
+      safeQuestionContent,
+      weFormAnalysis,
+      {
+        questionMeta: rtsQuestionMeta,
+        audioSignals: rtsAudioSignals
+      }
+    );
     const llmResult = await generateScoreTextWithFallback({
       prompt,
-      taskType: normalizedTaskType
+      taskType: normalizedTaskType,
+      structuredOutput: getStructuredOutputConfig(normalizedTaskType)
     });
     const latency = normalizeLatency(llmResult?.latency);
     const providerAttempts = normalizeProviderAttempts(llmResult?.provider_attempts);
@@ -206,8 +265,10 @@ export default async function handler(req, res) {
       parsed = normalizeResult(parsedPayload, {
         taskType: normalizedTaskType,
         transcript: safeTranscript,
-        questionContent,
+        questionContent: safeQuestionContent,
         weFormAnalysis,
+        rtsQuestionMeta,
+        rtsAudioSignals,
         providerUsed: llmResult?.provider_used || "gemini",
         fallbackReason: llmResult?.fallback_reason ?? null
       });
@@ -247,7 +308,11 @@ export default async function handler(req, res) {
     const latency = normalizeLatency(error?.latency);
     const providerUsed = `${error?.provider_used || error?.provider || "gemini"}`;
     const rawErrorType = error?.raw_error_type || "ai_error_unknown";
-    const fallbackReason = normalizeFallbackReason(error?.fallback_reason, rawErrorType);
+    const fallbackReason = normalizeFallbackReason(
+      error?.fallback_reason,
+      rawErrorType,
+      normalizedTaskType
+    );
     const errorStage = error?.error_stage || "provider_call";
     const providerAttempts = normalizeProviderAttempts(error?.provider_attempts);
 
@@ -258,7 +323,7 @@ export default async function handler(req, res) {
       fallback_reason: fallbackReason,
       raw_error_type: rawErrorType,
       error_stage: errorStage,
-      response_status: normalizedTaskType === "WE" ? 200 : 500,
+      response_status: (normalizedTaskType === "WE" || normalizedTaskType === "RTS") ? 200 : 500,
       provider_attempts: providerAttempts,
       latency_total_ms: latency.total_ms,
       latency_primary_ms: latency.primary_ms,
@@ -270,6 +335,25 @@ export default async function handler(req, res) {
         {
           ...buildWEAiFallbackResult({
             formAnalysis: weFormAnalysis,
+            providerUsed,
+            fallbackReason,
+            errorStage,
+            rawErrorType,
+            reasonCodes: ["ai_review_unavailable"]
+          }),
+          request_id: requestId
+        }
+      );
+    }
+
+    if (normalizedTaskType === "RTS") {
+      return res.status(200).json(
+        {
+          ...buildRTSAiFallbackResult({
+            transcript: safeTranscript,
+            questionContent: safeQuestionContent,
+            questionMeta: rtsQuestionMeta,
+            audioSignals: rtsAudioSignals,
             providerUsed,
             fallbackReason,
             errorStage,
@@ -382,6 +466,38 @@ function normalizeTaskType(taskType) {
   return normalized || "RA";
 }
 
+function normalizeRTSQuestionMeta(rawValue) {
+  const source = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
+    ? rawValue
+    : {};
+  return {
+    topic: `${source?.topic || ""}`.trim(),
+    tone: `${source?.tone || ""}`.trim(),
+    role: `${source?.role || ""}`.trim(),
+    directions_head: `${source?.directions_head || source?.directionsHead || ""}`.trim()
+  };
+}
+
+function normalizeRTSAudioSignals(rawValue) {
+  const source = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
+    ? rawValue
+    : {};
+  const hasUsableAudioRaw = source?.has_usable_audio ?? source?.hasUsableAudio;
+  const playbackUsableRaw = source?.playback_usable ?? source?.playbackUsable;
+  return {
+    duration_sec: Math.max(0, Math.round(Number(source?.duration_sec ?? source?.durationSec ?? 0))),
+    duration_ms: Math.max(0, Math.round(Number(source?.duration_ms ?? source?.durationMs ?? 0))),
+    non_silent_frame_ratio: Math.max(
+      0,
+      Math.min(1, Number(source?.non_silent_frame_ratio ?? source?.nonSilentFrameRatio ?? 0))
+    ),
+    silence_warning: Boolean(source?.silence_warning ?? source?.silenceWarning),
+    final_usable_reason: `${source?.final_usable_reason || source?.finalUsableReason || ""}`.trim(),
+    has_usable_audio: hasUsableAudioRaw == null ? true : Boolean(hasUsableAudioRaw),
+    playback_usable: playbackUsableRaw == null ? true : Boolean(playbackUsableRaw)
+  };
+}
+
 function hasConfiguredGeminiApiKey() {
   const apiKey = `${process.env.GEMINI_API_KEY || ""}`.trim();
   return Boolean(apiKey && apiKey !== "YOUR_GEMINI_API_KEY");
@@ -391,7 +507,10 @@ function hasConfiguredGroqApiKey() {
   return Boolean(getGroqApiKeyFromEnv());
 }
 
-function normalizeFallbackReason(fallbackReason, rawErrorType) {
+function normalizeFallbackReason(fallbackReason, rawErrorType, taskType = "") {
+  if (taskType === "RTS") {
+    return normalizeRTSFallbackReasonCode(fallbackReason, rawErrorType);
+  }
   const reason = `${fallbackReason || rawErrorType || ""}`.trim();
   return reason || null;
 }
@@ -433,12 +552,21 @@ function tryParseJsonObject(text) {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start === -1 || end === -1 || end <= start) return null;
+    return tryParseRepairedJson(text.slice(start, end + 1));
+  }
+}
 
-    try {
-      return JSON.parse(text.slice(start, end + 1));
-    } catch {
-      return null;
-    }
+function tryParseRepairedJson(text) {
+  const repaired = `${text || ""}`
+    .replace(/[\u201C\u201D]/g, "\"")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/,\s*([}\]])/g, "$1")
+    .trim();
+  if (!repaired) return null;
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
   }
 }
 
@@ -492,6 +620,17 @@ function normalizeResult(payload, options = {}) {
   if (options?.taskType === "WE") {
     return finalizeWEScorePayload(payload, {
       formAnalysis: options?.weFormAnalysis,
+      providerUsed: options?.providerUsed || "gemini",
+      fallbackReason: options?.fallbackReason ?? null
+    });
+  }
+
+  if (options?.taskType === "RTS") {
+    return finalizeRTSScorePayload(payload, {
+      transcript: options?.transcript || "",
+      questionContent: options?.questionContent || "",
+      questionMeta: options?.rtsQuestionMeta || null,
+      audioSignals: options?.rtsAudioSignals || null,
       providerUsed: options?.providerUsed || "gemini",
       fallbackReason: options?.fallbackReason ?? null
     });
@@ -666,7 +805,15 @@ function clampScore(value) {
   return Math.max(0, Math.min(90, Math.round(num)));
 }
 
-function buildPrompt(taskType, transcript, questionContent, weFormAnalysis) {
+function getStructuredOutputConfig(taskType) {
+  if (taskType !== "RTS") return null;
+  return {
+    responseMimeType: "application/json",
+    responseJsonSchema: buildRTSResponseJsonSchema()
+  };
+}
+
+function buildPrompt(taskType, transcript, questionContent, weFormAnalysis, options = {}) {
   const question = questionContent || "";
 
   if (taskType === "WE") {
@@ -674,6 +821,15 @@ function buildPrompt(taskType, transcript, questionContent, weFormAnalysis) {
       essayText: transcript,
       questionContent: questionContent || "",
       formAnalysis: weFormAnalysis || analyzeWEEssayForm(transcript)
+    });
+  }
+
+  if (taskType === "RTS") {
+    return buildRTSPrompt({
+      transcript,
+      questionContent: question,
+      questionMeta: options?.questionMeta || null,
+      audioSignals: options?.audioSignals || null
     });
   }
 

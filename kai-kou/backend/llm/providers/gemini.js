@@ -4,7 +4,14 @@ import { getPrimaryFailSimulationMode } from "../runtime-env.js";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
 const DEFAULT_TIMEOUT_MS = 8000;
 
-export async function callGemini({ prompt, apiKey, model, timeoutMs, disablePrimaryFailSimulation = false } = {}) {
+export async function callGemini({
+  prompt,
+  apiKey,
+  model,
+  timeoutMs,
+  disablePrimaryFailSimulation = false,
+  generationConfig = null
+} = {}) {
   const resolvedApiKey = `${apiKey || ""}`.trim();
   if (!resolvedApiKey || resolvedApiKey === "YOUR_GEMINI_API_KEY") {
     throw createProviderError("gemini", {
@@ -31,7 +38,10 @@ export async function callGemini({ prompt, apiKey, model, timeoutMs, disablePrim
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `${prompt || ""}` }] }]
+          contents: [{ parts: [{ text: `${prompt || ""}` }] }],
+          ...(generationConfig && typeof generationConfig === "object"
+            ? { generationConfig }
+            : {})
         })
       },
       resolvedTimeoutMs

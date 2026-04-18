@@ -1,0 +1,370 @@
+﻿<script setup>
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import NavBar from "@/components/NavBar.vue";
+import OrangeButton from "@/components/OrangeButton.vue";
+import { useRTSData } from "@/composables/useRTSData";
+import {
+  clearRTSReviewInflight,
+  ensureRTSReviewForLog,
+  fetchRTSPracticeLog,
+  finalizeRTSReviewAsDegraded,
+  getRTSAiReviewJob,
+  isRTSReviewFailedFromLog,
+  isRTSReviewJobStalled,
+  isRTSReviewReadyFromLog,
+  normalizeRTSFallbackReason,
+  normalizeTextValue
+} from "@/lib/rts-ai-review";
+
+const RTS_ANALYZE_POLL_MS = 1800;
+const RTS_ANALYZE_MAX_WAIT_MS = 45000;
+
+const route = useRoute();
+const router = useRouter();
+const { getQuestionById } = useRTSData();
+
+const logRow = ref(null);
+const question = ref(null);
+const errorMessage = ref("");
+const statusMessage = ref("AI 正在生成反馈...");
+const startedAtMs = ref(0);
+const polling = ref(false);
+
+let pollTimer = null;
+let scoringStarted = false;
+let cancelled = false;
+let terminalStopped = false;
+
+const routeLogId = computed(() => normalizeTextValue(route.query?.logId));
+const routeQuestionId = computed(() => normalizeTextValue(route.query?.id || logRow.value?.question_id));
+const routePendingSubmit = computed(() => normalizeTextValue(route.query?.pendingSubmit) === "1");
+const routeSubmitFailed = computed(() => normalizeTextValue(route.query?.submitFailed) === "1");
+const elapsedSeconds = computed(() => {
+  if (!startedAtMs.value) return 0;
+  return Math.max(0, Math.floor((Date.now() - startedAtMs.value) / 1000));
+});
+const sceneSummary = computed(() => (
+  normalizeTextValue(question.value?.content)
+  || normalizeTextValue(logRow.value?.transcript)
+  || "本次练习记录已保存，正在准备结果。"
+));
+const analyzingHint = computed(() => {
+  const job = getRTSAiReviewJob(logRow.value?.score_json);
+  if (job.status === "running") return "AI 正在生成反馈...";
+  if (job.status === "completed") return "正在整理结果页...";
+  if (job.status === "failed") return "评分流程已终止，正在跳转结果页...";
+  return statusMessage.value;
+});
+
+function clearPollTimer() {
+  if (pollTimer) {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function stopPollingWithError(message = "") {
+  clearPollTimer();
+  terminalStopped = true;
+  polling.value = false;
+  if (message) {
+    errorMessage.value = message;
+  }
+  statusMessage.value = "分析已终止，请查看结果或返回练习页。";
+}
+
+function buildResultRouteQuery(
+  logId = "",
+  questionId = "",
+  {
+    reviewState = "",
+    reviewReason = ""
+  } = {}
+) {
+  const query = {};
+  const normalizedLogId = normalizeTextValue(logId);
+  const normalizedQuestionId = normalizeTextValue(questionId);
+  const normalizedReviewState = normalizeTextValue(reviewState);
+  const normalizedReviewReason = normalizeTextValue(reviewReason);
+  if (normalizedLogId) query.logId = normalizedLogId;
+  if (normalizedQuestionId) query.id = normalizedQuestionId;
+  if (normalizedReviewState) query.reviewState = normalizedReviewState;
+  if (normalizedReviewReason) query.reviewReason = normalizedReviewReason;
+  return query;
+}
+
+async function loadQuestionForLog(row = null) {
+  const resolvedQuestionId = normalizeTextValue(row?.question_id || routeQuestionId.value);
+  if (!resolvedQuestionId) {
+    question.value = null;
+    return;
+  }
+  try {
+    question.value = await getQuestionById(resolvedQuestionId);
+  } catch {
+    question.value = null;
+  }
+}
+
+async function redirectToResult(row = null, extraQuery = {}) {
+  const safeRow = row || logRow.value;
+  const resolvedLogId = normalizeTextValue(safeRow?.id || routeLogId.value);
+  if (!resolvedLogId || cancelled) return;
+  clearPollTimer();
+  clearRTSReviewInflight(resolvedLogId);
+  terminalStopped = true;
+  await router.replace({
+    path: "/rts/result",
+    query: buildResultRouteQuery(
+      resolvedLogId,
+      safeRow?.question_id || routeQuestionId.value,
+      extraQuery
+    )
+  });
+}
+
+async function redirectToFailedResult(row = null, reasonCode = "") {
+  const normalizedReason = normalizeRTSFallbackReason(reasonCode);
+  await redirectToResult(row, {
+    reviewState: "failed",
+    reviewReason: normalizedReason
+  });
+}
+
+async function forceDegradedAndRedirect(row = null) {
+  const safeRow = row || logRow.value;
+  if (!safeRow) throw new Error("未找到可降级落盘的 RTS 记录。");
+  statusMessage.value = "分析时间较长，正在整理已保存结果...";
+  const finalized = await finalizeRTSReviewAsDegraded({
+    logRow: safeRow,
+    question: question.value,
+    reasonCode: "ai_review_timeout"
+  });
+  const latest = await fetchRTSPracticeLog(finalized.logId);
+  if (!latest || (!isRTSReviewReadyFromLog(latest) && !isRTSReviewFailedFromLog(latest))) {
+    throw new Error("practice_logs_update_failed_terminal");
+  }
+  logRow.value = latest;
+  await redirectToResult(latest);
+}
+
+async function maybeStartScoring(row = null) {
+  if (scoringStarted || !row || cancelled || terminalStopped) return;
+  scoringStarted = true;
+  statusMessage.value = "AI 正在生成反馈...";
+  void ensureRTSReviewForLog({
+    logRow: row,
+    question: question.value
+  }).then(async (result) => {
+    if (cancelled || terminalStopped) return;
+    const latest = await fetchRTSPracticeLog(result?.logId || row?.id).catch(() => null);
+    if (latest && (isRTSReviewReadyFromLog(latest) || isRTSReviewFailedFromLog(latest))) {
+      logRow.value = latest;
+      await redirectToResult(latest);
+    }
+  }).catch(async (error) => {
+    if (cancelled || terminalStopped) return;
+    const reasonCode = normalizeRTSFallbackReason(error?.message, error?.raw_error_type);
+    const latest = await fetchRTSPracticeLog(row?.id).catch(() => null);
+    if (latest && (isRTSReviewReadyFromLog(latest) || isRTSReviewFailedFromLog(latest))) {
+      logRow.value = latest;
+      await redirectToResult(latest);
+      return;
+    }
+    if (latest) {
+      logRow.value = latest;
+      await redirectToFailedResult(latest, reasonCode);
+      return;
+    }
+    stopPollingWithError(normalizeTextValue(error?.message) || "AI评阅暂时不可用，录音与练习记录已保留。");
+  });
+}
+
+async function pollOnce() {
+  if (cancelled || terminalStopped) return;
+  const currentLogId = routeLogId.value;
+  if (!currentLogId) {
+    if (routeSubmitFailed.value) {
+      stopPollingWithError("提交失败，请返回练习页重试。");
+      return;
+    }
+    if (routePendingSubmit.value) {
+      if (Date.now() - startedAtMs.value >= RTS_ANALYZE_MAX_WAIT_MS) {
+        stopPollingWithError("提交超时，请返回练习页重试。");
+        return;
+      }
+      statusMessage.value = "提交已完成，正在创建分析任务...";
+      clearPollTimer();
+      pollTimer = setTimeout(() => {
+        void pollOnce();
+      }, RTS_ANALYZE_POLL_MS);
+      return;
+    }
+    await router.replace("/rts/practice");
+    return;
+  }
+  polling.value = true;
+  errorMessage.value = "";
+  try {
+    const row = await fetchRTSPracticeLog(currentLogId);
+    if (!row) {
+      throw new Error("未找到对应的 RTS 练习记录。");
+    }
+    logRow.value = row;
+    if (!question.value || normalizeTextValue(question.value?.id) !== normalizeTextValue(row?.question_id)) {
+      await loadQuestionForLog(row);
+    }
+    if (isRTSReviewReadyFromLog(row) || isRTSReviewFailedFromLog(row)) {
+      await redirectToResult(row);
+      return;
+    }
+
+    if (isRTSReviewJobStalled(row)) {
+      await forceDegradedAndRedirect(row);
+      return;
+    }
+
+    await maybeStartScoring(row);
+
+    if (Date.now() - startedAtMs.value >= RTS_ANALYZE_MAX_WAIT_MS) {
+      await forceDegradedAndRedirect(row);
+      return;
+    }
+
+    clearPollTimer();
+    pollTimer = setTimeout(() => {
+      void pollOnce();
+    }, RTS_ANALYZE_POLL_MS);
+  } catch (error) {
+    const reasonCode = normalizeRTSFallbackReason(error?.message, error?.raw_error_type);
+    if (logRow.value?.id) {
+      await redirectToFailedResult(logRow.value, reasonCode);
+      return;
+    }
+    stopPollingWithError(normalizeTextValue(error?.message) || "分析状态读取失败，请稍后重试。");
+  } finally {
+    polling.value = false;
+  }
+}
+
+async function restartChecking() {
+  clearPollTimer();
+  scoringStarted = false;
+  terminalStopped = false;
+  errorMessage.value = "";
+  statusMessage.value = "AI 正在生成反馈...";
+  startedAtMs.value = Date.now();
+  await pollOnce();
+}
+
+function goBackPractice() {
+  const query = {};
+  if (routeQuestionId.value) query.id = routeQuestionId.value;
+  router.push({
+    path: "/rts/practice",
+    query
+  });
+}
+
+onMounted(() => {
+  cancelled = false;
+  terminalStopped = false;
+  startedAtMs.value = Date.now();
+  void loadQuestionForLog(logRow.value);
+  void pollOnce();
+});
+
+watch(
+  () => [route.query.logId, route.query.pendingSubmit, route.query.submitFailed],
+  () => {
+    clearPollTimer();
+    clearRTSReviewInflight(routeLogId.value);
+    logRow.value = null;
+    question.value = null;
+    errorMessage.value = "";
+    statusMessage.value = "AI 正在生成反馈...";
+    startedAtMs.value = Date.now();
+    scoringStarted = false;
+    terminalStopped = false;
+    void loadQuestionForLog(logRow.value);
+    void pollOnce();
+  }
+);
+
+onUnmounted(() => {
+  cancelled = true;
+  clearPollTimer();
+});
+</script>
+
+<template>
+  <div class="min-h-screen bg-[#F5F7FB]">
+    <NavBar title="RTS 分析中" back-to="/rts/practice" />
+
+    <main class="mx-auto flex min-h-[calc(100vh-72px)] max-w-md flex-col justify-center px-6 py-8">
+      <section class="rounded-[28px] border border-[#E8EDF5] bg-white px-6 py-10 text-center shadow-[0_18px_48px_rgba(27,58,107,0.08)]">
+        <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#FFF2EB]">
+          <span class="rts-analyzing-spinner" />
+        </div>
+
+        <h1 class="mt-7 text-[32px] font-semibold tracking-[-0.02em] text-[#1B3A6B]">
+          正在分析你的作答
+        </h1>
+        <p class="mt-3 text-base text-[#7A8CA5]">
+          {{ analyzingHint }}
+        </p>
+        <p class="mt-2 text-xs text-[#A0AEC0]">
+          已等待 {{ elapsedSeconds }}s
+        </p>
+
+        <div class="mt-8 rounded-2xl bg-[#F8FAFD] px-4 py-4 text-left">
+          <p class="text-xs font-semibold uppercase tracking-[0.16em] text-[#8CA0C0]">
+            当前题目
+          </p>
+          <p class="mt-2 text-sm leading-6 text-[#445468]">
+            {{ sceneSummary }}
+          </p>
+        </div>
+
+        <p v-if="errorMessage" class="mt-6 rounded-2xl border border-[#F2D6D3] bg-[#FFF7F6] px-4 py-3 text-left text-sm text-[#B42318]">
+          {{ errorMessage }}
+        </p>
+
+        <div v-if="errorMessage" class="mt-6 space-y-3">
+          <OrangeButton full @click="restartChecking">
+            重新检查
+          </OrangeButton>
+          <button
+            type="button"
+            class="w-full rounded-[12px] border border-[#E8EDF5] bg-white px-4 py-3 text-sm font-semibold text-[#1B3A6B]"
+            @click="goBackPractice"
+          >
+            返回练习页
+          </button>
+        </div>
+      </section>
+    </main>
+  </div>
+</template>
+
+<style scoped>
+.rts-analyzing-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 4px solid rgba(232, 132, 90, 0.16);
+  border-top-color: #e8845a;
+  animation: rts-analyzing-spin 1s linear infinite;
+}
+
+@keyframes rts-analyzing-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

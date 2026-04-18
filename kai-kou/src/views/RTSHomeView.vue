@@ -1,13 +1,28 @@
-<script setup>
-import { onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+﻿<script setup>
+import { computed, onActivated, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { usePracticeStore } from "@/stores/practice";
 import { supabase } from "@/lib/supabase";
-import { RTS_TOPIC_META, useRTSData } from "@/composables/useRTSData";
+import {
+  getLastRTSRecentAudioHistoryDebug,
+  getRTSPlaybackUrl,
+  isValidRTSRemoteHistoryRecord,
+  RTS_TOPIC_META,
+  useRTSData
+} from "@/composables/useRTSData";
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const { loadQuestions, getTopicStats, getUserRTSStats } = useRTSData();
+const practiceStore = usePracticeStore();
+const {
+  loadQuestions,
+  getTopicStats,
+  getUserRTSStats,
+  getRTSRecentAudioHistory
+} = useRTSData();
+const RTS_HOME_DEBUG_ENABLED = Boolean(import.meta.env.DEV);
 
 const loading = ref(true);
 const topicCards = ref([]);
@@ -16,7 +31,40 @@ const stats = ref({
   totalQuestions: 0,
   averageRating: 0
 });
-const recentPractices = ref([]);
+const currentPractice = ref(null);
+const recentAudioHistory = ref([]);
+const currentPracticePlayback = ref({
+  url: "",
+  loading: false,
+  error: ""
+});
+const historyPlaybackById = reactive({});
+const visibleHistoryItems = computed(() => {
+  const rows = Array.isArray(recentAudioHistory.value) ? recentAudioHistory.value : [];
+  return rows.filter((item) => isValidRTSRemoteHistoryRecord(item)).slice(0, 20);
+});
+const hasLoadedOnce = ref(false);
+const dashboardRefreshPending = ref(false);
+const DASHBOARD_REFRESH_DEBOUNCE_MS = 120;
+const DASHBOARD_PRACTICE_RETURN_RETRY_MS = 680;
+const RTS_HOME_REFRESH_HINT_KEY = "RTS_HOME_REFRESH_HINT_V1";
+const hintedQuestionId = ref("");
+let dashboardRefreshTimer = null;
+let practiceReturnRetryTimer = null;
+let dashboardRequestSeq = 0;
+let latestMissingCurrentPracticeRetryKey = "";
+
+function clearDashboardRefreshTimer() {
+  if (!dashboardRefreshTimer) return;
+  clearTimeout(dashboardRefreshTimer);
+  dashboardRefreshTimer = null;
+}
+
+function clearPracticeReturnRetryTimer() {
+  if (!practiceReturnRetryTimer) return;
+  clearTimeout(practiceReturnRetryTimer);
+  practiceReturnRetryTimer = null;
+}
 
 function goHome() {
   router.push("/home");
@@ -61,8 +109,95 @@ function formatDuration(seconds) {
   return `${m}:${s}`;
 }
 
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "-";
+  return date.toLocaleString();
+}
+
 function topicLabel(topic) {
   return RTS_TOPIC_META[`${topic || ""}`.trim()]?.label || "日常生活";
+}
+
+function normalizeHistoryRecordId(value) {
+  const id = `${value || ""}`.trim();
+  return id || "unknown";
+}
+
+function clearHistoryPlaybackState() {
+  Object.keys(historyPlaybackById).forEach((key) => {
+    delete historyPlaybackById[key];
+  });
+}
+
+function resetCurrentPracticePlayback() {
+  currentPracticePlayback.value = {
+    url: "",
+    loading: false,
+    error: ""
+  };
+}
+
+function getHistoryPlaybackState(recordId) {
+  const id = normalizeHistoryRecordId(recordId);
+  if (!historyPlaybackById[id]) {
+    historyPlaybackById[id] = {
+      url: "",
+      loading: false,
+      error: ""
+    };
+  }
+  return historyPlaybackById[id];
+}
+
+async function loadCurrentPracticePlayback({ force = false } = {}) {
+  if (!currentPractice.value?.hasAudio) return "";
+  if (!force && currentPracticePlayback.value.url) return currentPracticePlayback.value.url;
+  if (currentPracticePlayback.value.loading) return "";
+
+  currentPracticePlayback.value = {
+    ...currentPracticePlayback.value,
+    loading: true,
+    error: ""
+  };
+
+  const signedUrl = await getRTSPlaybackUrl(currentPractice.value.audioMeta, 60 * 20);
+  if (!signedUrl) {
+    currentPracticePlayback.value = {
+      ...currentPracticePlayback.value,
+      loading: false,
+      error: "回放链接获取失败，请重试。"
+    };
+    return "";
+  }
+
+  currentPracticePlayback.value = {
+    url: signedUrl,
+    loading: false,
+    error: ""
+  };
+  return signedUrl;
+}
+
+async function loadHistoryPlayback(item, { force = false } = {}) {
+  if (!isValidRTSRemoteHistoryRecord(item)) return "";
+  const state = getHistoryPlaybackState(item.id);
+  if (!force && state.url) return state.url;
+  if (state.loading) return "";
+
+  state.loading = true;
+  state.error = "";
+  const signedUrl = await getRTSPlaybackUrl(item.audioMeta, 60 * 20);
+  if (!signedUrl) {
+    state.loading = false;
+    state.error = "回放链接获取失败，请重试。";
+    return "";
+  }
+
+  state.url = signedUrl;
+  state.loading = false;
+  state.error = "";
+  return signedUrl;
 }
 
 async function resolveCurrentUserId() {
@@ -72,39 +207,188 @@ async function resolveCurrentUserId() {
   return `${data?.session?.user?.id || ""}`.trim();
 }
 
-async function loadDashboard() {
-  loading.value = true;
+function consumeRTSHomeRefreshHint() {
+  if (typeof window === "undefined" || !window.sessionStorage) return null;
+  const raw = `${window.sessionStorage.getItem(RTS_HOME_REFRESH_HINT_KEY) || ""}`.trim();
+  if (!raw) return null;
+  window.sessionStorage.removeItem(RTS_HOME_REFRESH_HINT_KEY);
+
+  try {
+    const payload = JSON.parse(raw);
+    if (!payload || typeof payload !== "object") return null;
+    const questionId = `${payload.questionId || ""}`.trim();
+    const at = Number(payload.at || 0);
+    if (!questionId || !Number.isFinite(at)) return null;
+    return {
+      questionId,
+      at
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveDashboardQuestionId() {
+  const sessionQuestionId = `${practiceStore.rtsSession?.questionId || ""}`.trim();
+  if (sessionQuestionId) {
+    if (hintedQuestionId.value === sessionQuestionId) {
+      hintedQuestionId.value = "";
+    }
+    return sessionQuestionId;
+  }
+  return `${hintedQuestionId.value || ""}`.trim();
+}
+
+function scheduleDashboardReload(reason = "", { immediate = false } = {}) {
+  clearDashboardRefreshTimer();
+  if (immediate) {
+    void loadDashboard({ reason });
+    return;
+  }
+  dashboardRefreshTimer = setTimeout(() => {
+    dashboardRefreshTimer = null;
+    void loadDashboard({ reason });
+  }, DASHBOARD_REFRESH_DEBOUNCE_MS);
+}
+
+function triggerEntryReload(reason = "entry_reload") {
+  const refreshHint = consumeRTSHomeRefreshHint();
+  if (refreshHint?.questionId) {
+    hintedQuestionId.value = refreshHint.questionId;
+  }
+
+  scheduleDashboardReload(reason, { immediate: true });
+
+  if (!refreshHint?.questionId) return;
+  clearPracticeReturnRetryTimer();
+  practiceReturnRetryTimer = setTimeout(() => {
+    practiceReturnRetryTimer = null;
+    void loadDashboard({ reason: `${reason}_practice_retry` });
+  }, DASHBOARD_PRACTICE_RETURN_RETRY_MS);
+}
+
+async function loadDashboard({ reason = "" } = {}) {
+  const requestSeq = ++dashboardRequestSeq;
+  if (!hasLoadedOnce.value) {
+    loading.value = true;
+  } else {
+    dashboardRefreshPending.value = true;
+  }
+
   try {
     const questions = await loadQuestions();
+    if (requestSeq !== dashboardRequestSeq) return;
     topicCards.value = getTopicStats(questions);
+
     const userId = await resolveCurrentUserId();
+    if (requestSeq !== dashboardRequestSeq) return;
     if (!userId) {
       stats.value = {
         todayPracticed: 0,
         totalQuestions: questions.length,
         averageRating: 0
       };
-      recentPractices.value = [];
+      currentPractice.value = null;
+      recentAudioHistory.value = [];
+      resetCurrentPracticePlayback();
+      clearHistoryPlaybackState();
       return;
     }
 
-    const userStats = await getUserRTSStats(userId, {
-      recentLimit: 3,
-      logsLimit: 400
-    });
+    const currentQuestionId = resolveDashboardQuestionId();
+    const [userStats, recentHistory] = await Promise.all([
+      getUserRTSStats(userId, {
+        logsLimit: 400,
+        currentQuestionId
+      }),
+      getRTSRecentAudioHistory(userId, {
+        limit: 20,
+        includePlaybackUrls: false
+      })
+    ]);
+    if (requestSeq !== dashboardRequestSeq) return;
+
     stats.value = {
       todayPracticed: userStats.todayPracticed,
       totalQuestions: userStats.totalQuestions,
       averageRating: userStats.averageRating
     };
-    recentPractices.value = userStats.recentLogs;
+    const nextCurrentPractice = userStats.currentQuestionLatestLog || null;
+    const missingCurrentPracticeRetryKey = (
+      currentQuestionId && !nextCurrentPractice
+    ) ? `${userId}|${currentQuestionId}` : "";
+    if (missingCurrentPracticeRetryKey) {
+      if (latestMissingCurrentPracticeRetryKey !== missingCurrentPracticeRetryKey) {
+        latestMissingCurrentPracticeRetryKey = missingCurrentPracticeRetryKey;
+        scheduleDashboardReload("current_question_retry");
+      }
+    } else {
+      latestMissingCurrentPracticeRetryKey = "";
+    }
+
+    currentPractice.value = nextCurrentPractice;
+    recentAudioHistory.value = Array.isArray(recentHistory) ? recentHistory : [];
+    resetCurrentPracticePlayback();
+    clearHistoryPlaybackState();
+    if (RTS_HOME_DEBUG_ENABLED) {
+      const historyDebug = getLastRTSRecentAudioHistoryDebug();
+      console.info("[rts-home:history-load]", {
+        fetchedCount: Number(historyDebug.fetchedCount || 0),
+        validRemoteAudioCount: Number(historyDebug.validRemoteAudioCount || 0),
+        topAudioMeta: Array.isArray(historyDebug.topAudioMeta) ? historyDebug.topAudioMeta.slice(0, 3) : []
+      });
+    }
   } finally {
-    loading.value = false;
+    if (requestSeq === dashboardRequestSeq) {
+      hasLoadedOnce.value = true;
+      loading.value = false;
+      dashboardRefreshPending.value = false;
+    }
   }
 }
 
 onMounted(() => {
-  void loadDashboard();
+  triggerEntryReload("mounted");
+});
+
+onActivated(() => {
+  triggerEntryReload("activated");
+});
+
+watch(
+  () => route.fullPath,
+  (nextPath, prevPath) => {
+    if (nextPath === prevPath) return;
+    if (`${nextPath || ""}`.trim().startsWith("/rts")) {
+      scheduleDashboardReload("route_change", { immediate: true });
+    }
+  }
+);
+
+watch(
+  () => `${authStore.loaded ? "ready" : "pending"}|${authStore.user?.id || ""}`,
+  (nextValue, prevValue) => {
+    if (nextValue === prevValue) return;
+    scheduleDashboardReload("auth_change");
+  }
+);
+
+watch(
+  () => `${practiceStore.rtsSession?.questionId || ""}`.trim(),
+  (nextQuestionId, prevQuestionId) => {
+    if (nextQuestionId === prevQuestionId) return;
+    if (nextQuestionId) {
+      hintedQuestionId.value = "";
+    }
+    scheduleDashboardReload("question_change", {
+      immediate: Boolean(nextQuestionId)
+    });
+  }
+);
+
+onBeforeUnmount(() => {
+  clearDashboardRefreshTimer();
+  clearPracticeReturnRetryTimer();
 });
 </script>
 
@@ -129,7 +413,7 @@ onMounted(() => {
         <p class="text-xs uppercase tracking-[0.15em] text-white/75">Respond to a situation</p>
         <h1 class="mt-2 text-3xl font-bold">听懂场景，开口回应</h1>
         <p class="mt-3 text-sm leading-relaxed text-white/90">
-          系统播放情景+文字，你需要代入角色给出得体口语回应。系统强调语气与场景匹配，并帮助你快速形成结构化表达。
+          系统播放场景和文字，你需要代入角色给出得体口语回应，重点训练语气与场景匹配。
         </p>
 
         <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -163,7 +447,7 @@ onMounted(() => {
           @click="goList"
         >
           <p class="text-sm font-semibold">选题练习</p>
-          <p class="mt-2 text-xs text-[#8CA0C0]">按场景/难度筛选</p>
+          <p class="mt-2 text-xs text-[#8CA0C0]">按场景和难度筛选</p>
         </button>
       </section>
 
@@ -187,34 +471,125 @@ onMounted(() => {
 
       <section class="mt-5">
         <div class="mb-2 flex items-center justify-between">
-          <p class="text-sm font-semibold text-[#1B3A6B]">最近练习</p>
+          <p class="text-sm font-semibold text-[#1B3A6B]">最近练习（当前题）</p>
           <button type="button" class="text-xs text-[#8CA0C0] hover:text-[#1B3A6B]" @click="goList">查看全部题库</button>
         </div>
 
         <div v-if="loading" class="rounded-[14px] border border-[#E8EDF5] bg-white p-4 text-sm text-[#8CA0C0]">
           正在读取练习记录...
         </div>
-
-        <div v-else-if="!recentPractices.length" class="rounded-[14px] border border-[#E8EDF5] bg-white p-4 text-sm text-[#8CA0C0]">
-          还没有 RTS 练习记录，先来一题随机练习吧。
+        <div v-else-if="!currentPractice" class="rounded-[14px] border border-[#E8EDF5] bg-white p-4 text-sm text-[#8CA0C0]">
+          当前题目还没有练习记录，先完成一题再回来查看。
         </div>
 
         <div v-else class="space-y-2">
-          <button
-            v-for="item in recentPractices"
+          <article class="w-full rounded-[14px] border border-[#E8EDF5] bg-white px-4 py-3">
+            <div class="flex items-center justify-between gap-3">
+              <p class="line-clamp-1 text-sm font-medium text-[#1E293B]">{{ currentPractice.summary }}</p>
+              <p class="text-sm text-[#1B3A6B]">[{{ renderStars(currentPractice.rating) }}]</p>
+            </div>
+            <p class="mt-1 text-xs text-[#8CA0C0]">
+              {{ topicLabel(currentPractice.topic) }} · {{ formatDuration(currentPractice.durationSec) }}
+            </p>
+
+            <div v-if="currentPractice.hasAudio" class="mt-2 space-y-2">
+              <audio
+                v-if="currentPracticePlayback.url"
+                class="w-full"
+                :src="currentPracticePlayback.url"
+                controls
+                preload="none"
+              />
+              <button
+                type="button"
+                class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#8CA0C0] hover:bg-[#F8FAFD]"
+                :disabled="currentPracticePlayback.loading"
+                @click="loadCurrentPracticePlayback()"
+              >
+                {{
+                  currentPracticePlayback.loading
+                    ? "加载中..."
+                    : currentPracticePlayback.url
+                      ? "刷新回放链接"
+                      : "加载并播放录音"
+                }}
+              </button>
+              <p v-if="currentPracticePlayback.error" class="text-xs text-[#D92D20]">{{ currentPracticePlayback.error }}</p>
+            </div>
+
+            <button
+              type="button"
+              class="mt-2 rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#8CA0C0] hover:bg-[#F8FAFD]"
+              @click="replayQuestion(currentPractice.questionId)"
+            >
+              进入题目重练
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <section class="mt-5">
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-sm font-semibold text-[#1B3A6B]">历史录音（最近20条）</p>
+          <button type="button" class="text-xs text-[#8CA0C0] hover:text-[#1B3A6B]" @click="loadDashboard">刷新列表</button>
+        </div>
+
+        <div v-if="loading" class="rounded-[14px] border border-[#E8EDF5] bg-white p-4 text-sm text-[#8CA0C0]">
+          正在加载历史录音...
+        </div>
+        <div v-else-if="!visibleHistoryItems.length" class="rounded-[14px] border border-[#E8EDF5] bg-white p-4 text-sm text-[#8CA0C0]">
+          还没有可回放的历史录音。
+        </div>
+
+        <div v-else class="space-y-2">
+          <article
+            v-for="item in visibleHistoryItems"
             :key="item.id"
-            type="button"
-            class="w-full rounded-[14px] border border-[#E8EDF5] bg-white px-4 py-3 text-left transition-colors hover:bg-[#F8FAFD]"
-            @click="replayQuestion(item.questionId)"
+            class="rounded-[14px] border border-[#E8EDF5] bg-white px-4 py-3"
           >
             <div class="flex items-center justify-between gap-3">
               <p class="line-clamp-1 text-sm font-medium text-[#1E293B]">{{ item.summary }}</p>
               <p class="text-sm text-[#1B3A6B]">[{{ renderStars(item.rating) }}]</p>
             </div>
             <p class="mt-1 text-xs text-[#8CA0C0]">
-              {{ topicLabel(item.topic) }} · {{ formatDuration(item.durationSec) }}
+              {{ formatDateTime(item.createdAt) }} · {{ formatDuration(item.durationSec) }}
             </p>
-          </button>
+
+            <div v-if="isValidRTSRemoteHistoryRecord(item)" class="mt-2 space-y-2">
+              <audio
+                v-if="getHistoryPlaybackState(item.id).url"
+                class="w-full"
+                :src="getHistoryPlaybackState(item.id).url"
+                controls
+                preload="none"
+              />
+              <button
+                type="button"
+                class="rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#8CA0C0] hover:bg-[#F8FAFD]"
+                :disabled="getHistoryPlaybackState(item.id).loading"
+                @click="loadHistoryPlayback(item)"
+              >
+                {{
+                  getHistoryPlaybackState(item.id).loading
+                    ? "加载中..."
+                    : getHistoryPlaybackState(item.id).url
+                      ? "刷新回放链接"
+                      : "加载并播放录音"
+                }}
+              </button>
+              <p v-if="getHistoryPlaybackState(item.id).error" class="text-xs text-[#D92D20]">
+                {{ getHistoryPlaybackState(item.id).error }}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              class="mt-2 rounded-[11px] border border-[#E8EDF5] bg-white px-3 py-1.5 text-xs text-[#8CA0C0] hover:bg-[#F8FAFD]"
+              @click="replayQuestion(item.questionId)"
+            >
+              进入题目重练
+            </button>
+          </article>
         </div>
       </section>
     </main>
