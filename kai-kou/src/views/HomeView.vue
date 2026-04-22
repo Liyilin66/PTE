@@ -2,41 +2,81 @@
 import { computed, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
-import NavBar from "@/components/NavBar.vue";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { supabase } from "@/lib/supabase";
 import { getDIQuestionCatalog } from "@/lib/di-data";
 import { isDIEnabled } from "@/lib/di-feature";
 
+const TASK_TYPES = ["RA", "WFD", "RTS", "DI", "RS", "RL", "WE"];
+const HOME_ANALYTICS_PAGE_SIZE = 1000;
+const HOME_ANALYTICS_MAX_DURATION_SEC = 60 * 60 * 3;
+const HOME_ANALYTICS_MAX_SCORE = 90;
+const WEEKDAY_LABELS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const HEAT_COLORS = ["#E9EEF7", "#F7DFD0", "#F0BB98", "#E78857", "#CD6A31"];
+const MODULE_THEME_MAP = {
+  ra: {
+    accent: "#2D63FF",
+    iconBg: "#EDF3FF",
+    iconColor: "#2D63FF"
+  },
+  wfd: {
+    accent: "#15A86B",
+    iconBg: "#EAF9F1",
+    iconColor: "#15A86B"
+  },
+  rts: {
+    accent: "#7C4DFF",
+    iconBg: "#F3EFFF",
+    iconColor: "#7C4DFF"
+  },
+  di: {
+    accent: "#EB7A3F",
+    iconBg: "#FFF2EA",
+    iconColor: "#EB7A3F"
+  },
+  rs: {
+    accent: "#3067FF",
+    iconBg: "#EEF4FF",
+    iconColor: "#3067FF"
+  },
+  rl: {
+    accent: "#149E6C",
+    iconBg: "#E8F7EF",
+    iconColor: "#149E6C"
+  },
+  we: {
+    accent: "#E36F35",
+    iconBg: "#FFF2EA",
+    iconColor: "#E36F35"
+  }
+};
+
 const router = useRouter();
 const authStore = useAuthStore();
 const practiceStore = usePracticeStore();
 const { tasks } = storeToRefs(practiceStore);
 
-const raTask = computed(() => tasks.value.find((item) => item.id === "ra") || null);
-const weTask = computed(() => tasks.value.find((item) => item.id === "we") || null);
-const wfdTask = computed(() => tasks.value.find((item) => item.id === "wfd") || null);
-const rtsTask = computed(() => tasks.value.find((item) => item.id === "rts") || null);
-const otherTaskOrder = {
-  rs: 0,
-  rl: 1
-};
-const otherTasks = computed(() =>
-  tasks.value
-    .filter((item) => item.id !== "ra" && item.id !== "we" && item.id !== "wfd" && item.id !== "rts")
-    .sort((a, b) => {
-      const aOrder = Number.isFinite(otherTaskOrder[a.id]) ? otherTaskOrder[a.id] : 99;
-      const bOrder = Number.isFinite(otherTaskOrder[b.id]) ? otherTaskOrder[b.id] : 99;
-      return aOrder - bOrder;
-    })
-);
-const diEnabled = computed(() => isDIEnabled());
 const showDIFavorites = ref(false);
 const diFavoriteQuestionIds = ref([]);
 const loadingDIFavorites = ref(false);
 const rtsFavoriteQuestionIds = ref([]);
 const loadingRTSFavorites = ref(false);
+const homeAnalytics = ref(createEmptyHomeAnalytics());
+
+const taskMap = computed(() =>
+  tasks.value.reduce((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+  }, {})
+);
+const raTask = computed(() => taskMap.value.ra || null);
+const wfdTask = computed(() => taskMap.value.wfd || null);
+const rtsTask = computed(() => taskMap.value.rts || null);
+const rsTask = computed(() => taskMap.value.rs || null);
+const rlTask = computed(() => taskMap.value.rl || null);
+const weTask = computed(() => taskMap.value.we || null);
+const diEnabled = computed(() => isDIEnabled());
 const rtsFavoriteCount = computed(() => rtsFavoriteQuestionIds.value.length);
 const diQuestionCatalog = getDIQuestionCatalog();
 const diQuestionMap = new Map(diQuestionCatalog.map((item) => [item.id, item]));
@@ -50,14 +90,168 @@ const diFavoriteQuestions = computed(() =>
     .filter(Boolean)
 );
 
-const buttonBaseClass =
-  "w-full cursor-pointer rounded-[10px] py-3 text-sm font-medium transition-colors duration-150 focus:outline-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-[#1B3A6B]";
-const buttonPrimaryClass = `${buttonBaseClass} border-0 bg-[#1B3A6B] text-white hover:bg-[#16326A]`;
-const buttonSecondaryClass = `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-white text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
-const buttonTertiaryClass = `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-white text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
-const buttonFeatureTertiaryClass = `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-[#EBF0FA] text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
-const buttonTertiaryHighlightClass =
-  `${buttonBaseClass} border-[1.5px] border-[#C8D5E8] bg-white text-[#1B3A6B] hover:border-[#1B3A6B] hover:bg-[#F0F4F8]`;
+const userDisplayName = computed(() => authStore.displayName);
+
+const userInitial = computed(() => {
+  const first = `${userDisplayName.value || ""}`.trim().charAt(0);
+  return first ? first.toUpperCase() : "K";
+});
+
+const greetingLabel = computed(() => {
+  const hour = new Date().getHours();
+  if (hour < 6) return "凌晨好";
+  if (hour < 12) return "早上好";
+  if (hour < 18) return "下午好";
+  return "晚上好";
+});
+
+const accountStatusMeta = computed(() => {
+  if (!authStore.loaded) {
+    return {
+      label: "状态同步中",
+      detail: "正在读取账号权限",
+      className: "account-pill--neutral"
+    };
+  }
+
+  if (authStore.isPremium) {
+    return {
+      label: "VIP",
+      detail: "无限练习",
+      className: "account-pill--vip"
+    };
+  }
+
+  if (authStore.isInTrial) {
+    return {
+      label: `试用 · ${authStore.trialDaysLeft}天`,
+      detail: "试用期内可正常练习",
+      className: "account-pill--trial"
+    };
+  }
+
+  if (authStore.accessStatus === "trial_expired") {
+    return {
+      label: "试用已结束",
+      detail: "权限已到期",
+      className: "account-pill--neutral"
+    };
+  }
+
+  return {
+    label: "未开通",
+    detail: "当前暂无练习权限",
+    className: "account-pill--neutral"
+  };
+});
+
+const streakGoal = computed(() => resolveNextStreakGoal(homeAnalytics.value.currentStreak));
+const streakGap = computed(() => Math.max(0, streakGoal.value - homeAnalytics.value.currentStreak));
+
+const heroSupportText = computed(() => {
+  if (homeAnalytics.value.loading) return "正在同步你的真实练习记录...";
+  if (homeAnalytics.value.currentStreak > 0) {
+    if (streakGap.value > 0) {
+      return `连续 ${homeAnalytics.value.currentStreak} 天 · 距离 ${streakGoal.value} 天小目标还差 ${streakGap.value} 天`;
+    }
+    return `连续 ${homeAnalytics.value.currentStreak} 天 · 已达成 ${streakGoal.value} 天小目标`;
+  }
+  if (homeAnalytics.value.totalCount > 0) {
+    return "今天开练，就能重新点亮连续记录";
+  }
+  return "从一题开始，streak 和热力图会自动累计";
+});
+
+const streakCardCaption = computed(() => {
+  if (homeAnalytics.value.loading) return "正在统计";
+  if (homeAnalytics.value.currentStreak > 0) {
+    return streakGap.value > 0 ? `目标 ${streakGoal.value} 天，还差 ${streakGap.value} 天完成` : "当前小目标已完成";
+  }
+  if (homeAnalytics.value.lastPracticeAt) {
+    return `最近练习 ${formatMonthDay(homeAnalytics.value.lastPracticeAt)}`;
+  }
+  return "今天开始建立你的练习节奏";
+});
+
+const activeDaysCardCaption = computed(() => {
+  if (homeAnalytics.value.loading) return "正在统计";
+  if (homeAnalytics.value.activeDaysCount > 0) {
+    return homeAnalytics.value.totalCount > 0
+      ? `${formatInteger(homeAnalytics.value.totalCount)} 题分布在 ${formatInteger(homeAnalytics.value.activeDaysCount)} 天里`
+      : "按练习日期去重统计";
+  }
+  return "开始练习后自动累计";
+});
+
+const heroHighlightCards = computed(() => [
+  {
+    key: "active-days",
+    icon: "📅",
+    label: "累计练习天数",
+    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.activeDaysCount),
+    caption: activeDaysCardCaption.value,
+    className: "hero-streak--secondary",
+    iconClass: "hero-streak__icon--secondary",
+    valueClass: "hero-streak__value--secondary"
+  },
+  {
+    key: "current-streak",
+    icon: "🔥",
+    label: "连续练习天数",
+    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.currentStreak),
+    caption: streakCardCaption.value,
+    className: "",
+    iconClass: "",
+    valueClass: ""
+  }
+]);
+
+const heroStats = computed(() => [
+  {
+    key: "today",
+    label: "今日题数",
+    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.todayCount),
+    helper: homeAnalytics.value.todayCount > 0 ? "今天已经开练" : "从一题开始热身",
+    helperClass: homeAnalytics.value.todayCount > 0 ? "hero-stat__hint--positive" : ""
+  },
+  {
+    key: "week-minutes",
+    label: "本周分钟",
+    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.weekMinutes),
+    helper: homeAnalytics.value.durationTrackedCount
+      ? "基于已有时长记录"
+      : "部分题型暂无时长落库",
+    helperClass: homeAnalytics.value.weekMinutes > 0 ? "hero-stat__hint--positive" : ""
+  },
+  {
+    key: "avg-score",
+    label: "平均评分",
+    value: homeAnalytics.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore),
+    suffix: homeAnalytics.value.averageScore !== null ? "/90" : "",
+    helper: homeAnalytics.value.scoredCount
+      ? `已评分 ${formatInteger(homeAnalytics.value.scoredCount)} 条`
+      : "有评分记录后自动更新",
+    helperClass: ""
+  },
+  {
+    key: "total",
+    label: "累计题数",
+    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.totalCount),
+    helper: homeAnalytics.value.activeDaysCount
+      ? `${formatInteger(homeAnalytics.value.activeDaysCount)} 天有练习记录`
+      : "开始练习后持续累计",
+    helperClass: ""
+  }
+]);
+
+const heatmapTotal = computed(() =>
+  homeAnalytics.value.recentDays.reduce((sum, item) => sum + Number(item.count || 0), 0)
+);
+
+const diFeatureChips = computed(() => {
+  if (!diEnabled.value) return [];
+  return ["5秒开口", "三连练", "提示降级"];
+});
 
 const otherTaskSelectPathMap = {
   rs: "/rs",
@@ -74,6 +268,280 @@ const otherTaskTertiaryMap = {
     to: "/rl"
   }
 };
+
+function createEmptyHomeAnalytics() {
+  return {
+    loading: true,
+    totalCount: 0,
+    todayCount: 0,
+    weekMinutes: 0,
+    averageScore: null,
+    scoredCount: 0,
+    durationTrackedCount: 0,
+    currentStreak: 0,
+    activeDaysCount: 0,
+    recentDays: buildRecentDaysSnapshot(),
+    taskWeekCounts: buildTaskCounterSeed(),
+    lastPracticeAt: ""
+  };
+}
+
+function buildTaskCounterSeed() {
+  return TASK_TYPES.reduce((acc, key) => {
+    acc[key] = 0;
+    return acc;
+  }, {});
+}
+
+function buildRecentDaysSnapshot(today = new Date()) {
+  const weekStart = startOfWeekMonday(today);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(weekStart, index);
+    return {
+      key: toDateKey(date),
+      label: WEEKDAY_LABELS[date.getDay()],
+      dateLabel: formatMonthDay(date),
+      count: 0,
+      color: HEAT_COLORS[0]
+    };
+  });
+}
+
+function startOfWeekMonday(value) {
+  const date = startOfDay(value);
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  return addDays(date, offset);
+}
+
+function startOfDay(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addDays(value, days) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + days);
+  return date;
+}
+
+function toDateKey(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatMonthDay(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "-";
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function resolveNextStreakGoal(streak) {
+  const normalized = Math.max(0, Number(streak || 0));
+  const checkpoints = [7, 14, 30, 60, 90];
+  const next = checkpoints.find((item) => normalized < item);
+  if (next) return next;
+  return Math.ceil((normalized + 1) / 30) * 30;
+}
+
+function calculateCurrentStreak(practicedDaySet) {
+  let streak = 0;
+  let cursor = startOfDay(new Date());
+  while (practicedDaySet.has(toDateKey(cursor))) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
+}
+
+function resolveHeatLevel(count, maxCount) {
+  const normalizedCount = Number(count || 0);
+  const normalizedMax = Number(maxCount || 0);
+  if (!normalizedCount || !normalizedMax) return 0;
+  const ratio = normalizedCount / normalizedMax;
+  if (ratio >= 0.8) return 4;
+  if (ratio >= 0.55) return 3;
+  if (ratio >= 0.3) return 2;
+  return 1;
+}
+
+function resolveDurationSec(scoreJson) {
+  const score = toObject(scoreJson) || {};
+  const analyticsDuration = normalizeDurationSec(
+    score?.analytics?.total_active_sec ?? score?.analytics?.totalActiveSec
+  );
+  if (analyticsDuration > 0) return analyticsDuration;
+
+  const direct = normalizeDurationSec(score?.duration_sec ?? score?.durationSec);
+  if (direct > 0) return direct;
+
+  const metricsDuration = normalizeDurationSec(
+    score?.metrics?.speech_duration_sec ?? score?.metrics?.speechDurationSec
+  );
+  if (metricsDuration > 0) return metricsDuration;
+
+  const audioSignalsDuration = normalizeDurationSec(
+    score?.audio_signals?.duration_sec ?? score?.audio_signals?.durationSec
+  );
+  if (audioSignalsDuration > 0) return audioSignalsDuration;
+
+  const audioSignalsMs = Number(score?.audio_signals?.duration_ms ?? score?.audio_signals?.durationMs);
+  if (Number.isFinite(audioSignalsMs) && audioSignalsMs > 0) {
+    return normalizeDurationSec(audioSignalsMs / 1000);
+  }
+
+  return 0;
+}
+
+function resolveOverallScore(taskType, scoreJson) {
+  const normalizedTaskType = normalizeTaskType(taskType);
+  if (normalizedTaskType === "WFD") return null;
+
+  const score = toObject(scoreJson) || {};
+  const candidates = [
+    score?.overall_estimated,
+    score?.ai_review?.display_scores?.overall,
+    score?.ai_review?.diagnostics?.display_scores?.overall,
+    score?.ai_review?.product?.overall,
+    score?.ai_review?.overall,
+    score?.product?.overall,
+    score?.diagnostics?.display_scores?.overall,
+    score?.display_scores?.overall,
+    score?.scores?.overall,
+    score?.overall
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeOverallCandidate(candidate);
+    if (normalized !== null) return normalized;
+  }
+
+  if (normalizedTaskType === "RS" || normalizedTaskType === "RL") {
+    return resolveLegacySpeechOverall(score);
+  }
+
+  return null;
+}
+
+function normalizeTaskType(value) {
+  return `${value || ""}`.trim().toUpperCase();
+}
+
+function toObject(value) {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value;
+}
+
+function normalizeDurationSec(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.max(0, Math.min(HOME_ANALYTICS_MAX_DURATION_SEC, Math.round(numeric)));
+}
+
+function normalizeOverallCandidate(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Number(Math.max(0, Math.min(HOME_ANALYTICS_MAX_SCORE, numeric)).toFixed(1));
+}
+
+function normalizePresentScore(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  return Number(Math.max(0, Math.min(HOME_ANALYTICS_MAX_SCORE, numeric)).toFixed(1));
+}
+
+function pickFirstPresentScore(...candidates) {
+  for (const candidate of candidates) {
+    const normalized = normalizePresentScore(candidate);
+    if (normalized !== null) return normalized;
+  }
+  return null;
+}
+
+function resolveLegacySpeechOverall(scoreJson) {
+  const score = toObject(scoreJson) || {};
+  const nestedScores = toObject(score?.scores) || {};
+  const pronunciation = pickFirstPresentScore(score?.pronunciation, nestedScores?.pronunciation);
+  const fluency = pickFirstPresentScore(
+    score?.fluency,
+    score?.oral_fluency,
+    score?.oralFluency,
+    nestedScores?.fluency,
+    nestedScores?.oral_fluency,
+    nestedScores?.oralFluency
+  );
+  const content = pickFirstPresentScore(
+    score?.content,
+    score?.appropriacy,
+    nestedScores?.content,
+    nestedScores?.appropriacy
+  );
+  const validScores = [pronunciation, fluency, content].filter((item) => item !== null);
+  if (validScores.length < 2) return null;
+
+  const average = validScores.reduce((sum, item) => sum + Number(item || 0), 0) / validScores.length;
+  return normalizeOverallCandidate(average);
+}
+
+function formatInteger(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: 0
+  }).format(Math.max(0, Math.round(number)));
+}
+
+function formatScore(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "--";
+  return new Intl.NumberFormat("zh-CN", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(number);
+}
+
+function formatModuleTitle(value) {
+  return `${value || ""}`.replace(/\s*-\s*/g, "路").trim();
+}
+
+function getModuleTheme(moduleId) {
+  return MODULE_THEME_MAP[moduleId] || MODULE_THEME_MAP.ra;
+}
+
+function getModuleStyle(moduleId) {
+  const theme = getModuleTheme(moduleId);
+  return {
+    "--module-accent": theme.accent,
+    "--module-icon-bg": theme.iconBg,
+    "--module-icon-color": theme.iconColor
+  };
+}
+
+function getTaskWeekCount(taskType) {
+  const key = normalizeTaskType(taskType);
+  return Number(homeAnalytics.value.taskWeekCounts[key] || 0);
+}
+
+function getTaskWeekPercent(taskType) {
+  const values = Object.values(homeAnalytics.value.taskWeekCounts || {});
+  const maxValue = Math.max(...values, 0);
+  const currentValue = getTaskWeekCount(taskType);
+  if (!maxValue || !currentValue) return 0;
+  return Math.max(18, Math.round((currentValue / maxValue) * 100));
+}
 
 function favoriteLocalStorageKey(userId, taskType = "DI") {
   const normalizedTaskType = `${taskType || "DI"}`.trim().toLowerCase();
@@ -114,6 +582,133 @@ async function resolveCurrentUserId() {
   if (authUserId) return authUserId;
   const { data } = await supabase.auth.getSession();
   return `${data?.session?.user?.id || ""}`.trim();
+}
+
+async function fetchHomeAnalyticsRows(userId) {
+  const normalizedUserId = `${userId || ""}`.trim();
+  if (!normalizedUserId) return [];
+
+  const rows = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + HOME_ANALYTICS_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from("practice_logs")
+      .select("id, task_type, created_at, score_json")
+      .eq("user_id", normalizedUserId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const chunk = Array.isArray(data) ? data : [];
+    if (!chunk.length) break;
+
+    rows.push(...chunk);
+
+    if (chunk.length < HOME_ANALYTICS_PAGE_SIZE) break;
+    from = to + 1;
+  }
+
+  return rows;
+}
+
+async function loadHomeAnalytics() {
+  const userId = await resolveCurrentUserId();
+  if (!userId) {
+    homeAnalytics.value = {
+      ...createEmptyHomeAnalytics(),
+      loading: false
+    };
+    return;
+  }
+
+  homeAnalytics.value = createEmptyHomeAnalytics();
+
+  try {
+    const rows = await fetchHomeAnalyticsRows(userId);
+    const recentDays = buildRecentDaysSnapshot();
+    const recentDayKeys = new Set(recentDays.map((item) => item.key));
+    const recentDayCounter = recentDays.reduce((acc, item) => {
+      acc[item.key] = 0;
+      return acc;
+    }, {});
+    const practicedDaySet = new Set();
+    const taskWeekCounts = buildTaskCounterSeed();
+    const todayKey = toDateKey(new Date());
+
+    let todayCount = 0;
+    let weekDurationSec = 0;
+    let durationTrackedCount = 0;
+    let scoreTotal = 0;
+    let scoredCount = 0;
+
+    rows.forEach((row) => {
+      const dateKey = toDateKey(row?.created_at);
+      if (!dateKey) return;
+
+      practicedDaySet.add(dateKey);
+
+      if (dateKey === todayKey) {
+        todayCount += 1;
+      }
+
+      if (recentDayKeys.has(dateKey)) {
+        recentDayCounter[dateKey] += 1;
+        const taskType = normalizeTaskType(row?.task_type);
+        if (taskType) {
+          taskWeekCounts[taskType] = (taskWeekCounts[taskType] || 0) + 1;
+        }
+
+        const durationSec = resolveDurationSec(row?.score_json);
+        if (durationSec > 0) {
+          weekDurationSec += durationSec;
+          durationTrackedCount += 1;
+        }
+      }
+
+      const overall = resolveOverallScore(row?.task_type, row?.score_json);
+      if (overall !== null) {
+        scoreTotal += overall;
+        scoredCount += 1;
+      }
+    });
+
+    const maxHeatCount = Math.max(...Object.values(recentDayCounter), 0);
+    const normalizedDays = recentDays.map((item) => {
+      const countValue = recentDayCounter[item.key] || 0;
+      const level = resolveHeatLevel(countValue, maxHeatCount);
+      return {
+        ...item,
+        count: countValue,
+        color: HEAT_COLORS[level]
+      };
+    });
+    const latestCreatedAt = rows.find((row) => toDateKey(row?.created_at))?.created_at || "";
+
+    homeAnalytics.value = {
+      loading: false,
+      totalCount: rows.length,
+      todayCount,
+      weekMinutes: Math.round(weekDurationSec / 60),
+      averageScore: scoredCount ? Number((scoreTotal / scoredCount).toFixed(1)) : null,
+      scoredCount,
+      durationTrackedCount,
+      currentStreak: calculateCurrentStreak(practicedDaySet),
+      activeDaysCount: practicedDaySet.size,
+      recentDays: normalizedDays,
+      taskWeekCounts,
+      lastPracticeAt: `${latestCreatedAt || ""}`.trim()
+    };
+  } catch (error) {
+    console.warn("Home analytics load failed:", error);
+    homeAnalytics.value = {
+      ...createEmptyHomeAnalytics(),
+      loading: false
+    };
+  }
 }
 
 async function loadDIFavorites() {
@@ -206,6 +801,15 @@ async function loadRTSFavorites() {
   }
 }
 
+function goLogin() {
+  router.push("/auth");
+}
+
+async function handleLogout() {
+  await authStore.logout();
+  router.replace("/auth");
+}
+
 function startDIRandomPractice() {
   router.push("/di");
 }
@@ -260,382 +864,1261 @@ function openOtherTaskTertiary(task) {
   router.push(to);
 }
 
-onMounted(() => {
-  void loadDIFavorites();
-  void loadRTSFavorites();
+onMounted(async () => {
+  if (!authStore.loaded) {
+    await authStore.loadStatus();
+  }
+
+  await Promise.all([
+    loadHomeAnalytics(),
+    loadDIFavorites(),
+    loadRTSFavorites()
+  ]);
 });
 </script>
 
 <template>
-  <div class="min-h-screen bg-bg">
-    <NavBar title="PTE 50+ 速通训练营" home show-login />
-
-    <div class="py-4 text-center text-[#1A1A2E]">
-      <p class="text-lg">放弃完美，拥抱流利</p>
-    </div>
-
-    <div class="mx-auto max-w-6xl px-4 pb-8">
-      <section class="mb-6 rounded-xl border bg-card p-6 shadow-card">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <h2 class="text-lg font-bold text-[#1A1A2E]">账号权限状态</h2>
-            <p class="text-sm text-[#6B7280]">权限统一由 VIP 或管理员赠送试用控制</p>
-          </div>
-          <span
-            class="rounded-full px-3 py-1 text-sm font-medium"
-            :class="authStore.isPremium ? 'bg-green-100 text-green-700' : authStore.isInTrial ? 'bg-orange/10 text-orange' : 'bg-gray-100 text-gray-500'"
-          >
-            {{ authStore.statusText }}
-          </span>
-        </div>
-      </section>
-
-      <section class="mb-6 space-y-4">
-        <article v-if="raTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div class="flex items-center gap-4 p-4">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#1E4A86] text-white">
-              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2.1">
-                <path d="M12 1v11" />
-                <path d="M8 6v5a4 4 0 0 0 8 0V6" />
-                <path d="M5 11a7 7 0 0 0 14 0" />
-                <path d="M12 18v5" />
-              </svg>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">{{ raTask.title }}</h3>
-              <p class="text-sm font-medium text-orange">{{ raTask.subtitle }}</p>
-              <p class="mt-1 text-sm text-[#6B7280]">{{ raTask.description }}</p>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4">
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                :class="buttonPrimaryClass"
-                @click="router.push('/ra')"
-              >
-                随机练习
-              </button>
-              <button
-                type="button"
-                :class="buttonSecondaryClass"
-                @click="router.push('/ra/list')"
-              >
-                选题练习
-              </button>
-            </div>
-          </div>
-        </article>
-
-        <article v-if="wfdTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div class="flex items-center gap-4 p-4">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#F3054E] text-white">
-              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
-                <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
-                <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
-              </svg>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">{{ wfdTask.title }}</h3>
-              <p class="text-sm font-medium text-orange">{{ wfdTask.subtitle }}</p>
-              <p class="mt-1 text-sm text-[#6B7280]">{{ wfdTask.description }}</p>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4">
-            <div class="mt-1 flex flex-col gap-2">
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  :class="buttonPrimaryClass"
-                  @click="router.push('/wfd')"
-                >
-                  随机练习
-                </button>
-                <button
-                  type="button"
-                  :class="buttonSecondaryClass"
-                  @click="router.push('/wfd/list')"
-                >
-                  选题练习
-                </button>
-              </div>
-              <button
-                type="button"
-                :class="buttonFeatureTertiaryClass"
-                @click="router.push('/wfd/listen')"
-              >
-                <span class="inline-flex items-center justify-center gap-1.5">
-                  <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
-                    <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
-                    <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <span>磨耳朵模式</span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </article>
-
-        <article v-if="weTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div class="flex items-center gap-4 p-4">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#00AA45] text-white">
-              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M7 3h8l4 4v14H7z" />
-                <path d="M15 3v5h5" />
-                <path d="M10 12h6M10 16h6" />
-              </svg>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">{{ weTask.title }}</h3>
-              <p class="text-sm font-medium text-orange">{{ weTask.subtitle }}</p>
-              <p class="mt-1 text-sm text-[#6B7280]">{{ weTask.description }}</p>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4">
-            <div class="flex flex-col gap-2">
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  :class="buttonPrimaryClass"
-                  @click="router.push('/we')"
-                >
-                  随机练习
-                </button>
-                <button
-                  type="button"
-                  :class="buttonSecondaryClass"
-                  @click="router.push('/we/select')"
-                >
-                  选题练习
-                </button>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  :class="buttonTertiaryClass"
-                  @click="router.push('/we/templates')"
-                >
-                  看模板
-                </button>
-                <button
-                  type="button"
-                  :class="buttonTertiaryClass"
-                  @click="router.push('/we/opinions')"
-                >
-                  观点句
-                </button>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article v-if="rtsTask" class="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div class="flex items-center gap-4 p-4">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#1B3A6B] text-white">
-              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M5 5h14v9H9l-4 4z" />
-                <path d="M12 9h4" />
-                <path d="M8 12h8" />
-              </svg>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">{{ rtsTask.title }}</h3>
-              <p class="text-sm font-medium text-orange">{{ rtsTask.subtitle }}</p>
-              <p class="mt-1 text-sm text-[#6B7280]">{{ rtsTask.description }}</p>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4">
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                :class="buttonPrimaryClass"
-                @click="startRTSRandomPractice"
-              >
-                随机练习
-              </button>
-              <button
-                type="button"
-                :class="buttonSecondaryClass"
-                @click="openRTSSelectPractice"
-              >
-                选题练习
-              </button>
-              <button
-                type="button"
-                :class="buttonFeatureTertiaryClass"
-                @click="openRTSTemplateLibrary"
-              >
-                模版库
-              </button>
-              <button
-                type="button"
-                :class="buttonTertiaryHighlightClass"
-                @click="openRTSFavorites"
-              >
-                <span class="inline-flex items-center justify-center gap-1.5">
-                  <span>RTS 收藏</span>
-                  <span class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#E8845A] px-1.5 py-[1px] text-[11px] font-medium leading-4 text-white">
-                    {{ rtsFavoriteCount }}
-                  </span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </article>
-
-        <article v-if="diEnabled" class="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div class="flex items-center gap-4 p-4">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#7A1DE6] text-white">
-              <svg viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4h16v12H4z" />
-                <path d="M8 20h8" />
-                <path d="M12 16v4" />
-              </svg>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">DI - 图片描述</h3>
-              <p class="text-sm font-medium text-orange">口语起步器 · 结构稳定器</p>
-              <p class="mt-1 text-sm text-[#6B7280]">不看分数，先把“看图开口”练成肌肉记忆。</p>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4">
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                :class="buttonPrimaryClass"
-                @click="startDIRandomPractice"
-              >
-                随机练习
-              </button>
-              <button
-                type="button"
-                :class="buttonSecondaryClass"
-                @click="router.push('/di/select')"
-              >
-                选题练习
-              </button>
-              <button
-                type="button"
-                :class="buttonFeatureTertiaryClass"
-                @click="router.push('/di/templates')"
-              >
-                模板库
-              </button>
-              <button
-                type="button"
-                :class="buttonTertiaryHighlightClass"
-                @click="showDIFavorites = !showDIFavorites"
-              >
-                <span class="inline-flex items-center justify-center gap-1.5">
-                  <span>{{ showDIFavorites ? "收起收藏" : "DI 收藏" }}</span>
-                  <span class="inline-flex min-w-[20px] items-center justify-center rounded-full bg-[#E8845A] px-1.5 py-[1px] text-[11px] font-medium leading-4 text-white">
-                    {{ diFavoriteQuestions.length }}
-                  </span>
-                </span>
-              </button>
-            </div>
-
-            <div v-if="showDIFavorites" class="mt-3 rounded-lg border border-[#E8EDF5] bg-[#F8FAFD] p-3">
-              <div class="mb-2 flex items-center justify-between">
-                <p class="text-xs font-semibold text-[#1A1A2E]">DI 全部收藏</p>
-                <span class="text-xs text-[#6B7280]">{{ diFavoriteQuestions.length }} 题</span>
-              </div>
-
-              <div v-if="loadingDIFavorites" class="text-xs text-[#6B7280]">收藏加载中...</div>
-              <div v-else-if="diFavoriteQuestions.length" class="max-h-48 space-y-2 overflow-y-auto">
-                <button
-                  v-for="item in diFavoriteQuestions"
-                  :key="item.id"
-                  type="button"
-                  class="flex w-full items-center justify-between rounded-md border border-[#E8EDF5] bg-white px-2 py-2 text-left text-xs text-[#1A1A2E] transition-colors hover:bg-[#F4F7FB]"
-                  @click="openDIFavoriteQuestion(item.id)"
-                >
-                  <span class="min-w-0 truncate">{{ item.sourceNumberLabel || item.id }} · {{ item.displayTitle || item.id }}</span>
-                  <span class="ml-2 shrink-0 rounded bg-[#EEF2FF] px-2 py-0.5 text-[11px] text-[#1E40AF]">{{ item.imageType || "-" }}</span>
-                </button>
-              </div>
-              <p v-else class="text-xs text-[#6B7280]">暂无 DI 收藏题目。</p>
-            </div>
-          </div>
-        </article>
-
-        <article v-for="task in otherTasks" :key="task.id" class="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div class="flex items-center gap-4 p-4">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white" :class="task.iconBg">
-              <svg v-if="task.icon === 'ra'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2.1">
-                <path d="M12 1v11" />
-                <path d="M8 6v5a4 4 0 0 0 8 0V6" />
-                <path d="M5 11a7 7 0 0 0 14 0" />
-                <path d="M12 18v5" />
-              </svg>
-              <svg v-else-if="task.icon === 'rs'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M5 6h14v9H9l-4 4z" />
-              </svg>
-              <svg v-else-if="task.icon === 'rl'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M6 9a6 6 0 0 1 6-6v12a6 6 0 0 1-6-6z" />
-                <path d="M13 8a4 4 0 0 1 0 8" />
-                <path d="M17 6a7 7 0 0 1 0 12" />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
-                <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
-                <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
-              </svg>
-            </div>
-
-            <div class="min-w-0 flex-1">
-              <h3 class="text-base font-bold text-[#1A1A2E]">{{ task.title }}</h3>
-              <p class="text-sm font-medium text-orange">{{ task.subtitle }}</p>
-              <p class="mt-1 text-sm text-[#6B7280]">{{ task.description }}</p>
-            </div>
-          </div>
-
-          <div class="px-4 pb-4">
-            <div class="grid grid-cols-2 gap-2">
-              <button type="button" :class="buttonPrimaryClass" @click="openOtherTaskRandom(task)">随机练习</button>
-              <button type="button" :class="buttonSecondaryClass" @click="openOtherTaskSelect(task)">选题练习</button>
-            </div>
-            <div v-if="otherTaskTertiaryLabel(task)" class="mt-2">
-              <button type="button" :class="buttonTertiaryClass" @click="openOtherTaskTertiary(task)">
-                {{ otherTaskTertiaryLabel(task) }}
-              </button>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section class="rounded-xl border bg-navy p-6 text-white shadow-card">
-        <div class="flex items-start gap-4">
-          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20">
-            <svg viewBox="0 0 24 24" class="h-6 w-6 text-[#D6E2FF]" fill="none" stroke="currentColor" stroke-width="2">
+  <div class="home-page">
+    <header class="home-topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand__mark">
+            <svg viewBox="0 0 24 24" class="brand__icon" fill="none" stroke="currentColor" stroke-width="2.4">
               <circle cx="12" cy="12" r="8" />
-              <circle cx="12" cy="12" r="4" />
-              <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+              <circle cx="12" cy="12" r="3.4" />
             </svg>
           </div>
-          <div>
-            <h3 class="mb-3 text-lg font-bold">开发者的 14 天逆袭故事</h3>
-            <p class="mb-4 leading-relaxed text-white/90">
-              实不相瞒，做这个网站的初衷，是因为我曾是被移民局不幸抽查语言成绩的‘天选大冤种’😭！官方限死28天内必须交成绩，当时天都要塌了... 
-              绝望中我悟了：短期提分，关键根本不是追求完美，而是把最基础的输出练到稳定、流利、可复盘。调整策略后我死磕了14天，结果不仅顺利上岸，
-              甚至还超了目标10分！🔥 这才有了现在这个拒绝焦虑、只抓核心的‘开口’。
-            </p>
-            <p class="text-base font-medium text-[#E8845A]">如果我可以，你也可以。</p>
+          <div class="brand__copy">
+            <p class="brand__title">开口</p>
           </div>
         </div>
-      </section>
-    </div>
+
+        <div v-if="authStore.isLoggedIn" class="account-card">
+          <div class="account-card__meta">
+            <span class="account-pill" :class="accountStatusMeta.className">{{ accountStatusMeta.label }}</span>
+            <div class="account-card__text">
+              <p class="account-card__name">{{ userDisplayName }}</p>
+              <p class="account-card__detail">{{ accountStatusMeta.detail }}</p>
+            </div>
+          </div>
+          <div class="account-card__actions">
+            <div class="account-avatar">{{ userInitial }}</div>
+            <button type="button" class="account-card__logout" @click="handleLogout">退出</button>
+          </div>
+        </div>
+
+        <button v-else type="button" class="account-login" @click="goLogin">登录</button>
+      </div>
+    </header>
+
+    <section class="home-hero">
+      <div class="hero-inner">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="hero-copy__eyebrow">{{ greetingLabel }}, {{ userDisplayName }} 👋</p>
+            <h1>今天要练点什么？</h1>
+            <p class="hero-copy__support">{{ heroSupportText }}</p>
+          </div>
+
+          <div class="hero-highlight-grid">
+            <article
+              v-for="card in heroHighlightCards"
+              :key="card.key"
+              class="hero-streak"
+              :class="card.className"
+            >
+              <div class="hero-streak__row">
+                <div class="hero-streak__icon" :class="card.iconClass">{{ card.icon }}</div>
+                <div>
+                  <p class="hero-streak__value" :class="card.valueClass">{{ card.value }}</p>
+                  <p class="hero-streak__label">{{ card.label }}</p>
+                  <p class="hero-streak__caption">{{ card.caption }}</p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="hero-stats-grid">
+          <article v-for="stat in heroStats" :key="stat.key" class="hero-stat">
+            <div>
+              <p class="hero-stat__value">
+                <span>{{ stat.value }}</span>
+                <span v-if="stat.suffix" class="hero-stat__suffix">{{ stat.suffix }}</span>
+              </p>
+              <p class="hero-stat__label">{{ stat.label }}</p>
+            </div>
+            <p class="hero-stat__hint" :class="stat.helperClass">{{ stat.helper }}</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <main class="home-content">
+      <div class="content-inner">
+        <section class="surface-card heatmap-card">
+          <div class="heatmap-card__inner">
+            <div class="section-header">
+              <div>
+                <p class="section-header__title">🗓️ 本周练习热力图</p>
+                <p class="section-header__subtle">本周真实练习次数 · 自动按你的练习记录更新</p>
+              </div>
+              <p class="section-header__summary">
+                {{ homeAnalytics.loading ? "同步中..." : `本周共 ${formatInteger(heatmapTotal)} 题` }}
+              </p>
+            </div>
+
+            <div class="heatmap-body">
+              <div class="heatmap-week">
+                <div v-for="day in homeAnalytics.recentDays" :key="day.key" class="heatmap-day">
+                  <div
+                    class="heatmap-cell"
+                    :class="{ 'heatmap-cell--today': day.label === '今' }"
+                    :style="{ backgroundColor: day.color }"
+                    :title="`${day.dateLabel} · ${day.count} 题`"
+                  />
+                  <span class="heatmap-day__label">{{ day.label }}</span>
+                </div>
+              </div>
+
+              <div class="heatmap-legend">
+                <span class="heatmap-legend__text">少</span>
+                <span
+                  v-for="(color, index) in HEAT_COLORS.slice(1)"
+                  :key="`${color}-${index}`"
+                  class="heatmap-legend__dot"
+                  :style="{ backgroundColor: color }"
+                />
+                <span class="heatmap-legend__text">多</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="content-section">
+          <div class="section-header section-header--plain">
+            <div>
+              <p class="section-header__title">口语练习</p>
+              <p class="section-header__subtle">保留现有入口逻辑，只重排首页结构和视觉层级</p>
+            </div>
+          </div>
+
+          <div class="module-grid">
+            <article v-if="raTask" class="module-card" :style="getModuleStyle('ra')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2.1">
+                      <path d="M12 1v11" />
+                      <path d="M8 6v5a4 4 0 0 0 8 0V6" />
+                      <path d="M5 11a7 7 0 0 0 14 0" />
+                      <path d="M12 18v5" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">{{ formatModuleTitle(raTask.title) }}</h3>
+                    <p class="module-card__subtitle">{{ raTask.subtitle }}</p>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('RA')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("RA") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="router.push('/ra')">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/ra/list')">选题练习</button>
+                </div>
+              </div>
+            </article>
+
+            <article v-if="wfdTask" class="module-card" :style="getModuleStyle('wfd')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
+                      <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
+                      <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">{{ formatModuleTitle(wfdTask.title) }}</h3>
+                    <p class="module-card__subtitle">{{ wfdTask.subtitle }}</p>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('WFD')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("WFD") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="router.push('/wfd')">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/wfd/list')">选题练习</button>
+                </div>
+                <div class="module-card__actions-grid module-card__actions-grid--single">
+                  <button type="button" class="module-btn module-btn--feature" @click="router.push('/wfd/listen')">磨耳朵模式</button>
+                </div>
+              </div>
+            </article>
+
+            <article v-if="rtsTask" class="module-card" :style="getModuleStyle('rts')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M5 5h14v9H9l-4 4z" />
+                      <path d="M12 9h4" />
+                      <path d="M8 12h8" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">{{ formatModuleTitle(rtsTask.title) }}</h3>
+                    <p class="module-card__subtitle">{{ rtsTask.subtitle }}</p>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('RTS')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("RTS") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="startRTSRandomPractice">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="openRTSSelectPractice">选题练习</button>
+                </div>
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--ghost" @click="openRTSTemplateLibrary">模板库</button>
+                  <button type="button" class="module-btn module-btn--ghost" @click="openRTSFavorites">
+                    <span class="module-btn__inline">
+                      <span>{{ loadingRTSFavorites ? "收藏加载中..." : "RTS 收藏" }}</span>
+                      <span class="module-badge">{{ rtsFavoriteCount }}</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </article>
+
+            <article v-if="diEnabled" class="module-card" :style="getModuleStyle('di')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="5" y="4" width="14" height="16" rx="2" />
+                      <path d="M9 8h6" />
+                      <path d="M9 12h6" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">DI - 图片描述</h3>
+                    <p class="module-card__subtitle">口语起步器</p>
+                    <div class="module-card__chips">
+                      <span v-for="chip in diFeatureChips" :key="chip" class="module-chip">{{ chip }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('DI')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("DI") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="startDIRandomPractice">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/di/select')">选题练习</button>
+                </div>
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--ghost" @click="router.push('/di/templates')">模板库</button>
+                  <button type="button" class="module-btn module-btn--ghost" @click="showDIFavorites = !showDIFavorites">
+                    <span class="module-btn__inline">
+                      <span>{{ showDIFavorites ? "收起收藏" : "DI 收藏" }}</span>
+                      <span class="module-badge">{{ diFavoriteQuestions.length }}</span>
+                    </span>
+                  </button>
+                </div>
+
+                <div v-if="showDIFavorites" class="module-favorites">
+                  <div class="module-favorites__head">
+                    <p>DI 全部收藏</p>
+                    <span>{{ diFavoriteQuestions.length }} 题</span>
+                  </div>
+
+                  <div v-if="loadingDIFavorites" class="module-favorites__empty">收藏加载中...</div>
+                  <div v-else-if="diFavoriteQuestions.length" class="module-favorites__list">
+                    <button
+                      v-for="item in diFavoriteQuestions"
+                      :key="item.id"
+                      type="button"
+                      class="module-favorites__item"
+                      @click="openDIFavoriteQuestion(item.id)"
+                    >
+                      <span class="module-favorites__item-title">{{ item.sourceNumberLabel || item.id }} 路 {{ item.displayTitle || item.id }}</span>
+                      <span class="module-favorites__item-tag">{{ item.imageType || "-" }}</span>
+                    </button>
+                  </div>
+                  <p v-else class="module-favorites__empty">暂无 DI 收藏题目。</p>
+                </div>
+              </div>
+            </article>
+
+            <article v-if="rsTask" class="module-card" :style="getModuleStyle('rs')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M5 6h14v9H9l-4 4z" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">{{ formatModuleTitle(rsTask.title) }}</h3>
+                    <p class="module-card__subtitle">{{ rsTask.subtitle }}</p>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('RS')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("RS") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="openOtherTaskRandom(rsTask)">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="openOtherTaskSelect(rsTask)">选题练习</button>
+                </div>
+                <div class="module-card__actions-grid module-card__actions-grid--single">
+                  <button type="button" class="module-btn module-btn--feature" @click="openOtherTaskTertiary(rsTask)">
+                    {{ otherTaskTertiaryLabel(rsTask) }}
+                  </button>
+                </div>
+              </div>
+            </article>
+
+            <article v-if="rlTask" class="module-card" :style="getModuleStyle('rl')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M6 5h8a4 4 0 0 1 4 4v10H10a4 4 0 0 0-4-4z" />
+                      <path d="M6 5v10a4 4 0 0 1 4 4" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">{{ formatModuleTitle(rlTask.title) }}</h3>
+                    <p class="module-card__subtitle">{{ rlTask.subtitle }}</p>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('RL')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("RL") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="openOtherTaskRandom(rlTask)">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="openOtherTaskSelect(rlTask)">选题练习</button>
+                </div>
+                <div class="module-card__actions-grid module-card__actions-grid--single">
+                  <button type="button" class="module-btn module-btn--feature" @click="openOtherTaskTertiary(rlTask)">
+                    {{ otherTaskTertiaryLabel(rlTask) }}
+                  </button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="content-section">
+          <div class="section-header section-header--plain">
+            <div>
+              <p class="section-header__title">写作</p>
+              <p class="section-header__subtle">写作入口保留原逻辑，视觉样式对齐首页新结构</p>
+            </div>
+          </div>
+
+          <div class="module-grid">
+            <article v-if="weTask" class="module-card" :style="getModuleStyle('we')">
+              <div class="module-card__head">
+                <div class="module-card__info">
+                  <div class="module-card__icon">
+                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 20h16" />
+                      <path d="M7 16.5V6.5A2.5 2.5 0 0 1 9.5 4h7.9" />
+                      <path d="m14 6 4-2v7" />
+                    </svg>
+                  </div>
+                  <div class="module-card__copy">
+                    <h3 class="module-card__title">{{ formatModuleTitle(weTask.title) }}</h3>
+                    <p class="module-card__subtitle">{{ weTask.subtitle }}</p>
+                  </div>
+                </div>
+                <div class="module-card__metric">
+                  <span class="module-card__metric-track">
+                    <span :style="{ width: `${getTaskWeekPercent('WE')}%` }" />
+                  </span>
+                  <span class="module-card__metric-value">{{ getTaskWeekCount("WE") }}题</span>
+                </div>
+              </div>
+
+              <div class="module-card__actions">
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--primary" @click="router.push('/we')">随机练习</button>
+                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/we/select')">选题练习</button>
+                </div>
+                <div class="module-card__actions-grid">
+                  <button type="button" class="module-btn module-btn--ghost" @click="router.push('/we/templates')">看模板</button>
+                  <button type="button" class="module-btn module-btn--ghost" @click="router.push('/we/opinions')">观点库</button>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </main>
   </div>
 </template>
+
+<style scoped>
+.home-page {
+  min-height: 100vh;
+  background: #f4f6fb;
+}
+
+.topbar-inner,
+.hero-inner,
+.content-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.home-topbar {
+  background: #ffffff;
+  border-bottom: 1px solid #e6edf7;
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand__mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: #1b315d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex: none;
+}
+
+.brand__icon {
+  width: 22px;
+  height: 22px;
+}
+
+.brand__title {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #13274b;
+  letter-spacing: -0.03em;
+}
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 6px 6px 14px;
+  border: 1px solid #e7edf6;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.account-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.account-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-card__text {
+  min-width: 0;
+}
+
+.account-card__name {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: #13274b;
+}
+
+.account-card__detail {
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  color: #7b8aa4;
+}
+
+.account-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #1b315d;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.account-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.account-pill--vip {
+  background: #edf8ef;
+  color: #1c8a4d;
+  border-color: #cde9d2;
+}
+
+.account-pill--trial {
+  background: #fff2eb;
+  color: #df6f34;
+  border-color: #f6c8b4;
+}
+
+.account-pill--neutral {
+  background: #f3f5f9;
+  color: #6f7c95;
+  border-color: #dce4ef;
+}
+
+.account-card__logout,
+.account-login {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid #d8e1ef;
+  background: #ffffff;
+  color: #16325d;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.account-card__logout:hover,
+.account-login:hover {
+  background: #f7f9fd;
+  border-color: #bccbe1;
+}
+
+.home-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #142d55 0%, #1a3b6b 55%, #10264a 100%);
+}
+
+.home-hero::before {
+  content: "";
+  position: absolute;
+  top: -40px;
+  right: -20px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 54px rgba(255, 255, 255, 0.03);
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  padding-top: 46px;
+  padding-bottom: 40px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 560px);
+  gap: 28px;
+  align-items: center;
+}
+
+.hero-copy__eyebrow {
+  margin: 0 0 12px;
+  font-size: 1.08rem;
+  color: rgba(221, 234, 255, 0.82);
+}
+
+.hero-copy h1 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+
+.hero-copy__support {
+  margin: 18px 0 0;
+  font-size: 1.02rem;
+  color: rgba(220, 233, 255, 0.76);
+}
+
+.hero-highlight-grid {
+  justify-self: end;
+  width: 100%;
+  max-width: 560px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.hero-streak {
+  width: 100%;
+  border-radius: 28px;
+  border: 1px solid rgba(239, 171, 136, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 22px 24px;
+  backdrop-filter: blur(8px);
+}
+
+.hero-streak--secondary {
+  border-color: rgba(161, 194, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hero-streak__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-streak__icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: rgba(234, 132, 86, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  flex: none;
+}
+
+.hero-streak__icon--secondary {
+  background: rgba(104, 159, 255, 0.16);
+}
+
+.hero-streak__value {
+  margin: 0;
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #ffb889;
+  line-height: 1;
+}
+
+.hero-streak__value--secondary {
+  color: #dbe7ff;
+}
+
+.hero-streak__label {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+
+.hero-streak__caption {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  color: rgba(219, 231, 250, 0.72);
+}
+
+.hero-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.hero-stat {
+  min-height: 124px;
+  border-radius: 24px;
+  border: 1px solid rgba(204, 221, 245, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hero-stat__value {
+  margin: 0;
+  color: #ffffff;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.hero-stat__suffix {
+  font-size: 0.9rem;
+  color: rgba(214, 227, 249, 0.86);
+  margin-bottom: 4px;
+}
+
+.hero-stat__label {
+  margin: 10px 0 0;
+  font-size: 0.95rem;
+  color: rgba(216, 228, 247, 0.78);
+}
+
+.hero-stat__hint {
+  margin: 0;
+  font-size: 0.92rem;
+  color: rgba(201, 215, 238, 0.74);
+}
+
+.hero-stat__hint--positive {
+  color: #6be69b;
+}
+
+.home-content {
+  padding-bottom: 56px;
+}
+
+.content-inner {
+  padding-top: 32px;
+}
+
+.surface-card {
+  background: #ffffff;
+  border: 1px solid #dbe4f0;
+  border-radius: 30px;
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.06);
+}
+
+.heatmap-card {
+  padding: 28px;
+}
+
+.heatmap-card__inner {
+  width: min(100%, 980px);
+  margin: 0 auto;
+}
+
+.content-section {
+  margin-top: 26px;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.section-header--plain {
+  margin-bottom: 16px;
+}
+
+.section-header__title {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 800;
+  color: #11284d;
+}
+
+.section-header__subtle {
+  margin: 7px 0 0;
+  font-size: 0.92rem;
+  color: #7a879f;
+}
+
+.section-header__summary {
+  margin: 2px 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #203b68;
+}
+
+.heatmap-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.heatmap-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(42px, 52px));
+  gap: 12px;
+}
+
+.heatmap-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.heatmap-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  border: 1.5px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.heatmap-cell--today {
+  border-color: rgba(205, 106, 49, 0.6);
+}
+
+.heatmap-day__label,
+.heatmap-legend__text {
+  font-size: 0.85rem;
+  color: #8090aa;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heatmap-legend__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.module-card {
+  background: #ffffff;
+  border: 1px solid #d8e2ef;
+  border-radius: 28px;
+  padding: 24px;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.05);
+}
+
+.module-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.module-card__info {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.module-card__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--module-icon-bg);
+  color: var(--module-icon-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.module-card__icon-svg {
+  width: 26px;
+  height: 26px;
+}
+
+.module-card__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.module-card__title {
+  margin: 0;
+  color: #10284c;
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
+}
+
+.module-card__subtitle {
+  margin: 8px 0 0;
+  color: #e8793c;
+  font-size: 0.96rem;
+  font-weight: 700;
+  word-break: keep-all;
+}
+
+.module-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.module-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #dae3ef;
+  background: #f8fbff;
+  color: #7283a0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.module-card__metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  min-width: 104px;
+  justify-content: flex-end;
+  flex: none;
+}
+
+.module-card__metric-track {
+  width: 64px;
+  height: 4px;
+  border-radius: 999px;
+  background: #dfe6f1;
+  overflow: hidden;
+}
+
+.module-card__metric-track > span {
+  display: block;
+  height: 100%;
+  background: var(--module-accent);
+  border-radius: inherit;
+}
+
+.module-card__metric-value {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #6f7f97;
+}
+
+.module-card__actions {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.module-card__actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.module-card__actions-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.module-btn {
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid #d7e1ee;
+  background: #ffffff;
+  color: #17335f;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.module-btn:hover {
+  transform: translateY(-1px);
+}
+
+.module-btn--primary {
+  background: #162f59;
+  border-color: #162f59;
+  color: #ffffff;
+}
+
+.module-btn--primary:hover {
+  background: #11294d;
+  border-color: #11294d;
+}
+
+.module-btn--secondary:hover,
+.module-btn--ghost:hover,
+.module-btn--feature:hover {
+  background: #f7f9fd;
+  border-color: #bccce1;
+}
+
+.module-btn--feature {
+  background: #f8fafc;
+}
+
+.module-btn__inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.module-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eb8659;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.module-favorites {
+  margin-top: 4px;
+  border: 1px solid #e6edf7;
+  background: #f8fbff;
+  border-radius: 22px;
+  padding: 14px;
+}
+
+.module-favorites__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.module-favorites__head p {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #11284d;
+}
+
+.module-favorites__head span,
+.module-favorites__empty {
+  font-size: 0.82rem;
+  color: #7b8ba4;
+}
+
+.module-favorites__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 216px;
+  overflow-y: auto;
+}
+
+.module-favorites__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e1e9f4;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.module-favorites__item:hover {
+  background: #f5f8fd;
+}
+
+.module-favorites__item-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #152d56;
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.module-favorites__item-tag {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #edf3ff;
+  color: #284fb1;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+@media (max-width: 1080px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-highlight-grid {
+    justify-self: start;
+    max-width: none;
+  }
+
+  .hero-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar-inner,
+  .hero-inner,
+  .content-inner {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .topbar-inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-card {
+    justify-content: space-between;
+    border-radius: 24px;
+    padding: 12px;
+  }
+
+  .account-card__meta {
+    flex: 1;
+  }
+
+  .account-card__actions {
+    gap: 8px;
+  }
+
+  .account-card__logout {
+    padding: 0 12px;
+  }
+
+  .hero-inner {
+    padding-top: 34px;
+    padding-bottom: 30px;
+  }
+
+  .hero-copy__eyebrow {
+    font-size: 0.96rem;
+  }
+
+  .hero-copy__support {
+    font-size: 0.94rem;
+    line-height: 1.5;
+  }
+
+  .hero-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-highlight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .heatmap-card,
+  .module-card {
+    padding: 20px;
+  }
+
+  .heatmap-week {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .module-card__head {
+    flex-direction: column;
+  }
+
+  .module-card__metric {
+    min-width: 0;
+    width: 100%;
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+}
+</style>
+
+
+

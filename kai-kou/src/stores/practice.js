@@ -2,6 +2,7 @@
 import router from "@/router";
 import { useAuthStore } from "@/stores/auth";
 import { getApiUrl } from "@/lib/api-url";
+import { buildPracticeAnalytics } from "@/lib/practice-analytics";
 import { supabase } from "@/lib/supabase";
 
 const RA_MIN_SCORE = 10;
@@ -100,7 +101,6 @@ function createDefaultRTSSessionState() {
     listeningLabel: "点击播放场景",
     listeningRemaining: 0,
     listeningTotal: 0,
-    selfRating: 0,
     usedPhraseIds: []
   };
 }
@@ -292,14 +292,6 @@ export const usePracticeStore = defineStore("practice", {
         listeningLabel: `${next.label || this.rtsSession.listeningLabel || "点击播放场景"}`.trim() || "点击播放场景",
         listeningRemaining,
         listeningTotal
-      };
-    },
-
-    setRTSSelfRating(rating) {
-      const normalized = Math.max(0, Math.min(5, Math.round(Number(rating || 0))));
-      this.rtsSession = {
-        ...this.rtsSession,
-        selfRating: normalized
       };
     },
 
@@ -568,6 +560,8 @@ export const usePracticeStore = defineStore("practice", {
           const currentQuestionContent = this.questionContent;
           const currentResult = this.result;
           const currentAudioBlob = this.audioBlob;
+          const currentLogAnalytics = options?.logAnalytics || null;
+          const currentLogPracticeTimestamps = options?.logPracticeTimestamps || null;
           const currentTaskType = normalizedTaskType;
           const currentUserId = session.user.id;
 
@@ -584,7 +578,9 @@ export const usePracticeStore = defineStore("practice", {
               result: currentResult,
               questionId: normalizedQuestionId,
               questionContent: currentQuestionContent,
-              audioMeta
+              audioMeta,
+              analytics: currentLogAnalytics,
+              practiceTimestamps: currentLogPracticeTimestamps
             });
             const payload = {
               user_id: currentUserId,
@@ -688,7 +684,9 @@ export const usePracticeStore = defineStore("practice", {
                   result: currentResult,
                   questionId: normalizedQuestionId,
                   questionContent: currentQuestionContent,
-                  audioMeta: null
+                  audioMeta: null,
+                  analytics: options?.logAnalytics || null,
+                  practiceTimestamps: options?.logPracticeTimestamps || null
                 }),
                 feedback: currentResult?.feedback || ""
               };
@@ -959,7 +957,15 @@ function getElapsedMs(startAt) {
   return Math.max(0, Math.round(getNowMs() - startAt));
 }
 
-function buildPracticeLogScoreJson({ taskType, result, questionId, questionContent, audioMeta }) {
+function buildPracticeLogScoreJson({
+  taskType,
+  result,
+  questionId,
+  questionContent,
+  audioMeta,
+  analytics = null,
+  practiceTimestamps = null
+}) {
   const normalizedTaskType = normalizeTaskType(taskType);
   if (normalizedTaskType === "WE") {
     return {
@@ -976,12 +982,23 @@ function buildPracticeLogScoreJson({ taskType, result, questionId, questionConte
       submitted_word_count: Number(result?.submitted_word_count || 0),
       submitted_excerpt: `${result?.submitted_excerpt || ""}`.trim() || "",
       submitted_text_hash: `${result?.submitted_text_hash || ""}`.trim() || "",
-      reviewed_at: `${result?.reviewed_at || ""}`.trim() || ""
+      reviewed_at: `${result?.reviewed_at || ""}`.trim() || "",
+      analytics: analytics ? buildPracticeAnalytics(analytics) : undefined,
+      practice_started_at: `${practiceTimestamps?.startedAt || ""}`.trim() || undefined,
+      practice_completed_at: `${practiceTimestamps?.completedAt || ""}`.trim() || undefined
     };
   }
 
   if (normalizedTaskType !== "RA") {
-    return result?.scores || {};
+    const baseScores = result?.scores && typeof result.scores === "object" ? { ...result.scores } : {};
+    const overall = Number(result?.overall);
+    if (Number.isFinite(overall) && overall > 0) {
+      baseScores.overall = clampOverall(overall, Math.round(overall));
+    }
+    if (analytics) {
+      baseScores.analytics = buildPracticeAnalytics(analytics);
+    }
+    return baseScores;
   }
 
   const pronunciation = clampRAScore(result?.scores?.pronunciation);
@@ -997,6 +1014,7 @@ function buildPracticeLogScoreJson({ taskType, result, questionId, questionConte
       content,
       overall
     },
+    analytics: analytics ? buildPracticeAnalytics(analytics) : undefined,
     audio: audioMeta || null,
     questionSnapshot: {
       id: `${questionId || "unknown"}`.trim() || "unknown",

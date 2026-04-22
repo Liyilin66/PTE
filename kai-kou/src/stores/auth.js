@@ -1,4 +1,5 @@
-﻿import { defineStore } from "pinia";
+import { defineStore } from "pinia";
+import { getApiUrl } from "@/lib/api-url";
 import { supabase } from "@/lib/supabase";
 
 const ACCESS_STATUS = {
@@ -10,11 +11,13 @@ const ACCESS_STATUS = {
 
 let initPromise = null;
 let authSubscription = null;
+const RESET_PASSWORD_PATH = "/reset-password";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     user: null,
     session: null,
+    profile: null,
     isPremium: false,
     isInTrial: false,
     trialDaysLeft: 0,
@@ -27,6 +30,9 @@ export const useAuthStore = defineStore("auth", {
 
   getters: {
     isLoggedIn: (state) => Boolean(state.session && state.user),
+    displayName(state) {
+      return resolveUserDisplayName(state.user, state.profile);
+    },
     statusText(state) {
       if (state.accessStatus === ACCESS_STATUS.VIP) return "✅ VIP · 无限练习";
       if (state.accessStatus === ACCESS_STATUS.TRIAL) return `试用中 · 剩余 ${state.trialDaysLeft} 天`;
@@ -79,9 +85,7 @@ export const useAuthStore = defineStore("auth", {
             }
 
             if (event === "PASSWORD_RECOVERY") {
-              if (typeof window !== "undefined" && window.__vue_router__) {
-                window.__vue_router__.push("/reset-password");
-              }
+              redirectToResetPassword();
             }
           });
 
@@ -99,6 +103,7 @@ export const useAuthStore = defineStore("auth", {
     },
 
     resetUsageState() {
+      this.profile = null;
       this.isPremium = false;
       this.isInTrial = false;
       this.trialDaysLeft = 0;
@@ -107,18 +112,58 @@ export const useAuthStore = defineStore("auth", {
       this.canPractice = false;
     },
 
-    async register(email, password) {
-      const redirectBase = import.meta.env.VITE_APP_URL || window.location.origin;
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${redirectBase}/home`
-        }
+    async sendRegisterCode(email) {
+      const response = await fetch(getApiUrl("/api/auth/send-register-code"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email
+        })
       });
 
-      if (error) throw error;
-      return data;
+      const payload = await readJsonPayload(response);
+      if (!response.ok) {
+        throw createApiError(payload, "发送验证码失败，请稍后重试");
+      }
+
+      return payload;
+    },
+
+    async registerWithCode({ username, email, verificationCode, password, confirmPassword }) {
+      const response = await fetch(getApiUrl("/api/auth/register-with-code"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          verificationCode,
+          password,
+          confirmPassword
+        })
+      });
+
+      const payload = await readJsonPayload(response);
+      if (!response.ok) {
+        throw createApiError(payload, "注册失败，请稍后重试");
+      }
+
+      try {
+        await this.login(email, password);
+        return {
+          ...payload,
+          autoLoggedIn: true
+        };
+      } catch (loginError) {
+        return {
+          ...payload,
+          autoLoggedIn: false,
+          loginError
+        };
+      }
     },
 
     async login(email, password) {
@@ -148,9 +193,9 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async forgotPassword(email) {
-      const redirectBase = import.meta.env.VITE_APP_URL || window.location.origin;
+      const redirectBase = getAuthRedirectBase();
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${redirectBase}/reset-password`
+        redirectTo: `${redirectBase}${RESET_PASSWORD_PATH}`
       });
 
       if (error) throw error;
@@ -186,7 +231,7 @@ export const useAuthStore = defineStore("auth", {
       try {
         let { data: profile, error: profileError } = await supabase
           .from("profiles")
-          .select("is_premium, trial_days, trial_granted_at")
+          .select("*")
           .eq("id", this.user.id)
           .single();
 
@@ -195,7 +240,7 @@ export const useAuthStore = defineStore("auth", {
           await new Promise((resolve) => setTimeout(resolve, 1000));
           const retry = await supabase
             .from("profiles")
-            .select("is_premium, trial_days, trial_granted_at")
+            .select("*")
             .eq("id", this.user.id)
             .single();
           profile = retry.data;
@@ -204,6 +249,7 @@ export const useAuthStore = defineStore("auth", {
 
         if (profileError && profileError.code !== "PGRST116") throw profileError;
 
+        this.profile = profile || null;
         const access = getAccessStatus(this.user, profile);
         applyAccessState(this, access);
         this.loaded = true;
@@ -276,3 +322,100 @@ function isAuthLockRaceError(error) {
   return message.includes("was released because another request stole it");
 }
 
+function getAuthRedirectBase() {
+  const envUrl = normalizeAbsoluteUrl(import.meta.env.VITE_APP_URL);
+
+  if (typeof window === "undefined") {
+    return envUrl || "";
+  }
+
+  const currentOrigin = normalizeAbsoluteUrl(window.location.origin);
+  if (!envUrl) return currentOrigin;
+
+  const envHost = getHostname(envUrl);
+  const currentHost = getHostname(currentOrigin);
+
+  if (isLocalHostname(envHost) && currentHost && !isLocalHostname(currentHost)) {
+    return currentOrigin;
+  }
+
+  return envUrl;
+}
+
+function redirectToResetPassword() {
+  if (typeof window === "undefined" || !window.__vue_router__) return;
+  if (window.__vue_router__.currentRoute?.value?.path === RESET_PASSWORD_PATH) return;
+  window.__vue_router__.replace(RESET_PASSWORD_PATH).catch(() => {});
+}
+
+function normalizeAbsoluteUrl(value) {
+  const normalized = `${value || ""}`.trim().replace(/\/+$/, "");
+  if (!normalized) return "";
+
+  try {
+    return new URL(normalized).toString().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function getHostname(value) {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLocalHostname(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0";
+}
+
+function resolveUserDisplayName(user, profile) {
+  const candidates = [
+    user?.user_metadata?.username,
+    user?.user_metadata?.display_name,
+    user?.user_metadata?.name,
+    profile?.username,
+    profile?.display_name,
+    profile?.name,
+    profile?.full_name,
+    getEmailLocalPart(user?.email)
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDisplayValue(candidate);
+    if (normalized) return normalized;
+  }
+
+  return "同学";
+}
+
+function getEmailLocalPart(email) {
+  const normalizedEmail = normalizeDisplayValue(email);
+  if (!normalizedEmail) return "";
+
+  const atIndex = normalizedEmail.indexOf("@");
+  if (atIndex <= 0) return normalizedEmail;
+  return normalizedEmail.slice(0, atIndex).trim();
+}
+
+function normalizeDisplayValue(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return `${value}`.trim();
+}
+
+async function readJsonPayload(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
+function createApiError(payload, fallbackMessage) {
+  const error = new Error(payload?.message || fallbackMessage);
+  error.code = payload?.error || "api_error";
+  error.payload = payload;
+  return error;
+}

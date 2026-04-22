@@ -33,6 +33,10 @@ const phase = ref("playing");
 const notes = ref("");
 const showTemplate = ref(false);
 const recordingSeconds = ref(0);
+const playbackStartedAtMs = ref(0);
+const playbackDurationSec = ref(0);
+const prepareStartedAtMs = ref(0);
+const prepareDurationSec = ref(0);
 const questionIndex = ref(1);
 const questionLoading = ref(true);
 const question = ref({ ...defaultQuestion });
@@ -141,13 +145,21 @@ function playRealAudio(url, onEnd) {
 }
 
 function playQuestionAudio(onEnd) {
+  playbackStartedAtMs.value = Date.now();
+  const finish = () => {
+    const elapsedMs = playbackStartedAtMs.value
+      ? Math.max(0, Date.now() - Number(playbackStartedAtMs.value || 0))
+      : 0;
+    playbackDurationSec.value = Math.max(0, Math.round(elapsedMs / 1000));
+    if (onEnd) onEnd();
+  };
   const realAudioUrl = getQuestionAudioUrl();
   if (realAudioUrl) {
-    playRealAudio(realAudioUrl, onEnd);
+    playRealAudio(realAudioUrl, finish);
     return;
   }
 
-  playTextToSpeech(onEnd);
+  playTextToSpeech(finish);
 }
 
 function startLecturePlayback(delay = 700) {
@@ -162,6 +174,8 @@ function startLecturePlayback(delay = 700) {
   notes.value = "";
   showTemplate.value = false;
   recordingSeconds.value = 0;
+  playbackDurationSec.value = 0;
+  prepareDurationSec.value = 0;
   hasFinalizedRecording = false;
 
   playbackDelayTimer = setTimeout(() => {
@@ -173,6 +187,7 @@ function startLecturePlayback(delay = 700) {
 function startPreparing() {
   if (questionLoading.value) return;
   phase.value = "preparing";
+  prepareStartedAtMs.value = Date.now();
   hasFinalizedRecording = false;
   timer.start(10, startRecording);
 }
@@ -183,6 +198,12 @@ async function startRecording() {
   isStartingRecording = true;
 
   try {
+    if (phase.value === "preparing") {
+      const elapsedMs = prepareStartedAtMs.value
+        ? Math.max(0, Date.now() - Number(prepareStartedAtMs.value || 0))
+        : 0;
+      prepareDurationSec.value = Math.min(10, Math.max(0, Math.round(elapsedMs / 1000)));
+    }
     phase.value = "recording";
     const started = await recorder.startRecording();
     if (!started) {
@@ -222,7 +243,33 @@ async function handleSubmit() {
       return;
     }
 
-    const scoreResult = await practiceStore.submitScore("RL", transcript, getQuestionAudioScript(), question.value?.id || "unknown");
+    const recordFromPlayable = Number(stopResult?.playableDurationSec || 0);
+    const recordFromDurationMs = Number(stopResult?.durationMs || 0);
+    const recordSec = Number.isFinite(recordFromPlayable) && recordFromPlayable > 0
+      ? Math.max(0, Math.round(recordFromPlayable))
+      : Number.isFinite(recordFromDurationMs) && recordFromDurationMs > 0
+        ? Math.max(0, Math.round(recordFromDurationMs / 1000))
+        : Math.max(0, Math.round(Number(recordingSeconds.value || 0)));
+    const playSec = Math.max(0, Math.round(Number(playbackDurationSec.value || 0)));
+    const prepareSec = Math.max(0, Math.round(Number(prepareDurationSec.value || 0)));
+    const scoreResult = await practiceStore.submitScore(
+      "RL",
+      transcript,
+      getQuestionAudioScript(),
+      question.value?.id || "unknown",
+      {
+        logAnalytics: {
+          source: recordSec > 0 ? "computed_client_flow" : "fallback_existing_duration",
+          totalActiveSec: playSec + prepareSec + recordSec,
+          breakdown: {
+            play_sec: playSec,
+            prepare_sec: prepareSec,
+            record_sec: recordSec,
+            speech_sec: recordSec
+          }
+        }
+      }
+    );
 
     if (!unmounted && practiceStore.phase === "done" && scoreResult && !scoreResult.error) {
       router.push("/rl/result");

@@ -2,11 +2,20 @@
 import { computed, reactive, ref, watch, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { supabase } from "@/lib/supabase";
+import { buildPracticeAnalytics } from "@/lib/practice-analytics";
+import {
+  buildDIAudioSignalsPayload,
+  getDIFallbackReasonMessage,
+  buildDIQuestionMetaPayload,
+  buildDIQuestionSnapshot,
+  createPendingDIAiReviewJob
+} from "@/lib/di-ai-review";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useUIStore } from "@/stores/ui";
 import { useDIRecorder } from "@/composables/useDIRecorder";
 import { getDIQuestionsByFilters, getDITemplateById, getDITemplatesByFilters } from "@/lib/di-data";
+import { uploadDIAudio } from "@/lib/di-history";
 import {
   DI_IMAGE_TYPE_FILTERS,
   getDIImageTypeMeta,
@@ -89,11 +98,9 @@ const templateMode = ref("random");
 const usedPhraseFlags = ref({});
 const selectedTemplateId = ref("");
 const carriedTemplateBlockIds = ref([]);
-const selfRating = ref(0);
 const isFavorite = ref(false);
 const favoriteBusy = ref(false);
 const favoriteSource = ref("checking");
-const latestSavedAt = ref("");
 const playbackTimeSec = ref(0);
 const playbackDurationSec = ref(0);
 const historyAudioRefs = reactive({});
@@ -103,7 +110,7 @@ const historyPlayingId = ref("");
 const summaryStats = ref({
   practicedCount: 0,
   totalMinutes: 0,
-  averageRating: 0
+  averageOverall: 0
 });
 
 const diRecorder = useDIRecorder({
@@ -162,22 +169,19 @@ const stageItems = [
   { key: "playback", label: "听回放" }
 ];
 const playbackTimeLabel = computed(() => `${formatSeconds(playbackTimeSec.value)} / ${formatSeconds(playbackDurationSec.value)}`);
-const ratingCopy = computed(() => {
-  const map = {
-    1: "卡壳了",
-    2: "凑合",
-    3: "还不错",
-    4: "很流利",
-    5: "完美！"
-  };
-  return map[selfRating.value] || "请先自评后再进入下一题";
-});
 const recentRecordings = computed(() => practiceStore.diRecentRecordings.slice(0, 3));
-const canGoNext = computed(() => selfRating.value > 0 || submittingRound.value);
+const hasRecordedRound = computed(() => Boolean(diRecorder.stopResult.value?.blob));
+const canSubmitAiReview = computed(() => hasRecordedRound.value && !submittingRound.value);
 const recorderErrorText = computed(() => `${diRecorder.recorder.error.value || ""}`.trim());
 const diLiveContext = computed(() => buildDILiveContext(currentQuestion.value, questionHighFrequencyWords.value));
 const diLiveSentences = computed(() => buildDILiveSentences(diLiveContext.value));
 const diLiveTips = computed(() => buildDILiveTips(diLiveContext.value));
+const emptySessionMessage = computed(() => {
+  if (allQuestions.value.length && selectedImageType.value) {
+    return `当前暂无 ${getDIImageTypeMeta(selectedImageType.value).label} 题目，请切换其他图题。`;
+  }
+  return "当前没有可用 DI 题目，请先在 Supabase `questions` 表添加 `task_type = DI` 的题目。";
+});
 const templateSlotSuggestions = computed(() =>
   toArray(selectedTemplate.value?.slots).map((slot) => ({
     slot: `${slot || ""}`.trim(),
@@ -187,18 +191,169 @@ const templateSlotSuggestions = computed(() =>
 const imagePreviewOpen = ref(false);
 const imagePreviewUrl = ref("");
 const imagePreviewAlt = ref("");
+const imagePreviewLoading = ref(false);
+const imagePreviewFailed = ref(false);
+const imagePreviewErrorText = ref("");
+const activeImageUrl = ref("");
+const displayedImageUrl = ref("");
+const currentImageRenderKey = ref("di-image-empty");
+const isImageLoading = ref(false);
+const imageLoadFailed = ref(false);
+const imageErrorText = ref("");
+const imageLoadCache = new Map();
+let currentImageLoadToken = 0;
+let currentPreviewLoadToken = 0;
 
-function openImagePreview() {
-  const url = `${currentQuestion.value?.imageUrl || ""}`.trim();
+function normalizeQuestionImageUrl(question) {
+  return `${question?.imageUrl || ""}`.trim();
+}
+
+function buildQuestionImageKey(question, url, suffix = "main") {
+  return `${suffix}:${question?.id || "di-question"}:${url || "empty"}`;
+}
+
+function createImageLoadError(url = "") {
+  return new Error(url ? `image_load_failed:${url}` : "image_load_failed");
+}
+
+function preloadImageUrl(url) {
+  const normalizedUrl = `${url || ""}`.trim();
+  if (!normalizedUrl) {
+    return Promise.reject(createImageLoadError(""));
+  }
+
+  const cached = imageLoadCache.get(normalizedUrl);
+  if (cached?.status === "loaded") {
+    return Promise.resolve(normalizedUrl);
+  }
+  if (cached?.status === "loading" && cached?.promise) {
+    return cached.promise;
+  }
+
+  const promise = new Promise((resolve, reject) => {
+    if (typeof Image === "undefined") {
+      resolve(normalizedUrl);
+      return;
+    }
+
+    const loader = new Image();
+    const cleanup = () => {
+      loader.onload = null;
+      loader.onerror = null;
+    };
+
+    loader.decoding = "async";
+    loader.onload = () => {
+      imageLoadCache.set(normalizedUrl, { status: "loaded", promise: Promise.resolve(normalizedUrl) });
+      cleanup();
+      resolve(normalizedUrl);
+    };
+    loader.onerror = () => {
+      imageLoadCache.delete(normalizedUrl);
+      cleanup();
+      reject(createImageLoadError(normalizedUrl));
+    };
+    loader.src = normalizedUrl;
+  });
+
+  imageLoadCache.set(normalizedUrl, { status: "loading", promise });
+  return promise;
+}
+
+function resolveUpcomingQuestionImageUrl(currentQuestionId = "") {
+  const total = sessionQuestions.value.length;
+  if (total <= 1) return "";
+
+  for (let offset = 1; offset < total; offset += 1) {
+    const candidate = sessionQuestions.value[(currentQuestionIndex.value + offset) % total];
+    if (!candidate || candidate.id === currentQuestionId) continue;
+    const candidateUrl = normalizeQuestionImageUrl(candidate);
+    if (candidateUrl) return candidateUrl;
+  }
+
+  return "";
+}
+
+function preloadUpcomingQuestionImage(currentQuestionId = "") {
+  const nextUrl = resolveUpcomingQuestionImageUrl(currentQuestionId);
+  if (!nextUrl || nextUrl === activeImageUrl.value) return;
+  void preloadImageUrl(nextUrl).catch(() => {
+    // no-op: preloading should not surface errors ahead of user action
+  });
+}
+
+async function syncCurrentQuestionImage(question) {
+  const targetUrl = normalizeQuestionImageUrl(question);
+  const requestToken = ++currentImageLoadToken;
+  const currentKey = buildQuestionImageKey(question, targetUrl);
+
+  activeImageUrl.value = targetUrl;
+  currentImageRenderKey.value = currentKey;
+  displayedImageUrl.value = "";
+  imageLoadFailed.value = false;
+  imageErrorText.value = "";
+  isImageLoading.value = Boolean(targetUrl);
+
+  if (!targetUrl) {
+    isImageLoading.value = false;
+    imageLoadFailed.value = true;
+    imageErrorText.value = "当前题目缺少 image_url，请在题库补充图片地址。";
+    return;
+  }
+
+  try {
+    const loadedUrl = await preloadImageUrl(targetUrl);
+    if (requestToken !== currentImageLoadToken) return;
+    displayedImageUrl.value = loadedUrl;
+    isImageLoading.value = false;
+    imageLoadFailed.value = false;
+    preloadUpcomingQuestionImage(question?.id || "");
+  } catch {
+    if (requestToken !== currentImageLoadToken) return;
+    displayedImageUrl.value = "";
+    isImageLoading.value = false;
+    imageLoadFailed.value = true;
+    imageErrorText.value = "新图片加载失败，请稍后重试或检查图片地址。";
+  }
+}
+
+function retryCurrentQuestionImage() {
+  if (!currentQuestion.value) return;
+  void syncCurrentQuestionImage(currentQuestion.value);
+}
+
+async function openImagePreview() {
+  const question = currentQuestion.value;
+  const url = normalizeQuestionImageUrl(question);
   if (!url) return;
 
-  imagePreviewUrl.value = url;
-  imagePreviewAlt.value = `${currentQuestion.value?.topic || currentQuestion.value?.id || "DI image"}`.trim();
+  const requestToken = ++currentPreviewLoadToken;
+  imagePreviewAlt.value = `${question?.topic || question?.id || "DI image"}`.trim();
   imagePreviewOpen.value = true;
+  imagePreviewLoading.value = true;
+  imagePreviewFailed.value = false;
+  imagePreviewErrorText.value = "";
+  imagePreviewUrl.value = "";
+
+  try {
+    const loadedUrl = displayedImageUrl.value === url ? url : await preloadImageUrl(url);
+    if (requestToken !== currentPreviewLoadToken || !imagePreviewOpen.value) return;
+    imagePreviewUrl.value = loadedUrl;
+    imagePreviewLoading.value = false;
+  } catch {
+    if (requestToken !== currentPreviewLoadToken || !imagePreviewOpen.value) return;
+    imagePreviewLoading.value = false;
+    imagePreviewFailed.value = true;
+    imagePreviewErrorText.value = "图片预览加载失败，请稍后重试。";
+  }
 }
 
 function closeImagePreview() {
+  currentPreviewLoadToken += 1;
   imagePreviewOpen.value = false;
+  imagePreviewLoading.value = false;
+  imagePreviewFailed.value = false;
+  imagePreviewErrorText.value = "";
 }
 
 function handleImagePreviewMaskClick(event) {
@@ -227,7 +382,6 @@ watch(
     practiceStore.setTranscript(value?.transcript || "");
     playbackTimeSec.value = 0;
     playbackDurationSec.value = Math.max(0, Number(value?.playableDurationSec || diRecorder.recordingDurationSec.value || 0));
-    selfRating.value = 0;
   }
 );
 
@@ -246,6 +400,9 @@ watch(
     if (!opened) {
       imagePreviewUrl.value = "";
       imagePreviewAlt.value = "";
+      imagePreviewLoading.value = false;
+      imagePreviewFailed.value = false;
+      imagePreviewErrorText.value = "";
     }
   }
 );
@@ -299,6 +456,65 @@ function normalizeQuestionHighFrequencyWords(value) {
       };
     })
     .filter(Boolean);
+}
+
+function inferVisualFeaturesByImageType(imageType = "") {
+  if (["bar", "line", "pie", "table", "mixed"].includes(imageType)) {
+    return {
+      hasTrend: true,
+      hasComparison: true,
+      hasExtreme: true,
+      hasNumbers: true
+    };
+  }
+
+  if (imageType === "process") {
+    return {
+      hasTrend: false,
+      hasComparison: false,
+      hasExtreme: false,
+      hasNumbers: false
+    };
+  }
+
+  if (imageType === "map") {
+    return {
+      hasTrend: false,
+      hasComparison: true,
+      hasExtreme: false,
+      hasNumbers: false
+    };
+  }
+
+  return {
+    hasTrend: false,
+    hasComparison: false,
+    hasExtreme: false,
+    hasNumbers: false
+  };
+}
+
+function normalizeVisualFeatures(value, imageType = "") {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const inferred = inferVisualFeaturesByImageType(`${imageType || ""}`.trim().toLowerCase());
+  const sourceAllTrue = ["hasTrend", "hasComparison", "hasExtreme", "hasNumbers"].every((key) => {
+    const snakeKey = key.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
+    return Boolean(source?.[key] ?? source?.[snakeKey]);
+  });
+  const normalizedImageType = `${imageType || ""}`.trim().toLowerCase();
+  if (sourceAllTrue && (normalizedImageType === "process" || normalizedImageType === "map")) {
+    return { ...inferred };
+  }
+  return {
+    hasTrend: Boolean(source?.hasTrend ?? source?.has_trend ?? inferred.hasTrend),
+    hasComparison: Boolean(source?.hasComparison ?? source?.has_comparison ?? inferred.hasComparison),
+    hasExtreme: Boolean(source?.hasExtreme ?? source?.has_extreme ?? inferred.hasExtreme),
+    hasNumbers: Boolean(source?.hasNumbers ?? source?.has_numbers ?? inferred.hasNumbers)
+  };
+}
+
+function countTranscriptWords(text) {
+  return (`${text || ""}`.trim().match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || []).length;
 }
 
 function normalizeDIContextText(value) {
@@ -538,24 +754,49 @@ function resolveSlotSuggestion(slot, context) {
 }
 
 function normalizeQuestionRow(row) {
-  const content = `${row?.content || ""}`.trim();
-  const topic = `${row?.topic || row?.displayTitle || row?.sourceNumberLabel || ""}`.trim();
+  const content = `${row?.content || row?.promptText || ""}`.trim();
+  const topic = `${row?.topic || row?.topicTitle || row?.displayTitle || row?.sourceNumberLabel || ""}`.trim();
   const imageUrl = `${row?.image_url || row?.imageUrl || ""}`.trim();
-  const normalizedType = normalizeDIImageType(row?.image_type);
-  const inferredType = normalizedType || inferDIImageTypeFromText(topic, content);
+  const normalizedType = normalizeDIImageType(row?.image_type || row?.imageType);
+  const inferredType = normalizedType || inferDIImageTypeFromText(
+    topic,
+    content,
+    toArray(row?.key_points).join(" "),
+    toArray(row?.high_frequency_words || row?.highFrequencyWords || row?.vocab || row?.key_terms || row?.keyTerms)
+      .map((item) => (typeof item === "string" ? item : item?.word || ""))
+      .join(" ")
+  );
 
-  return {
+  const baseQuestion = {
     id: `${row?.id || ""}`.trim(),
     taskType: "DI",
     content,
     topic,
+    displayTitle: `${row?.displayTitle || row?.display_title || topic || row?.sourceNumberLabel || ""}`.trim(),
+    sourceNumberLabel: `${row?.sourceNumberLabel || row?.source_number_label || ""}`.trim(),
     imageUrl,
-    keyPoints: toArray(row?.key_points),
+    keyPoints: toArray(row?.key_points || row?.keyPoints),
+    keyTerms: toArray(row?.key_terms || row?.keyTerms),
     difficulty: clampDifficulty(row?.difficulty),
     imageType: inferredType,
+    visualFeatures: normalizeVisualFeatures(row?.visual_features || row?.visualFeatures, inferredType),
     highFrequencyWords: normalizeQuestionHighFrequencyWords(
       row?.high_frequency_words || row?.highFrequencyWords || row?.vocab || row?.key_terms || row?.keyTerms
     )
+  };
+
+  const derivedMeta = buildDIQuestionMetaPayload(baseQuestion);
+
+  return {
+    ...baseQuestion,
+    keyPoints: [...derivedMeta.key_points],
+    keyTerms: [...derivedMeta.key_terms],
+    keyElements: [...derivedMeta.key_elements],
+    relations: [...derivedMeta.relations],
+    implicationsOrConclusion: [...derivedMeta.implications_or_conclusion],
+    numbersOrExtremes: [...derivedMeta.numbers_or_extremes],
+    sequenceOrTrend: [...derivedMeta.sequence_or_trend],
+    comparisonAxes: [...derivedMeta.comparison_axes]
   };
 }
 
@@ -566,15 +807,42 @@ function getLocalFallbackQuestions() {
       normalizeQuestionRow({
         id: item.id,
         content: item.promptText || item.content || item.displayTitle,
-        topic: item.displayTitle || item.sourceNumberLabel,
+        topic: item.topicTitle || item.displayTitle || item.sourceNumberLabel,
+        displayTitle: item.topicTitle || item.displayTitle || item.sourceNumberLabel,
+        sourceNumberLabel: item.sourceNumberLabel,
         image_url: item.imageUrl,
-        key_points: item.tags || [],
+        key_points: item.keyPoints || [],
+        key_terms: item.keyTerms || [],
         difficulty: item.difficulty,
         image_type: item.imageType,
+        visualFeatures: item.visualFeatures,
         highFrequencyWords: item.highFrequencyWords || []
       })
     )
     .filter((item) => item.id && item.content);
+}
+
+function getQuestionImageType(question) {
+  return normalizeDIImageType(question?.imageType);
+}
+
+function getQuestionsForImageType(type) {
+  const normalizedType = normalizeDIImageType(type);
+  if (!normalizedType) return [];
+  return allQuestions.value.filter((item) => getQuestionImageType(item) === normalizedType);
+}
+
+function findFirstAvailableImageType(preferredType = "") {
+  const candidates = [normalizeDIImageType(preferredType), ...DI_IMAGE_TYPE_FILTERS.map((item) => item.id)];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) continue;
+    seen.add(candidate);
+    if (getQuestionsForImageType(candidate).length) {
+      return candidate;
+    }
+  }
+  return "";
 }
 
 function shuffle(list) {
@@ -619,11 +887,13 @@ function resolveDurationFromScoreJson(scoreJson) {
   return 0;
 }
 
-function resolveRatingFromScoreJson(scoreJson) {
+function resolveOverallFromScoreJson(scoreJson) {
   const score = scoreJson && typeof scoreJson === "object" ? scoreJson : {};
-  const rating = Number(score?.self_rating || 0);
-  if (!Number.isFinite(rating)) return 0;
-  return Math.max(0, Math.min(5, Math.round(rating)));
+  const aiReview = score?.ai_review && typeof score.ai_review === "object" ? score.ai_review : {};
+  const displayScores = aiReview?.display_scores && typeof aiReview.display_scores === "object" ? aiReview.display_scores : {};
+  const overall = Number(displayScores?.overall ?? aiReview?.overall ?? score?.overall ?? 0);
+  if (!Number.isFinite(overall) || overall <= 0) return 0;
+  return Math.max(10, Math.min(90, Math.round(overall)));
 }
 
 async function resolveCurrentUserId() {
@@ -741,35 +1011,55 @@ async function applyQuestionState() {
   practiceStore.setAudioBlob(null);
   playbackTimeSec.value = 0;
   playbackDurationSec.value = 0;
-  selfRating.value = 0;
-  latestSavedAt.value = "";
   resetTemplatePanelState();
   const appliedCarriedTemplate = applyCarriedTemplateForCurrentQuestion();
   if (!appliedCarriedTemplate) {
     chooseRandomTemplate();
   }
-  await loadFavoriteState();
-  await diRecorder.enterPreparePhase();
+  void syncCurrentQuestionImage(question);
+  await Promise.allSettled([
+    loadFavoriteState(question.id),
+    diRecorder.enterPreparePhase()
+  ]);
 }
 
-async function buildSession(type, preferredQuestionId = "") {
-  const normalizedType = normalizeDIImageType(type) || "map";
-  selectedImageType.value = normalizedType;
-  const sameTypePool = allQuestions.value.filter((item) => item.imageType === normalizedType);
-  const sourcePool = sameTypePool.length ? sameTypePool : allQuestions.value;
+async function buildSession(type, preferredQuestionId = "", excludedQuestionId = "") {
+  const normalizedRequestedType = normalizeDIImageType(type);
+  const normalizedPreferred = `${preferredQuestionId || ""}`.trim();
+  const normalizedExcluded = `${excludedQuestionId || ""}`.trim();
+  const preferredQuestion = normalizedPreferred
+    ? allQuestions.value.find((item) => item.id === normalizedPreferred)
+    : null;
+  const resolvedType = normalizedRequestedType
+    || getQuestionImageType(preferredQuestion)
+    || findFirstAvailableImageType(selectedImageType.value || "map")
+    || selectedImageType.value
+    || "map";
 
-  if (!sourcePool.length) {
+  selectedImageType.value = normalizeDIImageType(resolvedType) || "map";
+  let sameTypePool = getQuestionsForImageType(selectedImageType.value);
+  if (!sameTypePool.length && preferredQuestion) {
+    sameTypePool = [preferredQuestion];
+  }
+
+  if (!sameTypePool.length) {
     sessionQuestions.value = [];
     currentQuestionIndex.value = 0;
     return;
   }
 
+  let sourcePool = normalizedExcluded
+    ? sameTypePool.filter((item) => item.id !== normalizedExcluded)
+    : [...sameTypePool];
+  if (!sourcePool.length) {
+    sourcePool = [...sameTypePool];
+  }
+
   const shuffled = shuffle(sourcePool);
   const sessionSize = Math.min(SESSION_TOTAL, shuffled.length);
   let session = shuffled.slice(0, sessionSize);
-  const normalizedPreferred = `${preferredQuestionId || ""}`.trim();
   if (normalizedPreferred) {
-    const preferred = sourcePool.find((item) => item.id === normalizedPreferred);
+    const preferred = sameTypePool.find((item) => item.id === normalizedPreferred);
     if (preferred) {
       session = [preferred, ...session.filter((item) => item.id !== preferred.id)].slice(0, sessionSize);
     }
@@ -786,19 +1076,23 @@ async function initializeSessionFromRoute() {
   const questionMatchedType = preferredQuestionId
     ? allQuestions.value.find((item) => item.id === preferredQuestionId)?.imageType
     : "";
-  const preferredType = routeType || normalizeDIImageType(questionMatchedType) || "map";
+  const preferredType = routeType || normalizeDIImageType(questionMatchedType) || findFirstAvailableImageType("map") || "map";
   await buildSession(preferredType, preferredQuestionId);
 }
 
 async function switchImageType(type) {
-  if (!type || type === selectedImageType.value) return;
-  await buildSession(type);
+  const normalizedType = normalizeDIImageType(type);
+  if (!normalizedType || normalizedType === selectedImageType.value) return;
+  await buildSession(normalizedType);
+  if (!sessionQuestions.value.length) {
+    uiStore.showToast(`当前暂无 ${getDIImageTypeMeta(normalizedType).label} 题目。`, "warning", 1800);
+  }
 }
 
 async function activateRandomQuestion() {
   if (!sessionQuestions.value.length) return;
   if (sessionQuestions.value.length === 1) {
-    await buildSession(selectedImageType.value);
+    await buildSession(selectedImageType.value, "", currentQuestion.value?.id || "");
     return;
   }
 
@@ -825,7 +1119,7 @@ async function jumpToNextQuestionFromPrepare() {
   diRecorder.recorder.stopRecording();
 
   if (currentQuestionIndex.value >= sessionQuestions.value.length - 1) {
-    await buildSession(selectedImageType.value);
+    await buildSession(selectedImageType.value, "", currentQuestion.value?.id || "");
     return;
   }
 
@@ -909,12 +1203,6 @@ function getHistoryCurrentTimeForRecord(record) {
   if (!Number.isFinite(duration) || duration <= 0) return current;
   if (duration - current <= HISTORY_END_SNAP_SECONDS) return duration;
   return Math.max(0, Math.min(current, duration));
-}
-
-function getRecordRating(record) {
-  const rating = Number(record?.rating || 0);
-  if (!Number.isFinite(rating)) return 0;
-  return Math.max(0, Math.min(5, Math.round(rating)));
 }
 
 function onHistoryLoadedMetadata(recordId, event) {
@@ -1057,16 +1345,18 @@ function isDuplicateInsertError(error) {
   return `${error?.code || ""}` === "23505";
 }
 
-async function loadFavoriteState() {
+async function loadFavoriteState(questionIdInput = "") {
   const userId = await resolveCurrentUserId();
-  const questionId = `${currentQuestion.value?.id || ""}`.trim();
+  const questionId = `${questionIdInput || currentQuestion.value?.id || ""}`.trim();
   if (!userId || !questionId) {
     isFavorite.value = false;
     return;
   }
 
   const localFavorites = readLocalFavorites(userId);
-  isFavorite.value = localFavorites.has(questionId);
+  if (`${currentQuestion.value?.id || ""}`.trim() === questionId) {
+    isFavorite.value = localFavorites.has(questionId);
+  }
 
   try {
     const { data, error } = await supabase
@@ -1079,10 +1369,16 @@ async function loadFavoriteState() {
 
     if (error) {
       if (isMissingFavoritesTableError(error)) {
-        favoriteSource.value = "local";
+        if (`${currentQuestion.value?.id || ""}`.trim() === questionId) {
+          favoriteSource.value = "local";
+        }
         return;
       }
       throw error;
+    }
+
+    if (`${currentQuestion.value?.id || ""}`.trim() !== questionId) {
+      return;
     }
 
     favoriteSource.value = "remote";
@@ -1092,7 +1388,9 @@ async function loadFavoriteState() {
     writeLocalFavorites(userId, localFavorites);
   } catch (error) {
     console.warn("DI favorite load fallback to local:", error);
-    favoriteSource.value = "local";
+    if (`${currentQuestion.value?.id || ""}`.trim() === questionId) {
+      favoriteSource.value = "local";
+    }
   }
 }
 
@@ -1185,68 +1483,131 @@ async function loadTodayStats() {
     const rows = Array.isArray(data) ? data : [];
     const practicedCount = rows.length;
     const totalDurationSec = rows.reduce((sum, row) => sum + resolveDurationFromScoreJson(row?.score_json), 0);
-    const ratingValues = rows
-      .map((row) => resolveRatingFromScoreJson(row?.score_json))
+    const overallValues = rows
+      .map((row) => resolveOverallFromScoreJson(row?.score_json))
       .filter((value) => value > 0);
-    const totalRating = ratingValues.reduce((sum, value) => sum + value, 0);
+    const totalOverall = overallValues.reduce((sum, value) => sum + value, 0);
 
     summaryStats.value = {
       practicedCount,
       totalMinutes: Math.round(totalDurationSec / 60),
-      averageRating: ratingValues.length ? Number((totalRating / ratingValues.length).toFixed(1)) : 0
+      averageOverall: overallValues.length ? Number((totalOverall / overallValues.length).toFixed(1)) : 0
     };
   } catch (error) {
     console.warn("DI today stats load failed:", error);
     summaryStats.value = {
       practicedCount: 0,
       totalMinutes: 0,
-      averageRating: 0
+      averageOverall: 0
     };
   } finally {
     loadingStats.value = false;
   }
 }
-async function persistCurrentRound({ allowSkip = false } = {}) {
-  if (submittingRound.value) return false;
+async function persistCurrentRound({ userId = "" } = {}) {
+  if (submittingRound.value) return null;
   const question = currentQuestion.value;
   const result = diRecorder.stopResult.value;
   if (!question || !result?.blob) {
-    uiStore.showToast("请先完成录音。", "warning");
-    return false;
+    return {
+      ok: false,
+      reason: "audio_upload_failed"
+    };
   }
 
-  const rating = Math.max(0, Math.min(5, Math.round(Number(selfRating.value || 0))));
-  if (!allowSkip && rating <= 0) {
-    uiStore.showToast("请先完成自我评分，或点击“跳过评分”。", "warning");
-    return false;
-  }
-
-  const userId = await resolveCurrentUserId();
-  if (!userId) {
-    uiStore.showToast("登录状态失效，请重新登录。", "warning");
-    return false;
+  const resolvedUserId = `${userId || await resolveCurrentUserId()}`.trim();
+  if (!resolvedUserId) {
+    return {
+      ok: false,
+      reason: "auth_session_failed"
+    };
   }
 
   submittingRound.value = true;
   try {
+    const transcript = `${result?.transcript || practiceStore.transcript || ""}`.trim();
+    const durationSec = Math.max(0, Number(diRecorder.recordingDurationSec.value || 0));
+    const prepareSec = Math.max(0, Number(diRecorder.prepareDurationSec.value || 0));
+    const questionMeta = buildDIQuestionMetaPayload(question);
+    const questionSnapshot = buildDIQuestionSnapshot(question, questionMeta);
+    const audioSignals = buildDIAudioSignalsPayload(result, diRecorder.recordingDurationSec.value);
+    const speechSec = Math.max(0, Number(audioSignals?.duration_sec || durationSec || 0));
+    const analytics = buildPracticeAnalytics({
+      source: "computed_client_flow",
+      totalActiveSec: prepareSec + speechSec,
+      breakdown: {
+        prepare_sec: prepareSec,
+        record_sec: speechSec,
+        speech_sec: speechSec
+      }
+    });
+    const audioMeta = await uploadDIAudio({
+      userId: resolvedUserId,
+      questionId: question.id,
+      blob: result.blob
+    });
+
+    if (!audioMeta?.bucket || !audioMeta?.path) {
+      return {
+        ok: false,
+        reason: `${audioMeta?.reasonCode || "audio_upload_failed"}`.trim() || "audio_upload_failed",
+        detail: `${audioMeta?.errorMessage || ""}`.trim()
+      };
+    }
+
     const payload = {
-      user_id: userId,
+      user_id: resolvedUserId,
       task_type: "DI",
       question_id: question.id,
-      transcript: "",
+      transcript,
       score_json: {
-        self_rating: rating,
-        duration_sec: Math.max(0, Number(diRecorder.recordingDurationSec.value || 0)),
-        image_type: question.imageType
+        duration_sec: durationSec,
+        image_type: question.imageType,
+        question_content: questionMeta.question_content,
+        question_meta: questionMeta,
+        question: questionSnapshot,
+        metrics: {
+          speech_duration_sec: durationSec,
+          transcript_word_count: countTranscriptWords(transcript)
+        },
+        analytics,
+        audio_signals: audioSignals,
+        ai_review_job: createPendingDIAiReviewJob(),
+        audio: {
+          ...audioMeta,
+          status: "ready"
+        }
       },
-      feedback: ""
+      feedback: "",
+      created_at: new Date().toISOString()
     };
 
-    const { error } = await supabase.from("practice_logs").insert(payload);
+    const { data: insertedRow, error } = await supabase
+      .from("practice_logs")
+      .insert(payload)
+      .select("id, task_type, score_json, transcript, feedback")
+      .single();
     if (error) {
+      try {
+        const { error: removeError } = await supabase.storage.from(audioMeta.bucket).remove([audioMeta.path]);
+        if (removeError) {
+          console.warn("DI uploaded audio compensation remove failed:", removeError, {
+            questionId: question.id,
+            path: audioMeta.path
+          });
+        }
+      } catch (removeException) {
+        console.warn("DI uploaded audio compensation remove failed:", removeException, {
+          questionId: question.id,
+          path: audioMeta.path
+        });
+      }
       console.warn("DI practice_logs insert failed:", error);
-      uiStore.showToast("保存练习失败，请稍后重试。", "warning");
-      return false;
+      return {
+        ok: false,
+        reason: resolveDIInsertFailureReason(error),
+        detail: `${error?.message || error?.details || error?.hint || ""}`.trim()
+      };
     }
 
     let blobUrl = "";
@@ -1262,31 +1623,128 @@ async function persistCurrentRound({ allowSkip = false } = {}) {
       practiceStore.pushDIRecentRecording({
         questionId: question.id,
         blobUrl,
-        durationSec: Number(diRecorder.recordingDurationSec.value || 0),
-        rating,
+        durationSec,
         createdAt: new Date().toISOString()
       });
     }
 
-    latestSavedAt.value = new Date().toISOString();
     await loadTodayStats();
-    return true;
+    return {
+      ok: true,
+      logId: `${insertedRow?.id || ""}`.trim()
+    };
+  } catch (error) {
+    console.warn("DI submit persist unexpected error:", error);
+    return {
+      ok: false,
+      reason: resolveDIInsertFailureReason(error),
+      detail: `${error?.message || ""}`.trim()
+    };
   } finally {
     submittingRound.value = false;
   }
 }
 
-async function goToNextQuestion({ allowSkip = false } = {}) {
-  const saved = await persistCurrentRound({ allowSkip });
-  if (!saved) return;
+function buildDIReviewRouteQuery({
+  logId = "",
+  questionId = "",
+  startedAt = "",
+  pendingSubmit = false,
+  submitFailed = false,
+  submitReason = ""
+} = {}) {
+  const query = {};
+  const normalizedLogId = `${logId || ""}`.trim();
+  const normalizedQuestionId = `${questionId || ""}`.trim();
+  const normalizedStartedAt = `${startedAt || ""}`.trim();
+  const normalizedSubmitReason = `${submitReason || ""}`.trim();
+  if (normalizedLogId) query.logId = normalizedLogId;
+  if (normalizedQuestionId) query.id = normalizedQuestionId;
+  if (normalizedStartedAt) query.startedAt = normalizedStartedAt;
+  if (pendingSubmit) query.pendingSubmit = "1";
+  if (submitFailed) query.submitFailed = "1";
+  if (normalizedSubmitReason) query.submitReason = normalizedSubmitReason;
+  return query;
+}
 
-  if (currentQuestionIndex.value >= sessionQuestions.value.length - 1) {
-    await buildSession(selectedImageType.value);
+async function submitCurrentRound() {
+  if (submittingRound.value) return;
+  const question = currentQuestion.value;
+  const result = diRecorder.stopResult.value;
+  if (!question || !result?.blob) {
+    uiStore.showToast("请先完成录音。", "warning");
     return;
   }
 
-  currentQuestionIndex.value += 1;
-  await applyQuestionState();
+  const userId = await resolveCurrentUserId();
+  if (!userId) {
+    uiStore.showToast("登录状态失效，请重新登录。", "warning");
+    return;
+  }
+
+  const analyzeStartedAtMs = Date.now();
+  const outcome = await persistCurrentRound({ userId });
+  if (!outcome?.ok || !outcome?.logId) {
+    const failureReason = `${outcome?.reason || "practice_log_insert_failed"}`.trim() || "practice_log_insert_failed";
+    console.warn("DI submit failed before analyzing route:", {
+      reason: failureReason,
+      detail: `${outcome?.detail || ""}`.trim(),
+      questionId: question.id
+    });
+    uiStore.showToast(getDIFallbackReasonMessage(failureReason), "warning", 3600);
+    return;
+  }
+
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      sessionStorage.setItem(`kai_kou_di_analyzing_started_at_${outcome.logId}`, String(analyzeStartedAtMs));
+    } catch {
+      // no-op
+    }
+  }
+
+  await router.push({
+    path: "/di/analyzing",
+    query: buildDIReviewRouteQuery({
+      logId: outcome.logId,
+      questionId: question.id,
+      startedAt: analyzeStartedAtMs
+    })
+  });
+}
+
+async function restartCurrentAttempt() {
+  if (!currentQuestion.value || submittingRound.value) return;
+  practiceStore.setTranscript("");
+  practiceStore.setAudioBlob(null);
+  playbackTimeSec.value = 0;
+  playbackDurationSec.value = 0;
+  await diRecorder.enterPreparePhase();
+}
+
+function resolveDIInsertFailureReason(error) {
+  const text = `${error?.message || error?.details || error?.hint || error?.code || error || ""}`.trim().toLowerCase();
+  if (!text) return "practice_log_insert_failed";
+  if (
+    text.includes("auth")
+    || text.includes("jwt")
+    || text.includes("token")
+    || text.includes("session")
+    || text.includes("unauthorized")
+  ) {
+    return "auth_session_failed";
+  }
+  if (
+    text.includes("row-level security")
+    || text.includes("policy")
+    || text.includes("permission")
+    || text.includes("forbidden")
+    || text.includes("not allowed")
+    || text.includes("access denied")
+  ) {
+    return "practice_log_policy_failed";
+  }
+  return "practice_log_insert_failed";
 }
 
 async function handleBackHome() {
@@ -1401,7 +1859,7 @@ onUnmounted(() => {
         DI 题库加载中...
       </div>
       <div v-else-if="!currentQuestion" class="rounded-[14px] border border-[#E8EDF5] bg-white p-8 text-center text-sm text-[#8CA0C0]">
-        当前没有可用 DI 题目，请先在 Supabase `questions` 表添加 `task_type = DI` 的题目。
+        {{ emptySessionMessage }}
       </div>
 
       <template v-else>
@@ -1413,14 +1871,31 @@ onUnmounted(() => {
             </div>
 
             <div class="mb-3 flex h-[190px] items-center justify-center overflow-hidden rounded-[10px] bg-[#F4F7FB]">
+              <div v-if="isImageLoading" class="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
+                <div class="h-[120px] w-full max-w-[220px] animate-pulse rounded-[10px] bg-white/80" />
+                <p class="text-xs font-medium text-[#5B6F90]">正在加载新图片...</p>
+              </div>
+              <div v-else-if="imageLoadFailed" class="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center">
+                <p class="text-sm font-semibold text-[#5B6F90]">图片暂时不可用</p>
+                <p class="text-xs text-[#8CA0C0]">{{ imageErrorText }}</p>
+                <button
+                  v-if="activeImageUrl"
+                  type="button"
+                  class="rounded-full border border-[#D7E2F0] px-3 py-1 text-xs font-semibold text-[#1B3A6B] transition-colors hover:bg-white"
+                  @click="retryCurrentQuestionImage"
+                >
+                  重新加载
+                </button>
+              </div>
               <button
-                v-if="currentQuestion.imageUrl"
+                v-else-if="displayedImageUrl"
                 type="button"
                 class="h-full w-full cursor-zoom-in focus:outline-none"
                 @click="openImagePreview"
               >
                 <img
-                  :src="currentQuestion.imageUrl"
+                  :key="currentImageRenderKey"
+                  :src="displayedImageUrl"
                   :alt="currentQuestion.topic || currentQuestion.id"
                   class="h-full w-full object-contain"
                 />
@@ -1510,43 +1985,31 @@ onUnmounted(() => {
               />
               <p class="text-right text-xs text-[#8CA0C0]">{{ playbackTimeLabel }}</p>
 
-              <div>
-                <p class="mb-2 text-sm font-semibold text-[#1B3A6B]">自我评分</p>
-                <div class="mb-2 flex items-center gap-1">
-                  <button
-                    v-for="star in 5"
-                    :key="star"
-                    type="button"
-                    class="text-2xl leading-none transition-colors"
-                    :class="star <= selfRating ? 'text-[#FFD166]' : 'text-[#D7DEE9]'"
-                    @click="selfRating = star"
-                  >
-                    ★
-                  </button>
-                </div>
-                <p class="text-xs text-[#8CA0C0]">{{ ratingCopy }}</p>
+              <div class="rounded-[12px] border border-[#E8EDF5] bg-[#F8FAFD] p-3 text-sm text-[#52627A]">
+                <p class="font-semibold text-[#1B3A6B]">提交后会进入独立分析页</p>
+                <p class="mt-1 text-xs text-[#8CA0C0]">
+                  练习页不再直接展示完整 AI 评分结果，结果会在独立页面呈现。
+                </p>
               </div>
 
               <div class="flex items-center gap-2">
                 <button
                   type="button"
                   class="flex-1 rounded-[11px] bg-[#E8845A] px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="!canGoNext || submittingRound"
-                  @click="goToNextQuestion()"
+                  :disabled="!canSubmitAiReview"
+                  @click="submitCurrentRound()"
                 >
-                  {{ submittingRound ? "保存中..." : "下一题 →" }}
+                  {{ submittingRound ? "正在提交作答..." : "提交 AI评分" }}
                 </button>
                 <button
                   type="button"
                   class="rounded-[11px] border border-[#E8EDF5] px-3 py-3 text-xs text-[#8CA0C0] transition-colors hover:text-[#1B3A6B]"
                   :disabled="submittingRound"
-                  @click="goToNextQuestion({ allowSkip: true })"
+                  @click="restartCurrentAttempt()"
                 >
-                  跳过评分
+                  重录本题
                 </button>
               </div>
-
-              <p v-if="latestSavedAt" class="text-right text-xs text-[#8CA0C0]">已保存：{{ formatDateTime(latestSavedAt) }}</p>
             </div>
           </article>
 
@@ -1794,8 +2257,8 @@ onUnmounted(() => {
                 <p class="text-xs text-[#8CA0C0]">分钟</p>
               </div>
               <div class="rounded-[11px] bg-[#F4F7FB] p-3 text-center">
-                <p class="text-2xl font-bold text-[#1B3A6B]">{{ summaryStats.averageRating.toFixed(1) }}</p>
-                <p class="text-xs text-[#8CA0C0]">平均评分</p>
+                <p class="text-2xl font-bold text-[#1B3A6B]">{{ summaryStats.averageOverall.toFixed(1) }}</p>
+                <p class="text-xs text-[#8CA0C0]">平均 Overall</p>
               </div>
             </div>
           </article>
@@ -1833,9 +2296,6 @@ onUnmounted(() => {
                   />
                 </div>
                 <p class="mt-2 text-xs text-[#8CA0C0]">{{ formatDateTime(record.createdAt) }}</p>
-                <p v-if="getRecordRating(record) > 0" class="mt-1 text-sm tracking-[1px] text-[#F5B94B]">
-                  <span v-for="star in getRecordRating(record)" :key="`${record.id}-${star}`">★</span>
-                </p>
                 <audio
                   :ref="(el) => bindHistoryAudioRef(record.id, el)"
                   class="hidden"
@@ -1885,7 +2345,23 @@ onUnmounted(() => {
           @click="handleImagePreviewMaskClick"
         >
           <div class="relative w-full max-w-5xl">
+            <div v-if="imagePreviewLoading" class="flex min-h-[320px] items-center justify-center rounded-[12px] bg-white px-6 text-sm text-[#5B6F90] shadow-2xl">
+              正在加载图片预览...
+            </div>
+            <div v-else-if="imagePreviewFailed" class="flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-[12px] bg-white px-6 text-center shadow-2xl">
+              <p class="text-sm font-semibold text-[#1B3A6B]">图片预览加载失败</p>
+              <p class="text-xs text-[#64748B]">{{ imagePreviewErrorText }}</p>
+              <button
+                type="button"
+                class="rounded-full border border-[#D7E2F0] px-3 py-1 text-xs font-semibold text-[#1B3A6B] transition-colors hover:bg-[#F8FAFD]"
+                @click.stop="openImagePreview"
+              >
+                重试预览
+              </button>
+            </div>
             <img
+              v-else
+              :key="`preview-${imagePreviewUrl}`"
               :src="imagePreviewUrl"
               :alt="imagePreviewAlt"
               class="max-h-[90vh] w-full rounded-[12px] bg-white object-contain shadow-2xl"

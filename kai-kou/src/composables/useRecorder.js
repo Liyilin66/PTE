@@ -2314,6 +2314,8 @@ export function useRecorder() {
       rmsAmplitude: 0,
       meanAbsAmplitude: 0,
       nonSilentFrameRatio: 0,
+      silenceFrameRatio: 0,
+      amplitudeDynamicRange: 0,
       sampleRate: 0,
       channelCount: 0,
       durationMs: 0,
@@ -2779,6 +2781,10 @@ export function useRecorder() {
         rmsAmplitude: Number(audioAmplitudeStats?.rmsAmplitude || 0),
         meanAbsAmplitude: Number(audioAmplitudeStats?.meanAbsAmplitude || 0),
         nonSilentFrameRatio: Number(audioAmplitudeStats?.nonSilentFrameRatio || 0),
+        silenceFrameRatio: Number(Math.max(0, 1 - Number(audioAmplitudeStats?.nonSilentFrameRatio || 0))),
+        amplitudeDynamicRange: Number(
+          Math.max(0, Number(audioAmplitudeStats?.peakAmplitude || 0) - Number(audioAmplitudeStats?.meanAbsAmplitude || 0))
+        ),
         sampleRate: Number(audioAmplitudeStats?.sampleRate || 0),
         channelCount: Number(audioAmplitudeStats?.channelCount || 0),
         durationMs: Number(audioAmplitudeStats?.durationMs || 0),
@@ -2936,6 +2942,13 @@ export function useRecorder() {
           rmsAmplitude: Number(failedAudioAmplitudeStats?.rmsAmplitude || 0),
           meanAbsAmplitude: Number(failedAudioAmplitudeStats?.meanAbsAmplitude || 0),
           nonSilentFrameRatio: Number(failedAudioAmplitudeStats?.nonSilentFrameRatio || 0),
+          silenceFrameRatio: Number(Math.max(0, 1 - Number(failedAudioAmplitudeStats?.nonSilentFrameRatio || 0))),
+          amplitudeDynamicRange: Number(
+            Math.max(
+              0,
+              Number(failedAudioAmplitudeStats?.peakAmplitude || 0) - Number(failedAudioAmplitudeStats?.meanAbsAmplitude || 0)
+            )
+          ),
           sampleRate: Number(failedAudioAmplitudeStats?.sampleRate || 0),
           channelCount: Number(failedAudioAmplitudeStats?.channelCount || 0),
           durationMs: Number(failedAudioAmplitudeStats?.durationMs || 0),

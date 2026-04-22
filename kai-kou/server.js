@@ -1,7 +1,9 @@
-import "dotenv/config";
+import "./backend/runtime/load-local-env.js";
 import cors from "cors";
 import express from "express";
 
+import registerWithCodeHandler from "./api/auth/register-with-code.js";
+import sendRegisterCodeHandler from "./api/auth/send-register-code.js";
 import questionsHandler from "./api/questions.js";
 import scoreHandler from "./api/score.js";
 import paymentCreateHandler from "./api/payment-create.js";
@@ -22,6 +24,10 @@ app.options("/api/debug/client-fetch", clientFetchDebugHandler);
 app.get("/api/debug/client-fetch", clientFetchDebugHandler);
 app.options("/api/debug/post-probe", postProbeDebugHandler);
 app.post("/api/debug/post-probe", postProbeDebugHandler);
+app.options("/api/auth/send-register-code", sendRegisterCodeHandler);
+app.post("/api/auth/send-register-code", sendRegisterCodeHandler);
+app.options("/api/auth/register-with-code", registerWithCodeHandler);
+app.post("/api/auth/register-with-code", registerWithCodeHandler);
 app.get("/api/questions", questionsHandler);
 app.get("/api/questions/:type", questionsHandler);
 app.post("/api/payment/create", paymentCreateHandler);

@@ -196,7 +196,9 @@ function resolveTemplateCategoryByImageType(imageType) {
 function normalizeQuestion(item) {
   const id = normalizeText(item?.id);
   const imageType = normalizeImageType(item?.imageType);
+  const keyPoints = toArray(item?.keyPoints).map((value) => normalizeText(value)).filter(Boolean);
   const highFrequencyWords = normalizeHighFrequencyWords(item?.highFrequencyWords || item?.vocab || item?.keyTerms);
+  const keyTerms = highFrequencyWords.map((entry) => entry.word).filter(Boolean);
   const rawDisplayTitle = normalizeText(item?.displayTitle);
   const topicTitle = buildQuestionTopicTitle({
     imageType,
@@ -211,6 +213,7 @@ function normalizeQuestion(item) {
     displayTitle,
     topicTitle,
     rawDisplayTitle,
+    content: normalizeText(item?.promptText || "Describe the image in detail."),
     promptText: normalizeText(item?.promptText || "Describe the image in detail."),
     imageUrl: normalizeText(item?.imageUrl),
     imageAlt: normalizeText(item?.imageAlt || displayTitle || id),
@@ -221,6 +224,8 @@ function normalizeQuestion(item) {
     isHighFrequency: Boolean(item?.isHighFrequency),
     isActive: item?.isActive !== false,
     recommendedTemplateIds: toArray(item?.recommendedTemplateIds).map((value) => normalizeText(value)).filter(Boolean),
+    keyPoints,
+    keyTerms,
     highFrequencyWords,
     visualFeatures: {
       hasTrend: Boolean(item?.visualFeatures?.hasTrend),
@@ -389,6 +394,8 @@ function cloneQuestion(item) {
     ...item,
     tags: [...item.tags],
     recommendedTemplateIds: [...item.recommendedTemplateIds],
+    keyPoints: [...toArray(item?.keyPoints)],
+    keyTerms: [...toArray(item?.keyTerms)],
     highFrequencyWords: toArray(item?.highFrequencyWords).map((word) => ({ ...word })),
     visualFeatures: { ...item.visualFeatures }
   };

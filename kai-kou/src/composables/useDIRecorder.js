@@ -9,6 +9,8 @@ export function useDIRecorder({ prepareSeconds = 25, recordingSeconds = 40 } = {
   const phase = ref("prepare");
   const stopResult = ref(null);
   const previewUrl = ref("");
+  const prepareStartedAtMs = ref(0);
+  const prepareDurationSec = ref(0);
   const recordingStartedAtMs = ref(0);
   const recordingDurationSec = ref(0);
 
@@ -54,6 +56,8 @@ export function useDIRecorder({ prepareSeconds = 25, recordingSeconds = 40 } = {
   function resetRoundState() {
     timer.stop();
     stopResult.value = null;
+    prepareStartedAtMs.value = 0;
+    prepareDurationSec.value = 0;
     recordingDurationSec.value = 0;
     recordingStartedAtMs.value = 0;
     revokePreviewUrl();
@@ -62,6 +66,7 @@ export function useDIRecorder({ prepareSeconds = 25, recordingSeconds = 40 } = {
   async function enterPreparePhase() {
     resetRoundState();
     phase.value = "prepare";
+    prepareStartedAtMs.value = Date.now();
     timer.start(prepareSeconds, () => {
       void startRecordingPhase();
     });
@@ -69,6 +74,12 @@ export function useDIRecorder({ prepareSeconds = 25, recordingSeconds = 40 } = {
 
   async function startRecordingPhase() {
     if (phase.value === "recording") return true;
+    if (phase.value === "prepare") {
+      const elapsedMs = prepareStartedAtMs.value
+        ? Math.max(0, Date.now() - Number(prepareStartedAtMs.value || 0))
+        : 0;
+      prepareDurationSec.value = Math.min(prepareSeconds, Math.max(0, Math.round(elapsedMs / 1000)));
+    }
     timer.stop();
     phase.value = "recording";
     recordingStartedAtMs.value = Date.now();
@@ -128,6 +139,7 @@ export function useDIRecorder({ prepareSeconds = 25, recordingSeconds = 40 } = {
     phase,
     stopResult,
     previewUrl,
+    prepareDurationSec,
     recordingDurationSec,
     timerLabel,
     timerRemaining,

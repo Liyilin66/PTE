@@ -1,10 +1,11 @@
 ﻿<script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import OrangeButton from "@/components/OrangeButton.vue";
 import { useUIStore } from "@/stores/ui";
 import { usePracticeStore } from "@/stores/practice";
+import { useActivePracticeTimer } from "@/composables/useActivePracticeTimer";
 import { supabase } from "@/lib/supabase";
 import {
   getDefaultWETemplate,
@@ -59,6 +60,7 @@ const postProbeDiagResult = ref(null);
 const postProbeDiagMessage = ref("");
 
 const body = ref("");
+const activePracticeTimer = useActivePracticeTimer();
 
 const wordCount = computed(() => (body.value.trim() ? body.value.trim().split(/\s+/).length : 0));
 const weResult = computed(() => latestReviewResult.value);
@@ -191,6 +193,7 @@ function applyQuestion(nextQuestion, { resetDraft = false } = {}) {
   reviewErrorMessage.value = "";
   reviewState.value = "idle";
   latestReviewResult.value = null;
+  activePracticeTimer.startSession();
 
   if (resetDraft) {
     body.value = "";
@@ -364,6 +367,7 @@ async function submitEssay() {
   submitSeq.value = currentSubmitSeq;
   activeSubmitSeq.value = currentSubmitSeq;
   isSubmitting.value = true;
+  const activeTimerSnapshot = activePracticeTimer.stopSession();
   reviewState.value = "reviewing";
   reviewErrorMessage.value = "";
   latestReviewResult.value = null;
@@ -377,7 +381,19 @@ async function submitEssay() {
       question.value?.id || "unknown",
       {
         requestId,
-        submitSeq: currentSubmitSeq
+        submitSeq: currentSubmitSeq,
+        logAnalytics: {
+          source: "computed_active_timer",
+          totalActiveSec: activeTimerSnapshot.activeSec,
+          breakdown: {
+            active_sec: activeTimerSnapshot.activeSec,
+            idle_paused_sec: activeTimerSnapshot.idlePausedSec
+          }
+        },
+        logPracticeTimestamps: {
+          startedAt: activeTimerSnapshot.startedAt,
+          completedAt: activeTimerSnapshot.completedAt
+        }
       }
     );
 
@@ -425,6 +441,9 @@ async function submitEssay() {
   } finally {
     if (currentSubmitSeq === activeSubmitSeq.value) {
       isSubmitting.value = false;
+    }
+    if (!questionLoading.value) {
+      activePracticeTimer.startSession();
     }
   }
 }
@@ -842,6 +861,10 @@ watch(
 
 onMounted(() => {
   loadQuestionByRoute();
+});
+
+onUnmounted(() => {
+  activePracticeTimer.stopSession({ finalize: false });
 });
 </script>
 

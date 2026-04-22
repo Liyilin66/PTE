@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import RecordingWave from "@/components/RecordingWave.vue";
+import { buildPracticeAnalytics } from "@/lib/practice-analytics";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useUIStore } from "@/stores/ui";
@@ -20,6 +21,7 @@ import {
   uploadRTSAudio,
   useRTSData
 } from "@/composables/useRTSData";
+import { getRTSFixedTemplateByQuestionIndex } from "@/data/rtsFixedPracticeTemplates";
 import { useRTSTimer } from "@/composables/useRTSTimer";
 
 const PHASE = {
@@ -27,14 +29,6 @@ const PHASE = {
   PREPARING: "preparing",
   RECORDING: "recording",
   PLAYBACK: "playback"
-};
-
-const RATING_LABELS = {
-  1: "语气不对",
-  2: "凑合",
-  3: "还不错",
-  4: "很自然",
-  5: "完美！"
 };
 
 const PLACE_HINTS = ["office", "restaurant", "meeting", "sydney", "melbourne", "brisbane", "city", "station", "airport", "home"];
@@ -108,7 +102,7 @@ const nextQuestionBusy = ref(false);
 const isAdvancingQuestion = ref(false);
 const submitPending = ref(false);
 const recordingFinalizePending = ref(false);
-const todayStats = ref({ practicedCount: 0, practiceMinutes: 0, averageRating: 0 });
+const todayStats = ref({ practicedCount: 0, practiceMinutes: 0 });
 const remoteRecentHistory = ref([]);
 const historyPlaybackStateMap = ref({});
 const lastPersistedPracticeKey = ref("");
@@ -231,7 +225,6 @@ const autoPlayHint = computed(() => {
   if (listeningStatus.value === "autoplay_waiting_ready") return "阅读与缓冲结束，正在等待音频就绪...";
   return "";
 });
-const selfRating = computed(() => Math.max(0, Number(practiceStore.rtsSession?.selfRating || 0)));
 const usedPhraseIds = computed(() => new Set(practiceStore.rtsSession?.usedPhraseIds || []));
 const hasUsableAudio = computed(() => isUsableAudioRecord(recordingStopResult.value));
 const hasPlaybackUsableAudio = computed(() => isPlaybackUsableRecord(recordingStopResult.value));
@@ -319,7 +312,14 @@ const topicMeta = computed(() => RTS_TOPIC_META[currentQuestion.value?.topic] ||
 const behaviorLabel = computed(() => `${currentQuestion.value?.key_points?.directions?.[0]?.head || "情境回应"}`.trim());
 const directions = computed(() => currentQuestion.value?.key_points?.directions || []);
 const tips = computed(() => currentQuestion.value?.key_points?.tips || []);
-const templateOpenerSegments = computed(() => splitTemplateSegments(currentQuestion.value?.key_points?.templateOpener));
+const currentTemplateMappingIndex = computed(() => {
+  const currentId = `${currentQuestion.value?.id || ""}`.trim();
+  if (!currentId) return -1;
+  return questionPool.value.findIndex((item) => `${item?.id || ""}`.trim() === currentId);
+});
+const currentFixedTemplate = computed(() => getRTSFixedTemplateByQuestionIndex(currentTemplateMappingIndex.value));
+const templateOpenerSegments = computed(() => splitTemplateSegments(currentFixedTemplate.value?.opener || ""));
+const templateFullText = computed(() => currentFixedTemplate.value?.full || "暂无固定示例（RTS答案映射缺失）。");
 const phraseGroups = computed(() => {
   const source = currentQuestion.value?.key_points?.phrases || {};
   return [
@@ -390,7 +390,6 @@ const historyItems = computed(() => {
       taskType: `${item?.taskType || item?.task_type || "RTS"}`.trim() || "RTS",
       questionId: `${item?.questionId || ""}`.trim(),
       durationSec: Number(item?.durationSec || 0),
-      rating: Number(item?.rating || 0),
       createdAt: `${item?.createdAt || ""}`.trim(),
       playbackUrl: resolveHistoryPlaybackUrl(item),
       blobUrl: "",
@@ -432,11 +431,6 @@ function goHome() {
 
 function goList() {
   router.push("/rts/list");
-}
-
-function renderStars(value) {
-  const rating = Math.max(0, Math.min(5, Math.round(Number(value || 0))));
-  return "★".repeat(rating).padEnd(5, "☆");
 }
 
 function formatDuration(seconds) {
@@ -546,10 +540,6 @@ function isPhraseUsed(group, index, text) {
 
 function togglePhrase(group, index, text) {
   practiceStore.toggleRTSUsedPhrase(phraseId(group, index, text));
-}
-
-function setRating(value) {
-  practiceStore.setRTSSelfRating(value);
 }
 
 function splitTemplateSegments(text) {
@@ -756,6 +746,11 @@ function buildResultRouteQuery({ logId = "", questionId = "" } = {}) {
   if (normalizedLogId) query.logId = normalizedLogId;
   if (normalizedQuestionId) query.id = normalizedQuestionId;
   return query;
+}
+
+function getRTSAnalyzingStartedAtStorageKey(logId = "") {
+  const normalizedLogId = `${logId || ""}`.trim();
+  return normalizedLogId ? `kai_kou_rts_analyzing_started_at_${normalizedLogId}` : "";
 }
 
 function getSafeLocalStorage() {
@@ -3636,7 +3631,7 @@ async function toggleFavorite() {
 async function loadTodayStatsPanel() {
   const userId = await resolveCurrentUserId();
   if (!userId) {
-    todayStats.value = { practicedCount: 0, practiceMinutes: 0, averageRating: 0 };
+    todayStats.value = { practicedCount: 0, practiceMinutes: 0 };
     remoteRecentHistory.value = [];
     historyPlaybackStateMap.value = {};
     return;
@@ -3652,8 +3647,7 @@ async function loadTodayStatsPanel() {
   });
   todayStats.value = {
     practicedCount: Number(stats.todayPracticed || 0),
-    practiceMinutes: Number(stats.todayMinutes || 0),
-    averageRating: Number(stats.averageRating || 0)
+    practiceMinutes: Number(stats.todayMinutes || 0)
   };
   remoteRecentHistory.value = Array.isArray(recentAudioHistory) ? recentAudioHistory : [];
   historyPlaybackStateMap.value = {};
@@ -3686,8 +3680,7 @@ function createPersistOutcome(overrides = {}) {
 async function persistCurrentPractice({
   stopResult: stopResultOverride = null,
   question: questionOverride = null,
-  durationSec: durationSecOverride = null,
-  rating: ratingOverride = null
+  durationSec: durationSecOverride = null
 } = {}) {
   const effectiveStopResult = stopResultOverride || recordingStopResult.value || null;
   const attemptId = Math.max(0, Number(effectiveStopResult?.attemptId || 0));
@@ -3702,8 +3695,7 @@ async function persistCurrentPractice({
   }
 
   const effectiveDurationSec = durationSecOverride == null ? Number(playbackDurationSec.value || 0) : Number(durationSecOverride || 0);
-  const effectiveRating = ratingOverride == null ? Number(selfRating.value || 0) : Number(ratingOverride || 0);
-  const persistKey = `${effectiveQuestion.id || ""}|${attemptId}|${effectiveRating}|${effectiveDurationSec}`;
+  const persistKey = `${effectiveQuestion.id || ""}|${attemptId}|${effectiveDurationSec}`;
   if (persistKey === lastPersistedPracticeKey.value) {
     const persistedMeta = lastPersistedPracticeMeta.value || {};
     const skippedOutcome = createPersistOutcome({
@@ -3760,6 +3752,20 @@ async function persistCurrentPractice({
   }
   const normalizedAttemptId = Math.max(0, Number(attemptId || 0));
   const transcriptText = `${effectiveStopResult?.transcript || recorder.transcript.value || ""}`.trim();
+  const promptPlaySec = Math.max(0, Math.round(Number(listeningTotal.value || 0)));
+  const recordSec = Math.max(0, Math.round(Number(effectiveDurationSec || 0)));
+  const analyticsSource = promptPlaySec > 0 && recordSec > 0
+    ? "computed_client_flow"
+    : "fallback_existing_duration";
+  const analytics = buildPracticeAnalytics({
+    source: analyticsSource,
+    totalActiveSec: promptPlaySec + recordSec,
+    breakdown: {
+      prompt_play_sec: promptPlaySec,
+      record_sec: recordSec,
+      speech_sec: recordSec
+    }
+  });
   const audioPayload = {
     ...audioMeta,
     attemptId: normalizedAttemptId,
@@ -3772,12 +3778,12 @@ async function persistCurrentPractice({
     question_id: effectiveQuestion.id,
     transcript: transcriptText,
     score_json: {
-      self_rating: effectiveRating,
       duration_sec: effectiveDurationSec,
       topic: effectiveQuestion.topic,
       tone: effectiveQuestion?.key_points?.tone || "",
       question_content: `${effectiveQuestion?.content || ""}`.trim(),
       question_meta: buildRTSQuestionMetaPayload(effectiveQuestion),
+      analytics,
       audio_signals: buildRTSAudioSignalsPayload(effectiveStopResult, effectiveDurationSec),
       ai_review_job: createPendingRTSAiReviewJob(),
       audio: audioPayload
@@ -4022,7 +4028,6 @@ async function applyQuestion(nextQuestion, { syncRoute = true, autoPlay = true }
     listeningLabel: initialListeningLabel,
     listeningRemaining: initialListeningRemaining,
     listeningTotal: initialListeningTotal,
-    selfRating: 0,
     usedPhraseIds: []
   });
 
@@ -4103,10 +4108,12 @@ async function handleSubmitPractice() {
   latestRTSAiReviewError.value = "";
   latestRTSAiReview.value = null;
   submitPending.value = true;
+  const analyzeStartedAtMs = Date.now();
   const analyzingPendingQuery = {
     ...buildResultRouteQuery({
       questionId
     }),
+    startedAt: String(analyzeStartedAtMs),
     pendingSubmit: "1"
   };
   void router.push({
@@ -4128,8 +4135,7 @@ async function handleSubmitPractice() {
     const persistOutcome = await persistCurrentPractice({
       stopResult: recordingStopResult.value,
       question: currentQuestion.value,
-      durationSec: Number(playbackDurationSec.value || 0),
-      rating: Number(selfRating.value || 0)
+      durationSec: Number(playbackDurationSec.value || 0)
     });
     const uploadOk = Boolean(persistOutcome?.uploadOk);
     const insertOk = Boolean(persistOutcome?.insertOk);
@@ -4165,6 +4171,7 @@ async function handleSubmitPractice() {
           ...buildResultRouteQuery({
             questionId
           }),
+          startedAt: String(analyzeStartedAtMs),
           submitFailed: "1"
         }
       }).catch(() => {});
@@ -4192,11 +4199,22 @@ async function handleSubmitPractice() {
     }
     const resultLogId = normalizeTextValue(persistOutcome?.savedLogId);
     if (resultLogId) {
+      if (typeof sessionStorage !== "undefined") {
+        try {
+          const storageKey = getRTSAnalyzingStartedAtStorageKey(resultLogId);
+          if (storageKey) {
+            sessionStorage.setItem(storageKey, String(analyzeStartedAtMs));
+          }
+        } catch {
+          // no-op
+        }
+      }
       void router.replace({
         path: "/rts/analyzing",
         query: buildResultRouteQuery({
           logId: resultLogId,
-          questionId
+          questionId,
+          startedAt: String(analyzeStartedAtMs)
         })
       }).catch(() => {});
       return;
@@ -4227,6 +4245,7 @@ async function handleSubmitPractice() {
         ...buildResultRouteQuery({
           questionId
         }),
+        startedAt: String(analyzeStartedAtMs),
         submitFailed: "1"
       }
     }).catch(() => {});
@@ -4688,21 +4707,6 @@ onUnmounted(() => {
                     {{ recordingUnavailableMessage }}
                   </p>
 
-                  <div>
-                    <p class="mb-2 text-xs text-[#8CA0C0]">自我评分：{{ RATING_LABELS[selfRating] || "请选择" }}</p>
-                    <div class="flex items-center gap-2">
-                      <button
-                        v-for="star in [1, 2, 3, 4, 5]"
-                        :key="star"
-                        type="button"
-                        class="text-xl transition-colors"
-                        :class="star <= selfRating ? 'text-[#E8845A]' : 'text-[#D3DCE9]'"
-                        @click="setRating(star)"
-                      >
-                        ★
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </template>
 
@@ -4799,7 +4803,7 @@ onUnmounted(() => {
               </button>
 
               <p v-if="showFullTemplate" class="rounded-[11px] border border-[#E8EDF5] bg-white p-3 text-sm leading-relaxed text-[#1E293B]">
-                {{ currentQuestion.key_points?.templateFull || "暂无完整示例。" }}
+                {{ templateFullText }}
               </p>
 
               <span class="inline-flex rounded-[20px] bg-[#EDF2FB] px-2.5 py-1 text-xs text-[#1B3A6B]">适用语气：{{ toneLabel }}</span>
@@ -4839,7 +4843,7 @@ onUnmounted(() => {
         <section class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <article class="rounded-[14px] border border-[#E8EDF5] bg-white p-4">
             <p class="text-sm font-semibold text-[#1B3A6B]">今日练习统计</p>
-            <div class="mt-3 grid grid-cols-3 gap-2">
+            <div class="mt-3 grid grid-cols-2 gap-2">
               <div class="rounded-[11px] bg-[#F8FAFD] px-3 py-2">
                 <p class="text-xs text-[#8CA0C0]">已练题数</p>
                 <p class="mt-1 text-lg font-semibold text-[#1E293B]">{{ todayStats.practicedCount }}</p>
@@ -4847,10 +4851,6 @@ onUnmounted(() => {
               <div class="rounded-[11px] bg-[#F8FAFD] px-3 py-2">
                 <p class="text-xs text-[#8CA0C0]">分钟</p>
                 <p class="mt-1 text-lg font-semibold text-[#1E293B]">{{ todayStats.practiceMinutes }}</p>
-              </div>
-              <div class="rounded-[11px] bg-[#F8FAFD] px-3 py-2">
-                <p class="text-xs text-[#8CA0C0]">平均评分</p>
-                <p class="mt-1 text-lg font-semibold text-[#1E293B]">{{ todayStats.averageRating || "0.0" }}</p>
               </div>
             </div>
           </article>
@@ -4864,7 +4864,6 @@ onUnmounted(() => {
               <article v-for="item in historyItems" :key="item.id" class="rounded-[11px] border border-[#E8EDF5] bg-[#F8FAFD] p-3">
                 <div class="flex items-center justify-between gap-2">
                   <p class="line-clamp-1 text-xs font-medium text-[#1E293B]">{{ item.summary }}</p>
-                  <p class="text-xs text-[#1B3A6B]">{{ renderStars(item.rating) }}</p>
                 </div>
                 <p class="mt-1 text-xs text-[#8CA0C0]">{{ formatDateTime(item.createdAt) }} · {{ formatDuration(item.durationSec) }}</p>
                 <div class="mt-2">

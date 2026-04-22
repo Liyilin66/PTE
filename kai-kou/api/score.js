@@ -1,4 +1,10 @@
 ﻿import { createClient } from "@supabase/supabase-js";
+import { buildDIPrompt, buildDIResponseJsonSchema } from "../backend/di/di-prompt.js";
+import {
+  buildDIAiFallbackResult,
+  finalizeDIScorePayload,
+  normalizeDIFallbackReasonCode
+} from "../backend/di/normalize-di-score.js";
 import { generateScoreTextWithFallback } from "../backend/llm/score-llm-service.js";
 import { getGroqApiKeyFromEnv } from "../backend/llm/providers/groq.js";
 import { buildRTSPrompt, buildRTSResponseJsonSchema } from "../backend/rts/rts-prompt.js";
@@ -75,6 +81,12 @@ export default async function handler(req, res) {
   const safeQuestionContent = typeof questionContent === "string" ? questionContent : "";
   const trimmedTranscript = safeTranscript.trim();
   const weFormAnalysis = normalizedTaskType === "WE" ? analyzeWEEssayForm(safeTranscript) : null;
+  const diQuestionMeta = normalizedTaskType === "DI"
+    ? normalizeDIQuestionMeta(req.body?.question_meta)
+    : null;
+  const diAudioSignals = normalizedTaskType === "DI"
+    ? normalizeDIAudioSignals(req.body?.audio_signals)
+    : null;
   const rtsQuestionMeta = normalizedTaskType === "RTS"
     ? normalizeRTSQuestionMeta(req.body?.question_meta)
     : null;
@@ -123,6 +135,22 @@ export default async function handler(req, res) {
       });
     }
 
+    if (normalizedTaskType === "DI") {
+      return res.status(200).json({
+        ...buildDIAiFallbackResult({
+          transcript: safeTranscript,
+          questionMeta: diQuestionMeta,
+          audioSignals: diAudioSignals,
+          providerUsed: "none",
+          fallbackReason: "transcript_empty",
+          errorStage: "precheck_transcript",
+          rawErrorType: "transcript_empty",
+          reasonCode: "transcript_empty"
+        }),
+        request_id: requestId
+      });
+    }
+
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
@@ -132,7 +160,13 @@ export default async function handler(req, res) {
     });
   }
 
-  if (normalizedTaskType !== "RA" && normalizedTaskType !== "WE" && normalizedTaskType !== "RTS" && trimmedTranscript.length < 3) {
+  if (
+    normalizedTaskType !== "RA"
+    && normalizedTaskType !== "WE"
+    && normalizedTaskType !== "RTS"
+    && normalizedTaskType !== "DI"
+    && trimmedTranscript.length < 3
+  ) {
     return res.status(400).json({
       error: "transcript_too_short",
       scores: { pronunciation: 0, fluency: 0, content: 0 },
@@ -182,6 +216,28 @@ export default async function handler(req, res) {
       });
     }
 
+    if (normalizedTaskType === "DI") {
+      const diPrecheckReasonCode = resolveDIPrecheckReasonCode({
+        questionMeta: diQuestionMeta,
+        audioSignals: diAudioSignals
+      });
+      if (diPrecheckReasonCode) {
+        return res.status(200).json({
+          ...buildDIAiFallbackResult({
+            transcript: safeTranscript,
+            questionMeta: diQuestionMeta,
+            audioSignals: diAudioSignals,
+            providerUsed: "none",
+            fallbackReason: diPrecheckReasonCode,
+            errorStage: "precheck_input",
+            rawErrorType: diPrecheckReasonCode,
+            reasonCode: diPrecheckReasonCode
+          }),
+          request_id: requestId
+        });
+      }
+    }
+
     const hasGeminiApiKey = hasConfiguredGeminiApiKey();
     const hasGroqApiKey = hasConfiguredGroqApiKey();
     if (!hasGeminiApiKey && !hasGroqApiKey) {
@@ -220,6 +276,24 @@ export default async function handler(req, res) {
         );
       }
 
+      if (normalizedTaskType === "DI") {
+        return res.status(200).json(
+          {
+            ...buildDIAiFallbackResult({
+              transcript: safeTranscript,
+              questionMeta: diQuestionMeta,
+              audioSignals: diAudioSignals,
+              providerUsed: "none",
+              fallbackReason: "llm_api_keys_missing",
+              errorStage: "precheck_missing_all_keys",
+              rawErrorType: "llm_api_keys_missing",
+              reasonCode: "llm_api_keys_missing"
+            }),
+            request_id: requestId
+          }
+        );
+      }
+
       return res.status(500).json({
         error: "missing_api_key",
         scores: { pronunciation: 60, fluency: 60, content: 60 },
@@ -235,6 +309,8 @@ export default async function handler(req, res) {
       safeQuestionContent,
       weFormAnalysis,
       {
+        diQuestionMeta,
+        diAudioSignals,
         questionMeta: rtsQuestionMeta,
         audioSignals: rtsAudioSignals
       }
@@ -267,6 +343,8 @@ export default async function handler(req, res) {
         transcript: safeTranscript,
         questionContent: safeQuestionContent,
         weFormAnalysis,
+        diQuestionMeta,
+        diAudioSignals,
         rtsQuestionMeta,
         rtsAudioSignals,
         providerUsed: llmResult?.provider_used || "gemini",
@@ -323,7 +401,7 @@ export default async function handler(req, res) {
       fallback_reason: fallbackReason,
       raw_error_type: rawErrorType,
       error_stage: errorStage,
-      response_status: (normalizedTaskType === "WE" || normalizedTaskType === "RTS") ? 200 : 500,
+      response_status: (normalizedTaskType === "WE" || normalizedTaskType === "RTS" || normalizedTaskType === "DI") ? 200 : 500,
       provider_attempts: providerAttempts,
       latency_total_ms: latency.total_ms,
       latency_primary_ms: latency.primary_ms,
@@ -359,6 +437,24 @@ export default async function handler(req, res) {
             errorStage,
             rawErrorType,
             reasonCodes: ["ai_review_unavailable"]
+          }),
+          request_id: requestId
+        }
+      );
+    }
+
+    if (normalizedTaskType === "DI") {
+      return res.status(200).json(
+        {
+          ...buildDIAiFallbackResult({
+            transcript: safeTranscript,
+            questionMeta: diQuestionMeta,
+            audioSignals: diAudioSignals,
+            providerUsed,
+            fallbackReason,
+            errorStage,
+            rawErrorType,
+            reasonCode: fallbackReason
           }),
           request_id: requestId
         }
@@ -478,6 +574,174 @@ function normalizeRTSQuestionMeta(rawValue) {
   };
 }
 
+function normalizeDIQuestionMeta(rawValue) {
+  const source = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
+    ? rawValue
+    : {};
+  return {
+    question_id: `${source?.question_id || source?.questionId || ""}`.trim(),
+    title: `${source?.title || source?.topic || ""}`.trim(),
+    question_content: `${source?.question_content || source?.questionContent || ""}`.trim(),
+    image_type: `${source?.image_type || source?.imageType || ""}`.trim().toLowerCase(),
+    metadata_quality: `${source?.metadata_quality || source?.metadataQuality || ""}`.trim().toLowerCase(),
+    key_points: Array.isArray(source?.key_points)
+      ? source.key_points.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 6)
+      : [],
+    key_terms: Array.isArray(source?.key_terms)
+      ? source.key_terms.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 8)
+      : [],
+    key_elements: Array.isArray(source?.key_elements)
+      ? source.key_elements.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 6)
+      : [],
+    relations: Array.isArray(source?.relations)
+      ? source.relations.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 6)
+      : [],
+    implications_or_conclusion: Array.isArray(source?.implications_or_conclusion)
+      ? source.implications_or_conclusion.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 4)
+      : [],
+    numbers_or_extremes: Array.isArray(source?.numbers_or_extremes)
+      ? source.numbers_or_extremes.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 6)
+      : [],
+    sequence_or_trend: Array.isArray(source?.sequence_or_trend)
+      ? source.sequence_or_trend.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 5)
+      : [],
+    comparison_axes: Array.isArray(source?.comparison_axes)
+      ? source.comparison_axes.map((item) => `${item || ""}`.trim()).filter(Boolean).slice(0, 5)
+      : [],
+    visual_features: {
+      has_trend: Boolean(source?.visual_features?.has_trend ?? source?.visualFeatures?.hasTrend),
+      has_comparison: Boolean(source?.visual_features?.has_comparison ?? source?.visualFeatures?.hasComparison),
+      has_extreme: Boolean(source?.visual_features?.has_extreme ?? source?.visualFeatures?.hasExtreme),
+      has_numbers: Boolean(source?.visual_features?.has_numbers ?? source?.visualFeatures?.hasNumbers)
+    }
+  };
+}
+
+function normalizeDIAudioSignals(rawValue) {
+  const source = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
+    ? rawValue
+    : {};
+  const hasUsableAudioRaw = source?.has_usable_audio ?? source?.hasUsableAudio;
+  const playbackUsableRaw = source?.playback_usable ?? source?.playbackUsable;
+  const durationSec = Math.max(0, Math.round(Number(source?.duration_sec ?? source?.durationSec ?? 0)));
+  const transcriptWordCount = Math.max(
+    0,
+    Math.round(Number(source?.transcript_word_count ?? source?.transcriptWordCount ?? 0))
+  );
+  return {
+    duration_sec: durationSec,
+    duration_ms: Math.max(0, Math.round(Number(source?.duration_ms ?? source?.durationMs ?? 0))),
+    non_silent_frame_ratio: Math.max(
+      0,
+      Math.min(1, Number(source?.non_silent_frame_ratio ?? source?.nonSilentFrameRatio ?? 0))
+    ),
+    silence_frame_ratio: Math.max(
+      0,
+      Math.min(
+        1,
+        Number(
+          source?.silence_frame_ratio
+          ?? source?.silenceFrameRatio
+          ?? (1 - Number(source?.non_silent_frame_ratio ?? source?.nonSilentFrameRatio ?? 0))
+        )
+      )
+    ),
+    peak_amplitude: Math.max(0, Math.min(1, Number(source?.peak_amplitude ?? source?.peakAmplitude ?? 0))),
+    rms_amplitude: Math.max(0, Math.min(1, Number(source?.rms_amplitude ?? source?.rmsAmplitude ?? 0))),
+    mean_abs_amplitude: Math.max(0, Math.min(1, Number(source?.mean_abs_amplitude ?? source?.meanAbsAmplitude ?? 0))),
+    amplitude_dynamic_range: Math.max(
+      0,
+      Math.min(1, Number(source?.amplitude_dynamic_range ?? source?.amplitudeDynamicRange ?? 0))
+    ),
+    transcript_word_count: transcriptWordCount,
+    speech_rate_wps: Math.max(
+      0,
+      Math.min(
+        8,
+        Number(
+          source?.speech_rate_wps
+          ?? source?.speechRateWps
+          ?? (durationSec > 0 ? transcriptWordCount / Math.max(durationSec, 1) : 0)
+        )
+      )
+    ),
+    sample_rate: Math.max(0, Math.round(Number(source?.sample_rate ?? source?.sampleRate ?? 0))),
+    channel_count: Math.max(0, Math.round(Number(source?.channel_count ?? source?.channelCount ?? 0))),
+    final_usable_reason: `${source?.final_usable_reason || source?.finalUsableReason || ""}`.trim(),
+    has_usable_audio: hasUsableAudioRaw == null ? true : Boolean(hasUsableAudioRaw),
+    playback_usable: playbackUsableRaw == null ? true : Boolean(playbackUsableRaw)
+  };
+}
+
+function resolveDIPrecheckReasonCode({ questionMeta = null, audioSignals = null } = {}) {
+  if (audioSignals?.has_usable_audio === false || audioSignals?.playback_usable === false) {
+    return "audio_not_usable";
+  }
+
+  const hasTitle = Boolean(`${questionMeta?.title || ""}`.trim());
+  const hasQuestionContent = Boolean(`${questionMeta?.question_content || ""}`.trim());
+  const hasImageType = Boolean(`${questionMeta?.image_type || ""}`.trim());
+  const keyPointCount = Array.isArray(questionMeta?.key_points) ? questionMeta.key_points.filter(Boolean).length : 0;
+  const keyTermCount = Array.isArray(questionMeta?.key_terms) ? questionMeta.key_terms.filter(Boolean).length : 0;
+  const keyElementCount = Array.isArray(questionMeta?.key_elements) ? questionMeta.key_elements.filter(Boolean).length : 0;
+  const relationCount = Array.isArray(questionMeta?.relations) ? questionMeta.relations.filter(Boolean).length : 0;
+  const implicationCount = Array.isArray(questionMeta?.implications_or_conclusion)
+    ? questionMeta.implications_or_conclusion.filter(Boolean).length
+    : 0;
+  const numbersCount = Array.isArray(questionMeta?.numbers_or_extremes)
+    ? questionMeta.numbers_or_extremes.filter(Boolean).length
+    : 0;
+  const sequenceCount = Array.isArray(questionMeta?.sequence_or_trend)
+    ? questionMeta.sequence_or_trend.filter(Boolean).length
+    : 0;
+  const comparisonAxisCount = Array.isArray(questionMeta?.comparison_axes)
+    ? questionMeta.comparison_axes.filter(Boolean).length
+    : 0;
+  const hasVisualFeatures = Boolean(
+    questionMeta?.visual_features?.has_trend
+    || questionMeta?.visual_features?.has_comparison
+    || questionMeta?.visual_features?.has_extreme
+    || questionMeta?.visual_features?.has_numbers
+  );
+
+  if (
+    !hasTitle
+    && !hasQuestionContent
+    && !hasImageType
+    && keyPointCount === 0
+    && keyTermCount === 0
+    && keyElementCount === 0
+    && relationCount === 0
+    && implicationCount === 0
+    && numbersCount === 0
+    && sequenceCount === 0
+    && comparisonAxisCount === 0
+    && !hasVisualFeatures
+  ) {
+    return "metadata_insufficient";
+  }
+
+  const metadataQuality = `${questionMeta?.metadata_quality || ""}`.trim().toLowerCase();
+  if (
+    metadataQuality === "limited"
+    && !hasTitle
+    && !hasQuestionContent
+    && keyPointCount === 0
+    && keyTermCount < 2
+    && keyElementCount === 0
+    && relationCount === 0
+    && implicationCount === 0
+    && numbersCount === 0
+    && sequenceCount === 0
+    && comparisonAxisCount === 0
+    && !hasVisualFeatures
+  ) {
+    return "metadata_insufficient";
+  }
+
+  return "";
+}
+
 function normalizeRTSAudioSignals(rawValue) {
   const source = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue)
     ? rawValue
@@ -508,6 +772,9 @@ function hasConfiguredGroqApiKey() {
 }
 
 function normalizeFallbackReason(fallbackReason, rawErrorType, taskType = "") {
+  if (taskType === "DI") {
+    return normalizeDIFallbackReasonCode(fallbackReason, rawErrorType);
+  }
   if (taskType === "RTS") {
     return normalizeRTSFallbackReasonCode(fallbackReason, rawErrorType);
   }
@@ -631,6 +898,16 @@ function normalizeResult(payload, options = {}) {
       questionContent: options?.questionContent || "",
       questionMeta: options?.rtsQuestionMeta || null,
       audioSignals: options?.rtsAudioSignals || null,
+      providerUsed: options?.providerUsed || "gemini",
+      fallbackReason: options?.fallbackReason ?? null
+    });
+  }
+
+  if (options?.taskType === "DI") {
+    return finalizeDIScorePayload(payload, {
+      transcript: options?.transcript || "",
+      questionMeta: options?.diQuestionMeta || null,
+      audioSignals: options?.diAudioSignals || null,
       providerUsed: options?.providerUsed || "gemini",
       fallbackReason: options?.fallbackReason ?? null
     });
@@ -806,11 +1083,19 @@ function clampScore(value) {
 }
 
 function getStructuredOutputConfig(taskType) {
-  if (taskType !== "RTS") return null;
-  return {
-    responseMimeType: "application/json",
-    responseJsonSchema: buildRTSResponseJsonSchema()
-  };
+  if (taskType === "RTS") {
+    return {
+      responseMimeType: "application/json",
+      responseJsonSchema: buildRTSResponseJsonSchema()
+    };
+  }
+  if (taskType === "DI") {
+    return {
+      responseMimeType: "application/json",
+      responseJsonSchema: buildDIResponseJsonSchema()
+    };
+  }
+  return null;
 }
 
 function buildPrompt(taskType, transcript, questionContent, weFormAnalysis, options = {}) {
@@ -830,6 +1115,15 @@ function buildPrompt(taskType, transcript, questionContent, weFormAnalysis, opti
       questionContent: question,
       questionMeta: options?.questionMeta || null,
       audioSignals: options?.audioSignals || null
+    });
+  }
+
+  if (taskType === "DI") {
+    return buildDIPrompt({
+      transcript,
+      questionContent: question,
+      questionMeta: options?.diQuestionMeta || null,
+      audioSignals: options?.diAudioSignals || null
     });
   }
 

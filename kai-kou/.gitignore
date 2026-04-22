@@ -28,7 +28,13 @@ db/*.db-*
 *.sw?
 .vercel
 .omx/
+.playwright-cli/*.png
 .playwright-cli/*.yml
+output/*.tmp
+output/*.json
+output/*.jsonl
+output/*.txt
+output/*.js
 output/playwright/results/*.json
 output/playwright/*.log
 output/playwright/*.err.log

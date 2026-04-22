@@ -185,8 +185,18 @@ export function hasDIAudio(logOrAudioMeta) {
 
 export async function uploadDIAudio({ userId, questionId, blob } = {}) {
   const normalizedUserId = normalizeText(userId);
-  if (!normalizedUserId) return null;
-  if (!blob || Number(blob?.size || 0) <= 0) return null;
+  if (!normalizedUserId) {
+    return buildUploadFailureResult({
+      reasonCode: "auth_session_failed",
+      errorMessage: "missing_user_id"
+    });
+  }
+  if (!blob || Number(blob?.size || 0) <= 0) {
+    return buildUploadFailureResult({
+      reasonCode: "audio_upload_failed",
+      errorMessage: "missing_audio_blob"
+    });
+  }
 
   const mimeType = normalizeMimeType(blob?.type);
   const ext = getAudioExtByMimeType(mimeType);
@@ -207,7 +217,10 @@ export async function uploadDIAudio({ userId, questionId, blob } = {}) {
         mimeType,
         size: Number(blob?.size || 0)
       });
-      return null;
+      return buildUploadFailureResult({
+        reasonCode: normalizeDIAudioUploadFailureReason(error),
+        errorMessage: normalizeText(error?.message || error?.error || error)
+      });
     }
 
     return {
@@ -223,8 +236,51 @@ export async function uploadDIAudio({ userId, questionId, blob } = {}) {
       mimeType,
       size: Number(blob?.size || 0)
     });
-    return null;
+    return buildUploadFailureResult({
+      reasonCode: normalizeDIAudioUploadFailureReason(error),
+      errorMessage: normalizeText(error?.message || error)
+    });
   }
+}
+
+function buildUploadFailureResult({ reasonCode = "", errorMessage = "" } = {}) {
+  return {
+    bucket: "",
+    path: "",
+    mimeType: "",
+    size: 0,
+    uploadedAt: "",
+    reasonCode: normalizeText(reasonCode),
+    errorMessage: normalizeText(errorMessage)
+  };
+}
+
+function normalizeDIAudioUploadFailureReason(error) {
+  const message = normalizeText(error?.message || error?.error || error).toLowerCase();
+  if (!message) return "audio_upload_failed";
+  if (
+    message.includes("auth")
+    || message.includes("token")
+    || message.includes("jwt")
+    || message.includes("session")
+    || message.includes("unauthorized")
+  ) {
+    return "auth_session_failed";
+  }
+  if (
+    message.includes("row-level security")
+    || message.includes("policy")
+    || message.includes("permission")
+    || message.includes("forbidden")
+    || message.includes("not allowed")
+    || message.includes("access denied")
+  ) {
+    return "storage_policy_failed";
+  }
+  if (message.includes("bucket") || message.includes("not found")) {
+    return "storage_bucket_failed";
+  }
+  return "audio_upload_failed";
 }
 
 export async function getDIPlaybackUrl(logOrAudioMeta, expiresIn = DEFAULT_SIGNED_URL_TTL_SECONDS) {

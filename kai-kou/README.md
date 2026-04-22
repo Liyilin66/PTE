@@ -13,7 +13,13 @@ If you see `Score API failed with status 404`, it usually means `/api/score` was
 
 ## Environment Variables
 
-Create `.env` in project root:
+Create one local env file in project root, for example `.env.local` or `.env.development.local`.
+
+- Vite frontend reads public `VITE_*` variables from these files.
+- The local Node API server (`npm run dev:api`) now reads `.env`, `.env.local`, `.env.development`, and `.env.development.local`.
+- Vercel serverless API routes read `process.env` from the Vercel project settings.
+
+Example:
 
 ```bash
 GEMINI_API_KEY=your_real_gemini_api_key
@@ -27,6 +33,14 @@ VITE_APP_URL=http://localhost:5173
 VITE_API_BASE=
 VITE_DEV_API_TARGET=http://localhost:3000
 API_PORT=3000
+
+# Server-only register / verification env
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_real_supabase_service_role_key
+BREVO_API_KEY=your_real_brevo_api_key
+REGISTER_OTP_FROM_EMAIL=noreply@your-domain.com
+# Optional, defaults to "开口"
+REGISTER_OTP_FROM_NAME=开口
 ```
 
 You can use `.env.example` as a template.
@@ -87,6 +101,18 @@ Compatibility note:
 
 - `GROP_API_KEY` is a legacy typo and is only kept for compatibility.
 - New setup should always use `GROQ_API_KEY`.
+
+### Register / Email Verification Environment Variables
+
+Server-side only:
+
+- `SUPABASE_URL`: required by `POST /api/auth/send-register-code` and `POST /api/auth/register-with-code`
+- `SUPABASE_SERVICE_ROLE_KEY`: required by `POST /api/auth/send-register-code` and `POST /api/auth/register-with-code`
+- `BREVO_API_KEY`: required by `POST /api/auth/send-register-code`
+- `REGISTER_OTP_FROM_EMAIL`: required by `POST /api/auth/send-register-code`
+- `REGISTER_OTP_FROM_NAME`: optional display name for the sender, defaults to `开口`
+
+Do not put `SUPABASE_SERVICE_ROLE_KEY`, `BREVO_API_KEY`, or `REGISTER_OTP_FROM_EMAIL` into any `VITE_*` variable.
 
 ### Local Verification
 
@@ -283,6 +309,11 @@ vercel
 - `LLM_FALLBACK_TIMEOUT_MS` (Production + Preview + Development)
 - `VITE_SUPABASE_URL` (Production + Preview + Development)
 - `VITE_SUPABASE_ANON_KEY` (Production + Preview + Development)
+- `SUPABASE_URL` (Production + Preview + Development)
+- `SUPABASE_SERVICE_ROLE_KEY` (Production + Preview + Development)
+- `BREVO_API_KEY` (Production + Preview + Development)
+- `REGISTER_OTP_FROM_EMAIL` (Production + Preview + Development)
+- `REGISTER_OTP_FROM_NAME` (optional, Production + Preview + Development)
 
 1. Redeploy after saving env vars.
 

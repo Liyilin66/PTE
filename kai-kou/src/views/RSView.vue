@@ -28,6 +28,8 @@ const tts = useTTS();
 const phase = ref("playing");
 const showAnswer = ref(false);
 const recordingSeconds = ref(0);
+const playbackStartedAtMs = ref(0);
+const playbackDurationSec = ref(0);
 const questionIndex = ref(1);
 const questionLoading = ref(true);
 const question = ref({ ...defaultQuestion });
@@ -128,13 +130,21 @@ function playRealAudio(url, onEnd) {
 }
 
 function playQuestionAudio(onEnd) {
+  playbackStartedAtMs.value = Date.now();
+  const finish = () => {
+    const elapsedMs = playbackStartedAtMs.value
+      ? Math.max(0, Date.now() - Number(playbackStartedAtMs.value || 0))
+      : 0;
+    playbackDurationSec.value = Math.max(0, Math.round(elapsedMs / 1000));
+    if (onEnd) onEnd();
+  };
   const realAudioUrl = getQuestionAudioUrl();
   if (realAudioUrl) {
-    playRealAudio(realAudioUrl, onEnd);
+    playRealAudio(realAudioUrl, finish);
     return;
   }
 
-  playTextToSpeech(onEnd);
+  playTextToSpeech(finish);
 }
 
 function startQuestionPlayback(delay = 700) {
@@ -146,6 +156,7 @@ function startQuestionPlayback(delay = 700) {
   tts.stop();
 
   recordingSeconds.value = 0;
+  playbackDurationSec.value = 0;
   showAnswer.value = false;
   phase.value = "playing";
   hasFinalizedRecording = false;
@@ -201,7 +212,31 @@ async function handleSubmit() {
       return;
     }
 
-    const scoreResult = await practiceStore.submitScore("RS", transcript, getQuestionContent(), question.value?.id || "unknown");
+    const recordFromPlayable = Number(stopResult?.playableDurationSec || 0);
+    const recordFromDurationMs = Number(stopResult?.durationMs || 0);
+    const recordSec = Number.isFinite(recordFromPlayable) && recordFromPlayable > 0
+      ? Math.max(0, Math.round(recordFromPlayable))
+      : Number.isFinite(recordFromDurationMs) && recordFromDurationMs > 0
+        ? Math.max(0, Math.round(recordFromDurationMs / 1000))
+        : Math.max(0, Math.round(Number(recordingSeconds.value || 0)));
+    const playSec = Math.max(0, Math.round(Number(playbackDurationSec.value || 0)));
+    const scoreResult = await practiceStore.submitScore(
+      "RS",
+      transcript,
+      getQuestionContent(),
+      question.value?.id || "unknown",
+      {
+        logAnalytics: {
+          source: playSec > 0 && recordSec > 0 ? "computed_client_flow" : "fallback_existing_duration",
+          totalActiveSec: playSec + recordSec,
+          breakdown: {
+            play_sec: playSec,
+            record_sec: recordSec,
+            speech_sec: recordSec
+          }
+        }
+      }
+    );
 
     if (!unmounted && practiceStore.phase === "done" && scoreResult && !scoreResult.error) {
       router.push("/rs/result");

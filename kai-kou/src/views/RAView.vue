@@ -57,6 +57,8 @@ const readingRhythmHint = computed(() => {
 });
 
 const recordingSeconds = ref(0);
+const prepareStartedAtMs = ref(0);
+const prepareElapsedSec = ref(0);
 const hasFinalizedRecording = ref(false);
 const finalizedStopResult = ref(null);
 const finalizedTranscript = ref("");
@@ -569,6 +571,8 @@ function clearFinalizedRecordingState() {
 
 function clearAttemptScopedUIState() {
   clearFinalizedRecordingState();
+  prepareStartedAtMs.value = 0;
+  prepareElapsedSec.value = 0;
   startFailureMessage.value = "";
   if (recorder?.error?.value) {
     recorder.error.value = null;
@@ -768,6 +772,7 @@ async function loadQuestion({ incrementIndex = false } = {}) {
 function startPreparing() {
   isSubmitting.value = false;
   clearAttemptScopedUIState();
+  prepareStartedAtMs.value = getNowMs();
   practiceStore.setPhase("preparing");
   timer.start(30, startRecording);
 }
@@ -777,6 +782,12 @@ async function startRecording() {
   isStartingRecording.value = true;
 
   try {
+    if (phase.value === "preparing") {
+      const elapsedPrepareMs = prepareStartedAtMs.value
+        ? Math.max(0, getNowMs() - Number(prepareStartedAtMs.value || 0))
+        : 0;
+      prepareElapsedSec.value = Math.min(30, Math.max(0, Math.round(elapsedPrepareMs / 1000)));
+    }
     if (phase.value === "preparing") {
       timer.stop();
     }
@@ -953,11 +964,42 @@ async function submitEvaluation() {
     practiceStore.setPhase("processing");
     const transcript = `${finalizedTranscript.value || recorder.transcript.value || ""}`.trim();
     const finalBlob = finalizedStopResult.value?.blob || recorder.audioBlob.value || null;
+    const recordFromPlayable = Number(finalizedStopResult.value?.playableDurationSec || 0);
+    const recordFromDurationMs = Number(finalizedStopResult.value?.durationMs || 0);
+    const recordSec = Number.isFinite(recordFromPlayable) && recordFromPlayable > 0
+      ? Math.max(0, Math.round(recordFromPlayable))
+      : Number.isFinite(recordFromDurationMs) && recordFromDurationMs > 0
+        ? Math.max(0, Math.round(recordFromDurationMs / 1000))
+        : Math.max(0, Math.round(Number(recordingSeconds.value || 0)));
+    const analyticsSource = (
+      (Number.isFinite(recordFromPlayable) && recordFromPlayable > 0)
+      || (Number.isFinite(recordFromDurationMs) && recordFromDurationMs > 0)
+    )
+      ? "computed_client_flow"
+      : "fallback_existing_duration";
+    const normalizedPrepareSec = Math.max(0, Math.round(Number(prepareElapsedSec.value || 0)));
     practiceStore.setTranscript(transcript);
     practiceStore.setAudioBlob(finalBlob);
 
     const scoreStartedAt = getNowMs();
-    const scoreResult = await practiceStore.submitScore("RA", transcript, question.value?.content || "", question.value?.id || "unknown");
+    const scoreResult = await practiceStore.submitScore(
+      "RA",
+      transcript,
+      question.value?.content || "",
+      question.value?.id || "unknown",
+      {
+        logAnalytics: {
+          source: analyticsSource,
+          totalActiveSec: normalizedPrepareSec + recordSec,
+          breakdown: {
+            prepare_sec: normalizedPrepareSec,
+            record_sec: recordSec,
+            speech_sec: recordSec,
+            total_sec: normalizedPrepareSec + recordSec
+          }
+        }
+      }
+    );
     const scoreApiMs = Number(scoreResult?.meta?.scoreApiMs ?? getElapsedMs(scoreStartedAt));
     const scoreErrorCode = `${scoreResult?.meta?.scoreErrorCode || ""}`;
     logRAChain("score_done", {

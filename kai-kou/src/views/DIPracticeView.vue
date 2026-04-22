@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useUIStore } from "@/stores/ui";
 import { useRecorder } from "@/composables/useRecorder";
 import { useTimer } from "@/composables/useTimer";
+import { buildPracticeAnalytics } from "@/lib/practice-analytics";
 import { supabase } from "@/lib/supabase";
 import {
   getDIQuestionById,
@@ -54,6 +55,7 @@ const firstTranscriptMs = ref(null);
 const speechDetectionAvailable = ref(false);
 const openedIn5s = ref(null);
 const openDetectionMode = ref("unavailable");
+const prepareDurationSec = ref(0);
 const speechDurationSec = ref(0);
 const roundTranscript = ref("");
 const nextSuggestion = ref("先完成本轮录音，再看下一步建议。");
@@ -236,6 +238,7 @@ function resetRoundStates() {
   speechDetectionAvailable.value = false;
   openedIn5s.value = null;
   openDetectionMode.value = "unavailable";
+  prepareDurationSec.value = 0;
   speechDurationSec.value = 0;
   roundTranscript.value = "";
   nextSuggestion.value = "先完成本轮录音，再看下一步建议。";
@@ -350,6 +353,10 @@ async function startRound() {
 
 async function beginRecording() {
   if (phase.value === "recording" || phase.value === "processing") return;
+  prepareDurationSec.value = Math.min(
+    PREPARE_SECONDS,
+    Math.max(0, Math.round(PREPARE_SECONDS - Number(timer.remaining.value || 0)))
+  );
   phase.value = "recording";
   recordingStartedAt.value = nowMs();
   firstTranscriptMs.value = null;
@@ -480,6 +487,19 @@ async function persistCurrentRound() {
     const normalizedFluency = Math.max(1, Math.min(5, Math.round(Number(selfFluencyRating.value || 0))));
     const normalizedStructure = Math.max(1, Math.min(5, Math.round(Number(selfStructureRating.value || 0))));
     const normalizedFreezeCount = Math.max(0, Math.round(Number(selfFreezeCount.value || 0)));
+    const speechSec = Math.max(
+      0,
+      Math.round(Number(roundStopResult.value?.playableDurationSec || speechDurationSec.value || 0))
+    );
+    const analytics = buildPracticeAnalytics({
+      source: "computed_client_flow",
+      totalActiveSec: Number(prepareDurationSec.value || 0) + speechSec,
+      breakdown: {
+        prepare_sec: Number(prepareDurationSec.value || 0),
+        record_sec: speechSec,
+        speech_sec: speechSec
+      }
+    });
 
     const payload = {
       user_id: session.user.id,
@@ -512,6 +532,7 @@ async function persistCurrentRound() {
           self_structure_rating: normalizedStructure,
           self_freeze_count: normalizedFreezeCount
         },
+        analytics,
         timestamps: {
           practice_started_at: startedAtIso,
           practice_finished_at: finishedAtIso

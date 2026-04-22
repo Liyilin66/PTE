@@ -21,10 +21,106 @@ const RTS_CONTENT_BASE_FLOOR = 45;
 const RTS_CONTENT_MEDIUM_COVERAGE_FLOOR = 65;
 const RTS_CONTENT_HIGH_COVERAGE_FLOOR = 70;
 const RTS_CONTENT_VERY_HIGH_COVERAGE_FLOOR = 78;
+const RTS_CONTENT_WEAK_RELATED_MIN = 30;
+const RTS_CONTENT_WEAK_RELATED_MAX = 44;
+const RTS_CONTENT_OFF_TOPIC_MAX = 30;
 const RTS_FLUENCY_PASS_LINE = 70;
 const RTS_OVERALL_FLUENCY_PASS_FLOOR = 65;
 const RTS_SCORE_API_TIMEOUT_MS = 15000;
 const RTS_AI_REVIEW_STALL_THRESHOLD_MS = 90000;
+
+const RTS_RELEVANCE_ENTITY_HINTS = new Set([
+  "professor",
+  "teacher",
+  "friend",
+  "classmate",
+  "librarian",
+  "roommate",
+  "staff",
+  "lecturer",
+  "tutor",
+  "manager",
+  "colleague",
+  "supervisor",
+  "coach",
+  "boss"
+]);
+
+const RTS_RELEVANCE_EVENT_HINTS = new Set([
+  "email",
+  "assignment",
+  "assignments",
+  "homework",
+  "address",
+  "wrong",
+  "class",
+  "classes",
+  "late",
+  "borrow",
+  "notes",
+  "broken",
+  "computer",
+  "noisy",
+  "noise",
+  "party",
+  "missed",
+  "missing",
+  "lost",
+  "notebook",
+  "deadline",
+  "extension",
+  "resend",
+  "submit"
+]);
+
+const RTS_RELEVANCE_ACTION_HINTS = new Set([
+  "apology",
+  "apologize",
+  "apologise",
+  "explain",
+  "ask",
+  "request",
+  "help",
+  "suggest",
+  "advice",
+  "advise",
+  "recommend",
+  "report",
+  "extension",
+  "resend",
+  "borrow",
+  "lend"
+]);
+
+const RTS_TEMPLATE_NOISE_TOKENS = new Set([
+  "hello",
+  "excuse",
+  "minute",
+  "thank",
+  "thanks",
+  "understanding",
+  "bother",
+  "hope",
+  "helps",
+  "talk",
+  "calling",
+  "lot"
+]);
+
+const RTS_TEMPLATE_NOISE_PHRASES = [
+  "hello",
+  "excuse me",
+  "do you have a minute",
+  "i am calling because",
+  "i'm calling because",
+  "thank you",
+  "thank you for understanding",
+  "i am sorry to bother you",
+  "i'm sorry to bother you",
+  "i hope this helps",
+  "could i talk to you for a minute",
+  "thanks a lot"
+];
 
 export const RTS_SCORE_REASON_MESSAGE_MAP = {
   appropriacy_zero_off_topic: "回答内容与题目场景不匹配。",
@@ -374,10 +470,11 @@ export function createRTSClientDegradedReview({
   const normalizedReasonCode = normalizeRTSFallbackReason(reasonCode);
   const normalizedReasonMessage = normalizeTextValue(reasonMessage) || getRTSFallbackReasonMessage(normalizedReasonCode);
   const reasonCodes = [...new Set([normalizedReasonCode, "ai_review_unavailable"].filter(Boolean))];
-  const coverageTier = computeRTSCoverageTier({
+  const relevanceSignals = computeRTSRelevanceSignals({
     transcript: transcriptText,
     questionContent
   });
+  const coverageTier = relevanceSignals.coverage_tier;
   const pronunciationRaw = transcriptWords.length >= 12 ? 2 : transcriptWords.length >= 6 ? 1 : 0;
   const fluencyRaw = transcriptWords.length >= 12 ? 2 : transcriptWords.length >= 6 ? 1 : 0;
   const baselineContentRaw = transcriptWords.length >= 8 ? 1 : 0;
@@ -393,14 +490,16 @@ export function createRTSClientDegradedReview({
     contentRaw,
     pronunciationRaw,
     fluencyRaw,
-    coverageTier
+    coverageTier,
+    relevanceSignals,
+    wordCount: transcriptWords.length
   });
   return {
     taskType: "RTS",
     status: RTS_SCORE_STATUS_DEGRADED,
     is_ai_review_degraded: true,
     is_estimated: true,
-    review_label: "AI璇勯槄锛堥檷绾э級",
+    review_label: "AI评阅（降级）",
     official_traits: {
       appropriacy: { score: contentRaw, max: RTS_CONTENT_RAW_MAX },
       pronunciation: { score: pronunciationRaw, max: RTS_PRONUNCIATION_RAW_MAX },
@@ -443,7 +542,7 @@ export function createRTSClientDegradedReview({
         template_overlap_ratio: 0
       },
       content_signals: {
-        coverage_tier: coverageTier
+        ...relevanceSignals
       },
       audio_signals: normalizeRTSAudioSignals(audioSignals),
       question_meta: normalizeRTSQuestionMeta(questionMeta),
@@ -816,17 +915,25 @@ function buildRTSDisplayScoresFromRaw({
   contentRaw = 0,
   pronunciationRaw = 0,
   fluencyRaw = 0,
-  coverageTier = "none"
+  coverageTier = "none",
+  relevanceSignals = null,
+  wordCount = 0
 } = {}) {
-  const coverageFloor = resolveClientCoverageContentFloor(coverageTier);
-  const content = Math.max(
+  const resolvedSignals = toObjectValue(relevanceSignals) || {};
+  const coverageFloor = resolveClientCoverageContentFloor(coverageTier, resolvedSignals);
+  let content = Math.max(
     mapRTSRawToDisplay(contentRaw, RTS_CONTENT_RAW_MAX),
     coverageFloor
   );
+  content = applyClientRelevanceContentBand({
+    content,
+    relevanceSignals: resolvedSignals,
+    wordCount
+  }).content;
   const pronunciation = mapRTSRawToDisplay(pronunciationRaw, RTS_PRONUNCIATION_RAW_MAX);
   const fluency = mapRTSRawToDisplay(fluencyRaw, RTS_FLUENCY_RAW_MAX);
   const weightedOverall = composeRTSDisplayOverall(content, pronunciation, fluency);
-  const fluencyGuardOverall = fluency >= RTS_FLUENCY_PASS_LINE
+  const fluencyGuardOverall = fluency >= RTS_FLUENCY_PASS_LINE && resolvedSignals.relevance_gate_passed
     ? Math.max(weightedOverall, RTS_OVERALL_FLUENCY_PASS_FLOOR)
     : weightedOverall;
   return {
@@ -837,65 +944,214 @@ function buildRTSDisplayScoresFromRaw({
   };
 }
 
-function resolveClientCoverageContentFloor(coverageTier = "none") {
+function resolveClientCoverageContentFloor(coverageTier = "none", relevanceSignals = null) {
+  if (!relevanceSignals?.relevance_gate_passed) return 0;
   if (coverageTier === "very_high") return RTS_CONTENT_VERY_HIGH_COVERAGE_FLOOR;
   if (coverageTier === "high") return RTS_CONTENT_HIGH_COVERAGE_FLOOR;
   if (coverageTier === "medium") return RTS_CONTENT_MEDIUM_COVERAGE_FLOOR;
   return RTS_CONTENT_BASE_FLOOR;
 }
 
-function computeRTSCoverageTier({ transcript = "", questionContent = "" } = {}) {
-  const transcriptTokens = tokenizeCoverageWords(transcript);
-  const questionTokens = tokenizeCoverageWords(questionContent);
-  if (!transcriptTokens.length || !questionTokens.length) return "none";
+function applyClientRelevanceContentBand({
+  content = RTS_DISPLAY_MIN_SCORE,
+  relevanceSignals = null,
+  wordCount = 0
+} = {}) {
+  const signals = toObjectValue(relevanceSignals) || {};
+  if (signals.relevance_gate_passed) {
+    return {
+      content: clampScore(content, RTS_CONTENT_BASE_FLOOR, RTS_DISPLAY_MAX_SCORE),
+      band: "relevant_45_plus"
+    };
+  }
 
-  const questionSet = new Set(questionTokens);
-  const overlapHits = transcriptTokens.reduce((count, token) => (
+  if (signals.weak_relevance && !signals.severe_off_topic_like) {
+    const categoryCount = Math.max(0, Math.min(3, Number(signals.relevance_category_count || 0)));
+    const overlapHits = Math.max(0, Number(signals.question_overlap_hits || 0));
+    const weakBoost = (
+      (categoryCount >= 2 ? 8 : categoryCount >= 1 ? 4 : 0)
+      + (overlapHits >= 2 ? 4 : overlapHits >= 1 ? 2 : 0)
+      + (wordCount >= 15 ? 2 : 0)
+    );
+    const weakTarget = clampScore(
+      RTS_CONTENT_WEAK_RELATED_MIN + weakBoost,
+      RTS_CONTENT_WEAK_RELATED_MIN,
+      RTS_CONTENT_WEAK_RELATED_MAX
+    );
+    return {
+      content: clampScore(
+        Math.max(RTS_CONTENT_WEAK_RELATED_MIN, Math.min(content, weakTarget)),
+        RTS_CONTENT_WEAK_RELATED_MIN,
+        RTS_CONTENT_WEAK_RELATED_MAX
+      ),
+      band: "weak_related_30_44"
+    };
+  }
+
+  const offTopicBoost = (
+    (wordCount >= 12 ? 4 : wordCount >= 7 ? 2 : 0)
+    + (Number(signals.question_overlap_hits || 0) > 0 ? 2 : 0)
+  );
+  const offTopicTarget = clampScore(
+    RTS_DISPLAY_MIN_SCORE + offTopicBoost,
+    RTS_DISPLAY_MIN_SCORE,
+    RTS_CONTENT_OFF_TOPIC_MAX
+  );
+  return {
+    content: clampScore(Math.min(content, offTopicTarget), RTS_DISPLAY_MIN_SCORE, RTS_CONTENT_OFF_TOPIC_MAX),
+    band: "off_topic_10_30"
+  };
+}
+
+function computeRTSRelevanceSignals({ transcript = "", questionContent = "" } = {}) {
+  const transcriptTokens = tokenizeCoverageWords(transcript);
+  const transcriptTextLower = normalizeTextValue(transcript).toLowerCase();
+  const transcriptEffectiveTokens = filterEffectiveTokens(transcriptTokens, RTS_TEMPLATE_NOISE_TOKENS);
+  const questionTokens = tokenizeCoverageWords(questionContent);
+  const questionEffectiveTokens = filterEffectiveTokens(questionTokens, RTS_TEMPLATE_NOISE_TOKENS);
+  if (!transcriptTokens.length || !questionTokens.length) {
+    return {
+      coverage_tier: "none",
+      relevance_gate_passed: false,
+      relevance_category_count: 0,
+      weak_relevance: false,
+      severe_off_topic_like: false,
+      template_only_like: false,
+      question_overlap_hits: 0
+    };
+  }
+
+  const questionSet = new Set(questionEffectiveTokens);
+  const overlapHits = transcriptEffectiveTokens.reduce((count, token) => (
     questionSet.has(token) ? count + 1 : count
   ), 0);
-  const uniqueOverlap = new Set(transcriptTokens.filter((token) => questionSet.has(token))).size;
+  const uniqueOverlap = new Set(transcriptEffectiveTokens.filter((token) => questionSet.has(token))).size;
+  const overlapRatio = questionEffectiveTokens.length ? uniqueOverlap / questionEffectiveTokens.length : 0;
+  const templatePhraseHits = countPhraseHits(transcriptTextLower, RTS_TEMPLATE_NOISE_PHRASES);
 
-  const eventHints = new Set([
-    "class",
-    "classes",
-    "skip",
-    "skips",
-    "late",
-    "early",
-    "leave",
-    "leaves",
-    "assignment",
-    "assignments",
-    "homework",
-    "deadline",
-    "submit"
-  ]);
-  const goalHints = new Set([
-    "advice",
-    "advise",
-    "suggest",
-    "recommend",
-    "help",
-    "should",
-    "could",
-    "try",
-    "start"
-  ]);
-  const hasEvent = transcriptTokens.some((token) => eventHints.has(token));
-  const hasGoal = transcriptTokens.some((token) => goalHints.has(token));
-  const overlapRatio = questionTokens.length ? uniqueOverlap / questionTokens.length : 0;
+  const entityHits = countSetHits(transcriptEffectiveTokens, RTS_RELEVANCE_ENTITY_HINTS);
+  const eventHits = countSetHits(transcriptEffectiveTokens, RTS_RELEVANCE_EVENT_HINTS);
+  const actionHits = countSetHits(transcriptEffectiveTokens, RTS_RELEVANCE_ACTION_HINTS);
 
-  if ((uniqueOverlap >= 7 && hasGoal) || (overlapRatio >= 0.55 && hasEvent && hasGoal)) return "very_high";
-  if ((uniqueOverlap >= 5 && hasGoal) || (overlapRatio >= 0.4 && hasEvent)) return "high";
-  if (uniqueOverlap >= 3 || hasEvent || hasGoal) return "medium";
-  if (overlapHits > 0) return "low";
-  return "none";
+  const questionEntityTokens = questionEffectiveTokens.filter((token) => RTS_RELEVANCE_ENTITY_HINTS.has(token));
+  const questionEventTokens = questionEffectiveTokens.filter((token) => RTS_RELEVANCE_EVENT_HINTS.has(token));
+  const questionActionTokens = questionEffectiveTokens.filter((token) => RTS_RELEVANCE_ACTION_HINTS.has(token));
+
+  const objectOverlapHits = countTokenOverlap(transcriptEffectiveTokens, questionEntityTokens);
+  const eventOverlapHits = countTokenOverlap(transcriptEffectiveTokens, questionEventTokens);
+  const actionOverlapHits = countTokenOverlap(transcriptEffectiveTokens, questionActionTokens);
+  const relevanceCategoryCount = [
+    entityHits > 0 || objectOverlapHits > 0,
+    eventHits > 0 || eventOverlapHits > 0,
+    actionHits > 0 || actionOverlapHits > 0
+  ].filter(Boolean).length;
+
+  const relevanceGatePassed = (
+    transcriptEffectiveTokens.length >= 6
+    && relevanceCategoryCount >= 2
+    && (
+      relevanceCategoryCount >= 3
+      || uniqueOverlap >= 2
+      || eventOverlapHits >= 1
+      || actionOverlapHits >= 1
+      || (entityHits >= 1 && eventHits >= 1)
+    )
+  );
+  const weakRelevance = (
+    !relevanceGatePassed
+    && (
+      relevanceCategoryCount >= 1
+      || uniqueOverlap >= 1
+      || overlapHits >= 1
+      || (eventHits + actionHits) >= 1
+    )
+  );
+  const templateOnlyLike = (
+    transcriptTokens.length > 0
+    && !relevanceGatePassed
+    && templatePhraseHits >= 2
+    && transcriptEffectiveTokens.length <= 4
+    && relevanceCategoryCount <= 1
+    && uniqueOverlap === 0
+  );
+  const severeOffTopicLike = (
+    !relevanceGatePassed
+    && (
+      templateOnlyLike
+      || (!weakRelevance && uniqueOverlap === 0 && relevanceCategoryCount === 0)
+    )
+  );
+
+  let coverageTier = "none";
+  if ((relevanceCategoryCount >= 3 && uniqueOverlap >= 4) || overlapRatio >= 0.55) {
+    coverageTier = "very_high";
+  } else if (relevanceCategoryCount >= 3 || (uniqueOverlap >= 3 && eventHits > 0)) {
+    coverageTier = "high";
+  } else if (relevanceCategoryCount >= 2 || uniqueOverlap >= 2) {
+    coverageTier = "medium";
+  } else if (weakRelevance || overlapHits > 0) {
+    coverageTier = "low";
+  }
+
+  return {
+    coverage_tier: coverageTier,
+    relevance_gate_passed: relevanceGatePassed,
+    relevance_category_count: relevanceCategoryCount,
+    weak_relevance: weakRelevance,
+    severe_off_topic_like: severeOffTopicLike,
+    template_only_like: templateOnlyLike,
+    template_phrase_hits: templatePhraseHits,
+    meaningful_token_count: transcriptEffectiveTokens.length,
+    question_overlap_hits: uniqueOverlap,
+    overlap_hits: overlapHits,
+    entity_hits: entityHits,
+    event_hits: eventHits,
+    action_hits: actionHits
+  };
 }
 
 function tokenizeCoverageWords(text) {
   return `${text || ""}`
     .toLowerCase()
     .match(/[a-z]+(?:'[a-z]+)?/g) || [];
+}
+
+function countSetHits(tokens, hintSet) {
+  if (!Array.isArray(tokens) || !tokens.length || !(hintSet instanceof Set) || !hintSet.size) return 0;
+  const tokenSet = new Set(tokens);
+  let count = 0;
+  for (const item of hintSet) {
+    if (tokenSet.has(item)) count += 1;
+  }
+  return count;
+}
+
+function countTokenOverlap(tokens, referenceTokens) {
+  if (!Array.isArray(tokens) || !tokens.length || !Array.isArray(referenceTokens) || !referenceTokens.length) return 0;
+  const tokenSet = new Set(tokens);
+  let count = 0;
+  for (const token of referenceTokens) {
+    if (tokenSet.has(token)) count += 1;
+  }
+  return count;
+}
+
+function filterEffectiveTokens(tokens, noiseTokenSet) {
+  if (!Array.isArray(tokens) || !tokens.length) return [];
+  if (!(noiseTokenSet instanceof Set) || !noiseTokenSet.size) return [...tokens];
+  return tokens.filter((token) => !noiseTokenSet.has(token));
+}
+
+function countPhraseHits(text, phrases = []) {
+  const source = normalizeTextValue(text).toLowerCase();
+  if (!source || !Array.isArray(phrases) || !phrases.length) return 0;
+  let hitCount = 0;
+  for (const phrase of phrases) {
+    const normalizedPhrase = normalizeTextValue(phrase).toLowerCase();
+    if (!normalizedPhrase) continue;
+    if (source.includes(normalizedPhrase)) hitCount += 1;
+  }
+  return hitCount;
 }
 
 function buildSimpleEnglishRTSSuggestion({

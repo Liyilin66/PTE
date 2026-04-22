@@ -216,7 +216,7 @@ export function inferDIImageTypeFromText(...fields) {
       return type;
     }
   }
-  return "map";
+  return "";
 }
 
 export function getDIImageTypeMeta(type) {

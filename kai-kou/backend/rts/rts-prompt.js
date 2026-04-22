@@ -57,11 +57,17 @@ Scoring target:
 - Appropriacy (0-3, used as Content raw) is coverage-first.
 - Judge coverage of key scenario information first:
   core object, core event, core problem, and response goal.
+- Relevance gate for Content:
+  only allow appropriacy >= 2 when the response shows real scenario relevance.
+  It should hit at least two of these groups: core object / core event-problem / response action.
 - If transcript covers most key points and stays in the same scenario, set appropriacy >= 2
   even when learner repeats the prompt wording.
 - If coverage is very complete and scenario fit is strong, set appropriacy = 3.
 - Only set appropriacy = 0 for clear off-topic, wrong response goal, unusable transcript, or meaningless output.
-- Repeating original wording, template opening, simple grammar, or non-native phrasing can only be a light deduction.
+- Generic template phrases do NOT count as relevance evidence, for example:
+  "hello", "excuse me", "do you have a minute", "thank you", "I hope this helps".
+- Repeating original wording, template opening, simple grammar, or non-native phrasing can only be a light deduction
+  after relevance is already established.
 - Pronunciation (0-5): lightweight estimate only from transcript naturalness and audio signals; do NOT pretend this is full acoustic scoring.
 - Oral Fluency (0-5): lightweight estimate from pacing/continuity cues and transcript coherence.
 - Keep these three raw traits on their native scales exactly (0-3 / 0-5 / 0-5).
