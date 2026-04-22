@@ -294,15 +294,19 @@ function buildTaskCounterSeed() {
 }
 
 function buildRecentDaysSnapshot(today = new Date()) {
+  const todayKey = toDateKey(today);
   const weekStart = startOfWeekMonday(today);
   return Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);
+    const key = toDateKey(date);
+    const isToday = isTodayDateKey(key, todayKey);
     return {
-      key: toDateKey(date),
-      label: WEEKDAY_LABELS[date.getDay()],
+      key,
+      label: isToday ? "今日" : WEEKDAY_LABELS[date.getDay()],
       dateLabel: formatMonthDay(date),
       count: 0,
-      color: HEAT_COLORS[0]
+      color: HEAT_COLORS[0],
+      isToday
     };
   });
 }
@@ -333,6 +337,10 @@ function toDateKey(value) {
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function isTodayDateKey(dateKey, todayKey = toDateKey(new Date())) {
+  return Boolean(dateKey) && dateKey === todayKey;
 }
 
 function formatMonthDay(value) {
@@ -680,10 +688,13 @@ async function loadHomeAnalytics() {
     const normalizedDays = recentDays.map((item) => {
       const countValue = recentDayCounter[item.key] || 0;
       const level = resolveHeatLevel(countValue, maxHeatCount);
+      const isToday = isTodayDateKey(item.key, todayKey);
       return {
         ...item,
+        label: isToday ? "今日" : item.label,
         count: countValue,
-        color: HEAT_COLORS[level]
+        color: HEAT_COLORS[level],
+        isToday
       };
     });
     const latestCreatedAt = rows.find((row) => toDateKey(row?.created_at))?.created_at || "";
@@ -970,14 +981,21 @@ onMounted(async () => {
 
             <div class="heatmap-body">
               <div class="heatmap-week">
-                <div v-for="day in homeAnalytics.recentDays" :key="day.key" class="heatmap-day">
+                <div
+                  v-for="day in homeAnalytics.recentDays"
+                  :key="day.key"
+                  class="heatmap-day"
+                  :class="{ 'heatmap-day--today': day.isToday }"
+                >
                   <div
                     class="heatmap-cell"
-                    :class="{ 'heatmap-cell--today': day.label === '今' }"
+                    :class="{ 'heatmap-cell--today': day.isToday }"
                     :style="{ backgroundColor: day.color }"
-                    :title="`${day.dateLabel} · ${day.count} 题`"
+                    :title="`${day.dateLabel} · ${day.count} 题${day.isToday ? ' · 今日' : ''}`"
                   />
-                  <span class="heatmap-day__label">{{ day.label }}</span>
+                  <span class="heatmap-day__label">
+                    {{ day.label }}
+                  </span>
                 </div>
               </div>
 
@@ -1710,28 +1728,61 @@ onMounted(async () => {
 }
 
 .heatmap-day {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
 }
 
+.heatmap-day--today {
+  z-index: 1;
+}
+
 .heatmap-cell {
+  position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: 12px;
   border: 1.5px solid transparent;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  overflow: visible;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
 .heatmap-cell--today {
-  border-color: rgba(205, 106, 49, 0.6);
+  border-color: rgba(128, 145, 171, 0.24);
+  box-shadow:
+    0 0 0 4px rgba(128, 145, 171, 0.08),
+    0 8px 18px rgba(128, 145, 171, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
+}
+
+.heatmap-cell--today::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.heatmap-cell--today::before {
+  inset: -4px;
+  border-radius: 16px;
+  border: 1px solid rgba(128, 145, 171, 0.18);
 }
 
 .heatmap-day__label,
 .heatmap-legend__text {
   font-size: 0.85rem;
   color: #8090aa;
+}
+
+.heatmap-day__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  line-height: 1.1;
+  transition: color 180ms ease;
 }
 
 .heatmap-legend {
@@ -2105,6 +2156,10 @@ onMounted(async () => {
   .heatmap-week {
     grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .heatmap-cell--today::before {
+    inset: -2px;
   }
 
   .module-card__head {
