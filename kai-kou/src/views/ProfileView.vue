@@ -363,13 +363,6 @@ function selectPlan(planKey) {
 }
 
 function goBack() {
-  if (typeof window !== "undefined") {
-    const fallbackPath = window.history.state?.back;
-    if (typeof fallbackPath === "string" && fallbackPath.startsWith("/")) {
-      router.back();
-      return;
-    }
-  }
   router.push("/home");
 }
 
