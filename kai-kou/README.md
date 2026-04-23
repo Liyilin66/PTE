@@ -30,6 +30,7 @@ LLM_FALLBACK_TIMEOUT_MS=8000
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 VITE_APP_URL=http://localhost:5173
+VITE_ADMIN_CONTACT_EMAIL=admin@example.com
 VITE_API_BASE=
 VITE_DEV_API_TARGET=http://localhost:3000
 API_PORT=3000
@@ -37,6 +38,13 @@ API_PORT=3000
 # Server-only register / verification env
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_real_supabase_service_role_key
+SITE_URL=https://your-app-domain.example.com
+ALIPAY_APP_ID=your_alipay_app_id
+ALIPAY_GATEWAY_URL=https://openapi.alipay.com/gateway.do
+ALIPAY_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+ALIPAY_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+ALIPAY_SELLER_ID=your_alipay_seller_id
+ALIPAY_TIMEOUT_EXPRESS=15m
 BREVO_API_KEY=your_real_brevo_api_key
 REGISTER_OTP_FROM_EMAIL=noreply@your-domain.com
 # Optional, defaults to "开口"
@@ -113,6 +121,21 @@ Server-side only:
 - `REGISTER_OTP_FROM_NAME`: optional display name for the sender, defaults to `开口`
 
 Do not put `SUPABASE_SERVICE_ROLE_KEY`, `BREVO_API_KEY`, or `REGISTER_OTP_FROM_EMAIL` into any `VITE_*` variable.
+
+### Billing / Alipay Environment Variables
+
+Server-side only:
+
+- `SITE_URL`: public app base URL used to build `notify_url` and `return_url`
+- `ALIPAY_APP_ID`: Alipay Open Platform app id
+- `ALIPAY_GATEWAY_URL`: production or sandbox gateway URL for the current environment
+- `ALIPAY_APP_PRIVATE_KEY`: merchant app private key in PEM format
+- `ALIPAY_PUBLIC_KEY`: Alipay public key in PEM format
+- `ALIPAY_SELLER_ID`: expected seller id for notify/query verification
+- `ALIPAY_TIMEOUT_EXPRESS`: order timeout, defaults to `15m`
+
+For billing routes, the browser bearer token is only used to identify the current user.
+All order writes, profile updates, and SQL RPC calls use `SUPABASE_SERVICE_ROLE_KEY` on the server.
 
 ### Local Verification
 
@@ -285,6 +308,15 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS trial_granted_at TIMESTAMPTZ;
 ```
 
+For the Alipay VIP billing flow, also run the SQL in:
+
+- `db/alipay-vip-billing.sql`
+
+That file creates `vip_orders`, adds the timed VIP profile fields, and installs the RPC functions used for:
+
+- payment confirmation + entitlement grant idempotency
+- order query throttling
+
 ## Deploy to Vercel
 
 1. Install and log in:
@@ -309,8 +341,16 @@ vercel
 - `LLM_FALLBACK_TIMEOUT_MS` (Production + Preview + Development)
 - `VITE_SUPABASE_URL` (Production + Preview + Development)
 - `VITE_SUPABASE_ANON_KEY` (Production + Preview + Development)
+- `VITE_ADMIN_CONTACT_EMAIL` (optional, Production + Preview + Development)
 - `SUPABASE_URL` (Production + Preview + Development)
 - `SUPABASE_SERVICE_ROLE_KEY` (Production + Preview + Development)
+- `SITE_URL` (Production + Preview + Development)
+- `ALIPAY_APP_ID` (Production + Preview + Development)
+- `ALIPAY_GATEWAY_URL` (Production + Preview + Development)
+- `ALIPAY_APP_PRIVATE_KEY` (Production + Preview + Development)
+- `ALIPAY_PUBLIC_KEY` (Production + Preview + Development)
+- `ALIPAY_SELLER_ID` (Production + Preview + Development)
+- `ALIPAY_TIMEOUT_EXPRESS` (Production + Preview + Development)
 - `BREVO_API_KEY` (Production + Preview + Development)
 - `REGISTER_OTP_FROM_EMAIL` (Production + Preview + Development)
 - `REGISTER_OTP_FROM_NAME` (optional, Production + Preview + Development)

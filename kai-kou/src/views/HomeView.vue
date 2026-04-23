@@ -7,6 +7,7 @@ import { usePracticeStore } from "@/stores/practice";
 import { supabase } from "@/lib/supabase";
 import { getDIQuestionCatalog } from "@/lib/di-data";
 import { isDIEnabled } from "@/lib/di-feature";
+import { loadHomeAnalyticsSnapshotForAuth } from "@/lib/home-analytics";
 
 const TASK_TYPES = ["RA", "WFD", "RTS", "DI", "RS", "RL", "WE"];
 const HOME_ANALYTICS_PAGE_SIZE = 1000;
@@ -624,102 +625,8 @@ async function fetchHomeAnalyticsRows(userId) {
 }
 
 async function loadHomeAnalytics() {
-  const userId = await resolveCurrentUserId();
-  if (!userId) {
-    homeAnalytics.value = {
-      ...createEmptyHomeAnalytics(),
-      loading: false
-    };
-    return;
-  }
-
   homeAnalytics.value = createEmptyHomeAnalytics();
-
-  try {
-    const rows = await fetchHomeAnalyticsRows(userId);
-    const recentDays = buildRecentDaysSnapshot();
-    const recentDayKeys = new Set(recentDays.map((item) => item.key));
-    const recentDayCounter = recentDays.reduce((acc, item) => {
-      acc[item.key] = 0;
-      return acc;
-    }, {});
-    const practicedDaySet = new Set();
-    const taskWeekCounts = buildTaskCounterSeed();
-    const todayKey = toDateKey(new Date());
-
-    let todayCount = 0;
-    let weekDurationSec = 0;
-    let durationTrackedCount = 0;
-    let scoreTotal = 0;
-    let scoredCount = 0;
-
-    rows.forEach((row) => {
-      const dateKey = toDateKey(row?.created_at);
-      if (!dateKey) return;
-
-      practicedDaySet.add(dateKey);
-
-      if (dateKey === todayKey) {
-        todayCount += 1;
-      }
-
-      if (recentDayKeys.has(dateKey)) {
-        recentDayCounter[dateKey] += 1;
-        const taskType = normalizeTaskType(row?.task_type);
-        if (taskType) {
-          taskWeekCounts[taskType] = (taskWeekCounts[taskType] || 0) + 1;
-        }
-
-        const durationSec = resolveDurationSec(row?.score_json);
-        if (durationSec > 0) {
-          weekDurationSec += durationSec;
-          durationTrackedCount += 1;
-        }
-      }
-
-      const overall = resolveOverallScore(row?.task_type, row?.score_json);
-      if (overall !== null) {
-        scoreTotal += overall;
-        scoredCount += 1;
-      }
-    });
-
-    const maxHeatCount = Math.max(...Object.values(recentDayCounter), 0);
-    const normalizedDays = recentDays.map((item) => {
-      const countValue = recentDayCounter[item.key] || 0;
-      const level = resolveHeatLevel(countValue, maxHeatCount);
-      const isToday = isTodayDateKey(item.key, todayKey);
-      return {
-        ...item,
-        label: isToday ? "今日" : item.label,
-        count: countValue,
-        color: HEAT_COLORS[level],
-        isToday
-      };
-    });
-    const latestCreatedAt = rows.find((row) => toDateKey(row?.created_at))?.created_at || "";
-
-    homeAnalytics.value = {
-      loading: false,
-      totalCount: rows.length,
-      todayCount,
-      weekMinutes: Math.round(weekDurationSec / 60),
-      averageScore: scoredCount ? Number((scoreTotal / scoredCount).toFixed(1)) : null,
-      scoredCount,
-      durationTrackedCount,
-      currentStreak: calculateCurrentStreak(practicedDaySet),
-      activeDaysCount: practicedDaySet.size,
-      recentDays: normalizedDays,
-      taskWeekCounts,
-      lastPracticeAt: `${latestCreatedAt || ""}`.trim()
-    };
-  } catch (error) {
-    console.warn("Home analytics load failed:", error);
-    homeAnalytics.value = {
-      ...createEmptyHomeAnalytics(),
-      loading: false
-    };
-  }
+  homeAnalytics.value = await loadHomeAnalyticsSnapshotForAuth(authStore);
 }
 
 async function loadDIFavorites() {
@@ -816,6 +723,10 @@ function goLogin() {
   router.push("/auth");
 }
 
+function openProfile() {
+  router.push("/profile");
+}
+
 async function handleLogout() {
   await authStore.logout();
   router.replace("/auth");
@@ -904,7 +815,16 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="authStore.isLoggedIn" class="account-card">
+        <div
+          v-if="authStore.isLoggedIn"
+          class="account-card account-card--clickable"
+          role="button"
+          tabindex="0"
+          aria-label="打开个人中心"
+          @click="openProfile"
+          @keydown.enter.prevent="openProfile"
+          @keydown.space.prevent="openProfile"
+        >
           <div class="account-card__meta">
             <span class="account-pill" :class="accountStatusMeta.className">{{ accountStatusMeta.label }}</span>
             <div class="account-card__text">
@@ -914,7 +834,7 @@ onMounted(async () => {
           </div>
           <div class="account-card__actions">
             <div class="account-avatar">{{ userInitial }}</div>
-            <button type="button" class="account-card__logout" @click="handleLogout">退出</button>
+            <button type="button" class="account-card__logout" @click.stop="handleLogout">退出</button>
           </div>
         </div>
 
@@ -1383,6 +1303,21 @@ onMounted(async () => {
   border: 1px solid #e7edf6;
   border-radius: 999px;
   background: #ffffff;
+}
+
+.account-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.account-card--clickable:hover {
+  border-color: #d4dfef;
+  box-shadow: 0 10px 20px rgba(19, 39, 75, 0.08);
+}
+
+.account-card--clickable:focus-visible {
+  outline: 3px solid rgba(45, 99, 255, 0.2);
+  outline-offset: 2px;
 }
 
 .account-card__meta {

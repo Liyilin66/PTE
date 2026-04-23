@@ -4,6 +4,9 @@ import express from "express";
 
 import registerWithCodeHandler from "./api/auth/register-with-code.js";
 import sendRegisterCodeHandler from "./api/auth/send-register-code.js";
+import billingAlipayCreateOrderHandler from "./api/billing/alipay/create-order.js";
+import billingAlipayNotifyHandler from "./api/billing/alipay/notify.js";
+import billingOrderStatusHandler from "./api/billing/order-status.js";
 import questionsHandler from "./api/questions.js";
 import scoreHandler from "./api/score.js";
 import paymentCreateHandler from "./api/payment-create.js";
@@ -15,6 +18,7 @@ import postProbeDebugHandler from "./api/debug/post-probe.js";
 const app = express();
 
 app.use(cors());
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.options("/api/score", scoreHandler);
@@ -28,6 +32,12 @@ app.options("/api/auth/send-register-code", sendRegisterCodeHandler);
 app.post("/api/auth/send-register-code", sendRegisterCodeHandler);
 app.options("/api/auth/register-with-code", registerWithCodeHandler);
 app.post("/api/auth/register-with-code", registerWithCodeHandler);
+app.options("/api/billing/alipay/create-order", billingAlipayCreateOrderHandler);
+app.post("/api/billing/alipay/create-order", billingAlipayCreateOrderHandler);
+app.options("/api/billing/alipay/notify", billingAlipayNotifyHandler);
+app.post("/api/billing/alipay/notify", billingAlipayNotifyHandler);
+app.options("/api/billing/order-status", billingOrderStatusHandler);
+app.get("/api/billing/order-status", billingOrderStatusHandler);
 app.get("/api/questions", questionsHandler);
 app.get("/api/questions/:type", questionsHandler);
 app.post("/api/payment/create", paymentCreateHandler);

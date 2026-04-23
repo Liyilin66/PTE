@@ -1,13 +1,7 @@
 import { defineStore } from "pinia";
 import { getApiUrl } from "@/lib/api-url";
+import { ACCESS_STATUS, getAccessStatus } from "@/lib/access-status";
 import { supabase } from "@/lib/supabase";
-
-const ACCESS_STATUS = {
-  VIP: "vip",
-  TRIAL: "trial",
-  TRIAL_EXPIRED: "trial_expired",
-  NOT_OPENED: "not_opened"
-};
 
 let initPromise = null;
 let authSubscription = null;
@@ -274,47 +268,6 @@ function applyAccessState(store, access) {
   store.accessStatus = access.accessStatus;
   store.canUseAiScoring = access.canUseAiScoring;
   store.canPractice = access.canUseAiScoring;
-}
-
-function getAccessStatus(user, profile) {
-  const now = new Date();
-  const isPremium = Boolean(profile?.is_premium);
-  const trialDays = toNonNegativeInteger(profile?.trial_days);
-  const registeredAt = parseDateOrFallback(user?.created_at, now);
-  const trialStartAt = parseDateOrFallback(profile?.trial_granted_at, registeredAt);
-  const trialDaysLeft = trialDays > 0 ? Math.max(0, trialDays - getDaysSince(trialStartAt, now)) : 0;
-  const isInTrial = !isPremium && trialDaysLeft > 0;
-
-  let accessStatus = ACCESS_STATUS.NOT_OPENED;
-  if (isPremium) accessStatus = ACCESS_STATUS.VIP;
-  else if (isInTrial) accessStatus = ACCESS_STATUS.TRIAL;
-  else if (trialDays > 0) accessStatus = ACCESS_STATUS.TRIAL_EXPIRED;
-
-  return {
-    isPremium,
-    isInTrial,
-    trialDaysLeft,
-    canUseAiScoring: isPremium || isInTrial,
-    accessStatus
-  };
-}
-
-function getDaysSince(fromDate, now = new Date()) {
-  const diff = now.getTime() - fromDate.getTime();
-  if (!Number.isFinite(diff) || diff < 0) return 0;
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function parseDateOrFallback(value, fallbackDate) {
-  const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) return fallbackDate;
-  return parsed;
-}
-
-function toNonNegativeInteger(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.floor(number));
 }
 
 function isAuthLockRaceError(error) {

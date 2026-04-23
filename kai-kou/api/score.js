@@ -20,6 +20,7 @@ import {
   finalizeWEScorePayload
 } from "../backend/we/normalize-we-score.js";
 import { buildWEPrompt } from "../backend/we/we-prompt.js";
+import { getAccessStatus } from "../backend/auth/access-status.js";
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
@@ -187,7 +188,7 @@ export default async function handler(req, res) {
 
     const { data: profile, error: profileError } = await authedSupabase
       .from("profiles")
-      .select("is_premium, trial_days, trial_granted_at")
+      .select("is_premium, trial_days, trial_granted_at, vip_plan, vip_expires_at")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -479,55 +480,6 @@ function getBearerToken(req) {
     return "";
   }
   return header.slice(7).trim();
-}
-
-function getDaysSince(fromDate, now = new Date()) {
-  const diff = now.getTime() - fromDate.getTime();
-  if (!Number.isFinite(diff) || diff < 0) return 0;
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function parseDateOrFallback(value, fallbackDate) {
-  const parsed = new Date(value);
-  if (!Number.isFinite(parsed.getTime())) return fallbackDate;
-  return parsed;
-}
-
-function toNonNegativeInteger(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.floor(number));
-}
-
-function getAccessStatus(user, profile) {
-  const now = new Date();
-  const isPremium = Boolean(profile?.is_premium);
-  const trialDays = toNonNegativeInteger(profile?.trial_days);
-  const registeredAt = parseDateOrFallback(user?.created_at, now);
-  const trialStartAt = parseDateOrFallback(profile?.trial_granted_at, registeredAt);
-  const trialDaysLeft = trialDays > 0 ? Math.max(0, trialDays - getDaysSince(trialStartAt, now)) : 0;
-  const isInTrial = !isPremium && trialDaysLeft > 0;
-
-  let accessStatus = "not_opened";
-  if (isPremium) accessStatus = "vip";
-  else if (isInTrial) accessStatus = "trial";
-  else if (trialDays > 0) accessStatus = "trial_expired";
-
-  return {
-    isPremium,
-    isInTrial,
-    trialDaysLeft,
-    canUseAiScoring: isPremium || isInTrial,
-    accessStatus,
-    statusText: buildStatusText(accessStatus, trialDaysLeft)
-  };
-}
-
-function buildStatusText(accessStatus, trialDaysLeft) {
-  if (accessStatus === "vip") return "VIP - Unlimited practice";
-  if (accessStatus === "trial") return `Trial - ${trialDaysLeft} day(s) left`;
-  if (accessStatus === "trial_expired") return "Trial expired";
-  return "Not activated";
 }
 
 function createRequestId(req) {
