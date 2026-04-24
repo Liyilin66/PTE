@@ -27,6 +27,9 @@ export const useAuthStore = defineStore("auth", {
     displayName(state) {
       return resolveUserDisplayName(state.user, state.profile);
     },
+    avatarUrl(state) {
+      return resolveAvatarUrl(state.user, state.profile);
+    },
     statusText(state) {
       if (state.accessStatus === ACCESS_STATUS.VIP) return "✅ VIP · 无限练习";
       if (state.accessStatus === ACCESS_STATUS.TRIAL) return `试用中 · 剩余 ${state.trialDaysLeft} 天`;
@@ -215,6 +218,40 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
+    async updateAvatarDataUrl(dataUrl) {
+      const normalizedAvatar = normalizeAvatarUrl(dataUrl);
+      if (!normalizedAvatar) {
+        throw new Error("头像数据无效，请重新选择图片");
+      }
+
+      const currentMeta =
+        this.user?.user_metadata && typeof this.user.user_metadata === "object"
+          ? this.user.user_metadata
+          : {};
+
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          ...currentMeta,
+          avatar_url: normalizedAvatar,
+          avatar_updated_at: new Date().toISOString()
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        this.user = data.user;
+        if (this.session) {
+          this.session = {
+            ...this.session,
+            user: data.user
+          };
+        }
+      }
+
+      return normalizedAvatar;
+    },
+
     async loadStatus() {
       if (!this.user) {
         this.resetUsageState();
@@ -356,6 +393,35 @@ function getEmailLocalPart(email) {
 function normalizeDisplayValue(value) {
   if (typeof value !== "string" && typeof value !== "number") return "";
   return `${value}`.trim();
+}
+
+function resolveAvatarUrl(user, profile) {
+  const candidates = [
+    user?.user_metadata?.avatar_url,
+    user?.user_metadata?.avatarUrl,
+    user?.user_metadata?.photo_url,
+    user?.user_metadata?.photoUrl,
+    profile?.avatar_url,
+    profile?.avatarUrl,
+    profile?.photo_url,
+    profile?.photoUrl
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeAvatarUrl(candidate);
+    if (normalized) return normalized;
+  }
+
+  return "";
+}
+
+function normalizeAvatarUrl(value) {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim();
+  if (!normalized) return "";
+  if (normalized.startsWith("data:image/")) return normalized;
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return "";
 }
 
 async function readJsonPayload(response) {

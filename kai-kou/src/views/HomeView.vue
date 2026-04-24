@@ -98,6 +98,8 @@ const userInitial = computed(() => {
   return first ? first.toUpperCase() : "K";
 });
 
+const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
+
 const greetingLabel = computed(() => {
   const hour = new Date().getHours();
   if (hour < 6) return "凌晨好";
@@ -243,6 +245,27 @@ const heroStats = computed(() => [
       : "开始练习后持续累计",
     helperClass: ""
   }
+]);
+
+const mobileHeroCards = computed(() => [
+  ...heroHighlightCards.value.map((card) => ({
+    key: card.key,
+    icon: card.icon,
+    value: card.value,
+    suffix: "",
+    label: card.label,
+    helper: card.caption,
+    className: card.className === "hero-streak--secondary" ? "hero-mobile-card--secondary" : "",
+    valueClass: card.valueClass === "hero-streak__value--secondary" ? "hero-mobile-card__value--secondary" : "hero-mobile-card__value--accent",
+    helperClass: ""
+  })),
+  ...heroStats.value.map((stat) => ({
+    ...stat,
+    icon: "",
+    className: "",
+    valueClass: "",
+    helperClass: stat.helperClass === "hero-stat__hint--positive" ? "hero-mobile-card__hint--positive" : ""
+  }))
 ]);
 
 const heatmapTotal = computed(() =>
@@ -523,7 +546,7 @@ function formatScore(value) {
 }
 
 function formatModuleTitle(value) {
-  return `${value || ""}`.replace(/\s*-\s*/g, "路").trim();
+  return `${value || ""}`.replace(/\s*-\s*/g, " - ").trim();
 }
 
 function getModuleTheme(moduleId) {
@@ -727,11 +750,6 @@ function openProfile() {
   router.push("/profile");
 }
 
-async function handleLogout() {
-  await authStore.logout();
-  router.replace("/auth");
-}
-
 function startDIRandomPractice() {
   router.push("/di");
 }
@@ -825,16 +843,34 @@ onMounted(async () => {
           @keydown.enter.prevent="openProfile"
           @keydown.space.prevent="openProfile"
         >
-          <div class="account-card__meta">
-            <span class="account-pill" :class="accountStatusMeta.className">{{ accountStatusMeta.label }}</span>
-            <div class="account-card__text">
-              <p class="account-card__name">{{ userDisplayName }}</p>
-              <p class="account-card__detail">{{ accountStatusMeta.detail }}</p>
+          <span class="account-pill" :class="accountStatusMeta.className">{{ accountStatusMeta.label }}</span>
+          <div class="account-card__badge-wrap">
+            <div class="account-card__badge">
+              <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" class="account-card__badge-image" />
+              <span v-else>{{ userInitial }}</span>
             </div>
+            <span class="account-card__crown" aria-hidden="true">
+              <svg viewBox="0 0 24 24" class="account-card__crown-icon" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M4 17h16l-1.4-8-4.8 3.5L12 5 10.2 12.5 5.4 9 4 17Z" fill="currentColor" stroke="none" />
+                <path d="M6 19h12" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span class="account-card__spark" aria-hidden="true">
+              <svg viewBox="0 0 16 16" class="account-card__spark-icon" fill="currentColor">
+                <path d="M8 1.2 9.6 6.4 14.8 8l-5.2 1.6L8 14.8 6.4 9.6 1.2 8l5.2-1.6Z" />
+              </svg>
+            </span>
           </div>
-          <div class="account-card__actions">
-            <div class="account-avatar">{{ userInitial }}</div>
-            <button type="button" class="account-card__logout" @click.stop="handleLogout">退出</button>
+          <div class="account-card__panel">
+            <div class="account-card__panel-copy">
+              <p class="account-card__title">个人中心</p>
+              <p class="account-card__subtitle">点击进入</p>
+            </div>
+            <div class="account-card__arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" class="account-card__arrow-icon" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </div>
           </div>
         </div>
 
@@ -882,6 +918,26 @@ onMounted(async () => {
             <p class="hero-stat__hint" :class="stat.helperClass">{{ stat.helper }}</p>
           </article>
         </div>
+
+        <div class="hero-mobile-grid">
+          <article
+            v-for="card in mobileHeroCards"
+            :key="card.key"
+            class="hero-mobile-card"
+            :class="card.className"
+          >
+            <p class="hero-mobile-card__value" :class="card.valueClass">
+              <span>{{ card.value }}</span>
+              <span v-if="card.suffix" class="hero-mobile-card__suffix">{{ card.suffix }}</span>
+            </p>
+            <p class="hero-mobile-card__label">
+              <span v-if="card.icon" class="hero-mobile-card__emoji">{{ card.icon }}</span>
+              <span>{{ card.label }}</span>
+            </p>
+            <p class="hero-mobile-card__hint" :class="card.helperClass">{{ card.helper }}</p>
+          </article>
+        </div>
+
       </div>
     </section>
 
@@ -1104,7 +1160,7 @@ onMounted(async () => {
                       class="module-favorites__item"
                       @click="openDIFavoriteQuestion(item.id)"
                     >
-                      <span class="module-favorites__item-title">{{ item.sourceNumberLabel || item.id }} 路 {{ item.displayTitle || item.id }}</span>
+                      <span class="module-favorites__item-title">{{ item.sourceNumberLabel || item.id }} - {{ item.displayTitle || item.id }}</span>
                       <span class="module-favorites__item-tag">{{ item.imageType || "-" }}</span>
                     </button>
                   </div>
@@ -1268,6 +1324,8 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex-wrap: nowrap;
+  flex: none;
 }
 
 .brand__mark {
@@ -1289,20 +1347,30 @@ onMounted(async () => {
 
 .brand__title {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: clamp(1.3rem, 4vw, 1.8rem);
   font-weight: 800;
   color: #13274b;
   letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+  word-break: keep-all;
+  flex: none;
 }
 
 .account-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 6px 6px 6px 14px;
-  border: 1px solid #e7edf6;
-  border-radius: 999px;
-  background: #ffffff;
+  gap: 12px;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid #dde7f4;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  min-width: 0;
+  width: fit-content;
+  max-width: min(100%, 360px);
+  margin-left: auto;
+  flex: 0 1 auto;
 }
 
 .account-card--clickable {
@@ -1311,8 +1379,8 @@ onMounted(async () => {
 }
 
 .account-card--clickable:hover {
-  border-color: #d4dfef;
-  box-shadow: 0 10px 20px rgba(19, 39, 75, 0.08);
+  border-color: #cfdcf0;
+  box-shadow: 0 12px 24px rgba(19, 39, 75, 0.08);
 }
 
 .account-card--clickable:focus-visible {
@@ -1320,67 +1388,24 @@ onMounted(async () => {
   outline-offset: 2px;
 }
 
-.account-card__meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.account-card__actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.account-card__text {
-  min-width: 0;
-}
-
-.account-card__name {
-  margin: 0;
-  font-size: 0.96rem;
-  font-weight: 700;
-  color: #13274b;
-}
-
-.account-card__detail {
-  margin: 3px 0 0;
-  font-size: 0.84rem;
-  color: #7b8aa4;
-}
-
-.account-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: #1b315d;
-  color: #ffffff;
-  font-size: 1rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
 .account-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  font-size: 0.84rem;
-  font-weight: 700;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  font-weight: 800;
   border: 1px solid transparent;
   white-space: nowrap;
+  flex: none;
 }
 
 .account-pill--vip {
   background: #edf8ef;
   color: #1c8a4d;
-  border-color: #cde9d2;
+  border-color: #d5ead7;
 }
 
 .account-pill--trial {
@@ -1395,7 +1420,113 @@ onMounted(async () => {
   border-color: #dce4ef;
 }
 
-.account-card__logout,
+.account-card__badge-wrap {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  flex: none;
+}
+
+.account-card__badge {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #5b79b3 0%, #344f80 34%, #1b315d 72%, #13274b 100%);
+  border: 3px solid #dce6f8;
+  color: #ffffff;
+  font-size: 1.55rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 6px 12px rgba(19, 39, 75, 0.1);
+  overflow: hidden;
+}
+
+.account-card__badge-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.account-card__crown {
+  position: absolute;
+  top: -8px;
+  left: 11px;
+  width: 20px;
+  height: 20px;
+  color: #f4b53f;
+  filter: drop-shadow(0 2px 2px rgba(167, 109, 0, 0.18));
+}
+
+.account-card__spark {
+  position: absolute;
+  top: 6px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  color: #7e96c9;
+}
+
+.account-card__crown-icon,
+.account-card__spark-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.account-card__panel {
+  min-width: 0;
+  min-height: 56px;
+  padding: 0 12px;
+  border-radius: 16px;
+  background: #f5f8fe;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.account-card__panel-copy {
+  min-width: 0;
+}
+
+.account-card__title {
+  margin: 0;
+  color: #15326a;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.account-card__subtitle {
+  margin: 4px 0 0;
+  color: #8d98af;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.account-card__arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #18376d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.account-card__arrow-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .account-login {
   min-height: 38px;
   padding: 0 14px;
@@ -1405,11 +1536,15 @@ onMounted(async () => {
   color: #16325d;
   font-size: 0.92rem;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex: none;
   cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease;
 }
 
-.account-card__logout:hover,
 .account-login:hover {
   background: #f7f9fd;
   border-color: #bccbe1;
@@ -1545,6 +1680,10 @@ onMounted(async () => {
   margin-top: 30px;
 }
 
+.hero-mobile-grid {
+  display: none;
+}
+
 .hero-stat {
   min-height: 124px;
   border-radius: 24px;
@@ -1586,6 +1725,83 @@ onMounted(async () => {
 }
 
 .hero-stat__hint--positive {
+  color: #6be69b;
+}
+
+.hero-mobile-card {
+  border-radius: 24px;
+  border: 1px solid rgba(204, 221, 245, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.08) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  padding: 18px 20px;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hero-mobile-card--secondary {
+  border-color: rgba(161, 194, 255, 0.3);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.06) 100%);
+}
+
+.hero-mobile-card__value {
+  margin: 0;
+  color: #ffffff;
+  font-size: 2.05rem;
+  font-weight: 800;
+  line-height: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.hero-mobile-card__value--muted {
+  color: rgba(147, 166, 194, 0.96);
+}
+
+.hero-mobile-card__value--secondary {
+  color: #dbe7ff;
+}
+
+.hero-mobile-card__value--accent {
+  color: #ffb889;
+}
+
+.hero-mobile-card__suffix {
+  font-size: 0.92rem;
+  color: rgba(201, 215, 238, 0.72);
+  margin-bottom: 4px;
+}
+
+.hero-mobile-card__label {
+  margin: 0;
+  font-size: 0.95rem;
+  color: rgba(216, 228, 247, 0.78);
+  font-weight: 700;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-mobile-card__emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.hero-mobile-card__hint {
+  margin: 0;
+  font-size: 0.86rem;
+  color: rgba(201, 215, 238, 0.74);
+  line-height: 1.35;
+}
+
+.hero-mobile-card__hint--positive {
   color: #6be69b;
 }
 
@@ -2005,7 +2221,7 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 768px) {
   .hero-grid {
     grid-template-columns: 1fr;
   }
@@ -2031,56 +2247,158 @@ onMounted(async () => {
 }
 
 @media (max-width: 640px) {
-  .topbar-inner,
+  .topbar-inner {
+    gap: 10px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
   .hero-inner,
   .content-inner {
     padding-left: 16px;
     padding-right: 16px;
   }
 
-  .topbar-inner {
-    flex-direction: column;
-    align-items: stretch;
+  .brand {
+    gap: 10px;
+  }
+
+  .brand__mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .brand__icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .brand__title {
+    font-size: clamp(1.08rem, 5vw, 1.35rem);
   }
 
   .account-card {
-    justify-content: space-between;
-    border-radius: 24px;
-    padding: 12px;
-  }
-
-  .account-card__meta {
-    flex: 1;
-  }
-
-  .account-card__actions {
     gap: 8px;
+    padding: 7px;
+    max-width: min(100%, 308px);
   }
 
-  .account-card__logout {
-    padding: 0 12px;
+  .account-pill {
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: 0.8rem;
+  }
+
+  .account-card__badge-wrap {
+    width: 52px;
+    height: 52px;
+  }
+
+  .account-card__badge {
+    font-size: 1.42rem;
+  }
+
+  .account-card__crown {
+    top: -6px;
+    left: 9px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .account-card__spark {
+    width: 11px;
+    height: 11px;
+  }
+
+  .account-card__panel {
+    min-height: 50px;
+    padding: 0 10px;
+    gap: 10px;
+  }
+
+  .account-card__title {
+    font-size: 0.9rem;
+  }
+
+  .account-card__subtitle {
+    font-size: 0.72rem;
+  }
+
+  .account-card__arrow {
+    width: 31px;
+    height: 31px;
+  }
+
+  .account-login {
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 0.86rem;
   }
 
   .hero-inner {
-    padding-top: 34px;
-    padding-bottom: 30px;
+    padding-top: 20px;
+    padding-bottom: 24px;
   }
 
   .hero-copy__eyebrow {
-    font-size: 0.96rem;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(2.35rem, 8vw, 3.15rem);
+    line-height: 1.08;
   }
 
   .hero-copy__support {
-    font-size: 0.94rem;
+    margin-top: 12px;
+    font-size: 0.9rem;
     line-height: 1.5;
   }
 
-  .hero-stats-grid {
-    grid-template-columns: 1fr;
+  .hero-grid {
+    display: block;
+  }
+
+  .hero-copy {
+    margin-bottom: 18px;
   }
 
   .hero-highlight-grid {
-    grid-template-columns: 1fr;
+    display: none;
+  }
+
+  .hero-stats-grid {
+    display: none;
+  }
+
+  .hero-mobile-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+  }
+
+  .hero-mobile-card {
+    min-height: 128px;
+    border-radius: 20px;
+    padding: 16px 14px 14px;
+    gap: 8px;
+  }
+
+  .hero-mobile-card__value {
+    font-size: 1.82rem;
+  }
+
+  .hero-mobile-card__label {
+    font-size: 0.82rem;
+    line-height: 1.28;
+  }
+
+  .hero-mobile-card__hint {
+    font-size: 0.76rem;
+    line-height: 1.32;
   }
 
   .heatmap-card,
@@ -2106,6 +2424,140 @@ onMounted(async () => {
     width: 100%;
     justify-content: flex-start;
     padding-top: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .hero-copy__eyebrow {
+    font-size: 0.84rem;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(1.95rem, 12vw, 2.75rem);
+    line-height: 1.02;
+  }
+
+  .hero-copy__support {
+    font-size: 0.82rem;
+  }
+
+  .hero-mobile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .hero-mobile-card {
+    min-height: 138px;
+    padding: 16px 14px;
+  }
+
+  .hero-mobile-card__value {
+    font-size: 1.9rem;
+    gap: 2px;
+  }
+
+  .hero-mobile-card__suffix {
+    font-size: 0.82rem;
+    margin-bottom: 3px;
+  }
+
+  .hero-mobile-card__label {
+    font-size: 0.88rem;
+  }
+
+  .hero-mobile-card__hint {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar-inner {
+    gap: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand__mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .brand__icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .brand__title {
+    font-size: 1rem;
+  }
+
+  .account-card {
+    gap: 8px;
+    padding: 6px;
+    max-width: min(100%, 276px);
+  }
+
+  .account-pill {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.74rem;
+  }
+
+  .account-card__badge-wrap {
+    width: 46px;
+    height: 46px;
+  }
+
+  .account-card__badge {
+    font-size: 1.24rem;
+  }
+
+  .account-card__crown {
+    top: -6px;
+    left: 8px;
+    width: 17px;
+    height: 17px;
+  }
+
+  .account-card__spark {
+    top: 5px;
+    width: 10px;
+    height: 10px;
+  }
+
+  .account-card__title {
+    font-size: 0.82rem;
+  }
+
+  .account-card__subtitle {
+    font-size: 0.66rem;
+  }
+
+  .account-card__panel {
+    min-height: 44px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .account-card__arrow {
+    width: 24px;
+    height: 24px;
+  }
+
+  .account-card__arrow-icon {
+    width: 13px;
+    height: 13px;
+  }
+
+  .account-login {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 0.8rem;
   }
 }
 </style>

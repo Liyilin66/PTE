@@ -5,11 +5,11 @@
   "keyword": "$plan",
   "phase": "planning",
   "activated_at": "2026-04-17T12:18:29.849Z",
-  "updated_at": "2026-04-17T12:46:26.282Z",
+  "updated_at": "2026-04-24T11:05:52.721Z",
   "source": "keyword-detector",
   "session_id": "",
-  "thread_id": "019d9b6d-098e-75f1-a8fb-bdcc5e4c8df6",
-  "turn_id": "019d9b6d-1544-7d20-9b82-8b42ea7c8edd",
-  "iteration": 15,
-  "last_turn_at": "2026-04-22T09:28:25.199Z"
+  "thread_id": "019dbf28-56f0-7d51-86fc-3a2be96b9b1a",
+  "turn_id": "019dbf28-573d-7db2-afdc-8215f4e19953",
+  "iteration": 1,
+  "last_turn_at": "2026-04-24T11:28:26.862Z"
 }

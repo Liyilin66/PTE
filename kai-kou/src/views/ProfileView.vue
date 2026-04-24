@@ -1,5 +1,5 @@
-<script setup>
-import { computed, onMounted, ref } from "vue";
+﻿<script setup>
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -12,6 +12,10 @@ import {
   createEmptyProfilePortrait,
   loadProfilePortraitSnapshotForAuth
 } from "@/lib/profile-portrait";
+import {
+  createEmptyProfileProgress,
+  loadProfileProgressSnapshotForAuth
+} from "@/lib/profile-progress";
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -19,6 +23,8 @@ const authStore = useAuthStore();
 const selectedPlanKey = ref("month");
 const homeAnalytics = ref(createEmptyHomeAnalytics());
 const profilePortrait = ref(createEmptyProfilePortrait());
+const profileProgress = ref(createEmptyProfileProgress());
+let profileRefreshPromise = null;
 const STREAK_MILESTONES = [
   { days: 1, reward: "✅" },
   { days: 3, reward: "⚡" },
@@ -26,6 +32,7 @@ const STREAK_MILESTONES = [
   { days: 14, reward: "🎯" },
   { days: 30, reward: "🎁" }
 ];
+const WEEKDAY_SHORT_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 const plans = [
   {
@@ -33,7 +40,7 @@ const plans = [
     name: "周卡",
     price: "6.9",
     unit: "7 天无限",
-    per: "先试试看",
+    per: "无试用期",
     featured: false,
     badge: ""
   },
@@ -42,7 +49,7 @@ const plans = [
     name: "月卡",
     price: "19.9",
     unit: "30 天无限",
-    per: "≈ 每天 ¥0.66",
+    per: "含 每天 ¥0.66",
     featured: true,
     badge: "🔥 最划算"
   },
@@ -51,7 +58,7 @@ const plans = [
     name: "永久卡",
     price: "49.9",
     unit: "永久无限",
-    per: "一次搞定",
+    per: "一次购罄",
     featured: false,
     badge: ""
   }
@@ -59,86 +66,119 @@ const plans = [
 
 const heroStats = computed(() => [
   {
+    key: "total",
     value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.totalCount),
     label: "累计题数"
   },
   {
+    key: "days",
     value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.activeDaysCount),
     label: "累计天数"
   },
   {
+    key: "streak",
     value: homeAnalytics.value.loading ? "--" : `🔥 ${formatInteger(homeAnalytics.value.currentStreak)}`,
     label: "连续天数"
   },
   {
+    key: "score",
     value: homeAnalytics.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore),
     label: "平均评分"
   }
 ]);
 
-const progressItems = [
+const heroStatIcons = ["", "", "🔥", ""];
+
+function formatHeroStatValue(value) {
+  const text = `${value ?? ""}`.trim();
+  if (!text) return "--";
+  if (/^[^\d-]/.test(text) && /\d/.test(text)) {
+    return text.replace(/^[^\d-]+\s*/, "");
+  }
+  return text;
+}
+const progressItemMeta = [
   {
+    taskType: "RA",
     icon: "🎙",
     iconBg: "#EEF3FD",
     name: "RA · 朗读",
-    width: "60%",
-    fill: "#2563EB",
-    count: "30/50",
-    pct: "60%",
-    pctColor: ""
+    fill: "#2563EB"
   },
   {
+    taskType: "WFD",
     icon: "🎧",
     iconBg: "#ECFDF3",
     name: "WFD · 听写句子",
-    width: "80%",
-    fill: "#059669",
-    count: "80/100",
-    pct: "80%",
-    pctColor: ""
+    fill: "#059669"
   },
   {
+    taskType: "RTS",
     icon: "💬",
     iconBg: "#F4F3FF",
     name: "RTS · 情景回应",
-    width: "4%",
-    fill: "#6941C6",
-    count: "2/48",
-    pct: "4%",
-    pctColor: ""
+    fill: "#6941C6"
   },
   {
+    taskType: "DI",
     icon: "🖼",
     iconBg: "var(--og-bg)",
     name: "DI · 图片描述",
-    width: "30%",
-    fill: "var(--orange)",
-    count: "9/30",
-    pct: "30%",
-    pctColor: ""
+    fill: "var(--orange)"
   },
   {
+    taskType: "RS",
     icon: "🔊",
     iconBg: "#EEF3FD",
     name: "RS · 复述句子",
-    width: "0%",
-    fill: "",
-    count: "0/30",
-    pct: "未开始",
-    pctColor: "var(--hi)"
+    fill: "#4F7BEE"
+  },
+  {
+    taskType: "WE",
+    icon: "✍️",
+    iconBg: "#FFF2EA",
+    name: "WE · 写作",
+    fill: "#E36F35"
   }
 ];
 
-const achievements = [
-  { icon: "🔥", name: "连练 3 天", unlocked: true },
-  { icon: "🎯", name: "首次满分", unlocked: true },
-  { icon: "⚡", name: "速通 WFD", unlocked: true },
-  { icon: "🏆", name: "连练 7 天", unlocked: false },
-  { icon: "📚", name: "练习 50 题", unlocked: false },
-  { icon: "🌟", name: "全题型解锁", unlocked: false },
-  { icon: "❤️", name: "收藏 10 题", unlocked: false },
-  { icon: "🎁", name: "分享好友", unlocked: false }
-];
+const liveProgressItems = computed(() =>
+  progressItemMeta.map((item) => {
+    const completedCountRaw = Number(profileProgress.value.completedCounts?.[item.taskType] || 0);
+    const totalCount = Number(profileProgress.value.totalCounts?.[item.taskType] || 0);
+    const completedCount = totalCount > 0
+      ? Math.min(completedCountRaw, totalCount)
+      : completedCountRaw;
+    const hasStarted = completedCount > 0;
+    const percent = totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0;
+
+    let pct = "同步中...";
+    let pctColor = "";
+    if (!profileProgress.value.loading) {
+      if (totalCount <= 0) {
+        pct = hasStarted ? "已练习" : "题库待同步";
+        pctColor = "var(--hi)";
+      } else if (hasStarted) {
+        pct = `${percent}%`;
+      } else {
+        pct = "未开始";
+        pctColor = "var(--hi)";
+      }
+    }
+
+    return {
+      ...item,
+      width: profileProgress.value.loading || !totalCount || !hasStarted
+        ? "0%"
+        : `${Math.max(percent, 4)}%`,
+      count: profileProgress.value.loading
+        ? "--/--"
+        : `${formatInteger(completedCount)}/${totalCount > 0 ? formatInteger(totalCount) : "--"}`,
+      pct,
+      pctColor
+    };
+  })
+);
 
 const settingsItems = [
   {
@@ -166,7 +206,7 @@ const settingsItems = [
     badge: "有礼品"
   },
   {
-    icon: "🔒",
+    icon: "🔐",
     iconBg: "#F0EEFE",
     label: "修改密码",
     sub: "",
@@ -194,6 +234,11 @@ const userEmail = computed(() => {
   return `${authStore.user?.email || authStore.profile?.email || ""}`.trim();
 });
 
+const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
+const avatarInputRef = ref(null);
+const avatarUploading = ref(false);
+const avatarUploadError = ref("");
+
 const trialPillText = computed(() => {
   if (!authStore.loaded) return "状态同步中";
   if (authStore.isPremium) return "VIP · 已开通";
@@ -207,7 +252,6 @@ const selectedPlan = computed(
 );
 
 const ctaLabel = computed(() => `立即升级${selectedPlan.value.name} · ¥${selectedPlan.value.price}`);
-
 const portraitMetrics = computed(() =>
   profilePortrait.value.metrics.map((item) => ({
     ...item,
@@ -278,7 +322,7 @@ const milestoneSteps = computed(() =>
     const active = !completed && index === nextMilestoneIndex.value;
     return {
       ...item,
-      key: `milestone-${item.days}`,
+      key: `milestone-${item.days}` ,
       daysLabel: `${item.days}天`,
       circle: completed ? "✓" : active ? "🔥" : `${item.days}`,
       state: completed ? "done" : active ? "active" : ""
@@ -358,6 +402,44 @@ const weeklyBars = computed(() =>
     };
   })
 );
+const heroStudyRingProgress = computed(() => {
+  const score = Number(homeAnalytics.value.averageScore ?? 0);
+  if (homeAnalytics.value.loading || !Number.isFinite(score) || score <= 0) return 0;
+  return Math.max(0, Math.min(score / 90, 1));
+});
+const heroStudyRingDegree = computed(() => `${(heroStudyRingProgress.value * 360).toFixed(1)}deg`);
+const heroStudyScore = computed(() =>
+  homeAnalytics.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore)
+);
+const heroStudyStatus = computed(() => {
+  if (homeAnalytics.value.loading) return "正在同步你的学习状态...";
+
+  const totalCount = Number(homeAnalytics.value.totalCount || 0);
+  const averageScore = Number(homeAnalytics.value.averageScore || 0);
+
+  if (totalCount <= 0) return "开始第一题后，这里会自动点亮。";
+  if (averageScore >= 60) return "状态在线，继续保持冲分节奏！";
+  if (averageScore >= 45) return "继续保持，稳步提升中！";
+  return "基础在累积，坚持练习会更稳。";
+});
+const heroStudyFacts = computed(() => [
+  `累计练习 ${formatInteger(homeAnalytics.value.totalCount)} 题`,
+  `已坚持 ${formatInteger(homeAnalytics.value.activeDaysCount)} 天`
+]);
+const heroWeekSummary = computed(() => {
+  if (homeAnalytics.value.loading) return "正在同步本周练习频率";
+  return `已练习 ${formatInteger(homeAnalytics.value.activeDaysCount)} 天 · 当前连续 ${formatInteger(currentStreak.value)} 天`;
+});
+const heroWeekDots = computed(() =>
+  homeAnalytics.value.recentDays.map((item, index) => ({
+    key: item.key,
+    label: WEEKDAY_SHORT_LABELS[index] || `${index + 1}`,
+    active: Number(item.count || 0) > 0,
+    today: Boolean(item.isToday)
+  }))
+);
+const heroQuoteLines = ["每一次练习，", "都是通往更好的自己。"];
+
 function selectPlan(planKey) {
   selectedPlanKey.value = planKey;
 }
@@ -380,19 +462,172 @@ async function handleLogout() {
   router.replace("/auth");
 }
 
-onMounted(async () => {
-  await authStore.init();
-  if (!authStore.loaded) {
-    await authStore.loadStatus();
+function triggerAvatarPicker() {
+  if (avatarUploading.value) return;
+  avatarInputRef.value?.click?.();
+}
+
+async function handleAvatarFileChange(event) {
+  const input = event?.target;
+  const file = input?.files?.[0] || null;
+  if (input) {
+    input.value = "";
   }
-  homeAnalytics.value = createEmptyHomeAnalytics();
-  profilePortrait.value = createEmptyProfilePortrait();
-  const [analyticsSnapshot, portraitSnapshot] = await Promise.all([
-    loadHomeAnalyticsSnapshotForAuth(authStore),
-    loadProfilePortraitSnapshotForAuth(authStore)
-  ]);
-  homeAnalytics.value = analyticsSnapshot;
-  profilePortrait.value = portraitSnapshot;
+  if (!file) return;
+
+  avatarUploadError.value = "请选择图片文件";
+
+  if (!String(file.type || "").startsWith("image/")) {
+    avatarUploadError.value = "请选择图片文件";
+    return;
+  }
+
+  if (Number(file.size || 0) > 8 * 1024 * 1024) {
+    avatarUploadError.value = "请选择图片文件";
+    return;
+  }
+
+  avatarUploading.value = true;
+  try {
+    const avatarDataUrl = await createAvatarDataUrl(file);
+    await authStore.updateAvatarDataUrl(avatarDataUrl);
+  } catch (error) {
+    console.error("Avatar upload failed:", error);
+    avatarUploadError.value = error?.message || "头像上传失败，请稍后重试";
+  } finally {
+    avatarUploading.value = false;
+  }
+}
+
+async function createAvatarDataUrl(file) {
+  const image = await loadImageFromFile(file);
+  const canvas = document.createElement("canvas");
+  const size = 256;
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+      throw new Error("当前浏览器不支持头像处理");
+  }
+
+  const sourceWidth = Number(image.naturalWidth || image.width || 0);
+  const sourceHeight = Number(image.naturalHeight || image.height || 0);
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error("图片读取失败，请重新选择");
+  }
+
+  const sourceSize = Math.min(sourceWidth, sourceHeight);
+  const sourceX = Math.max(0, (sourceWidth - sourceSize) / 2);
+  const sourceY = Math.max(0, (sourceHeight - sourceSize) / 2);
+
+  context.clearRect(0, 0, size, size);
+  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+
+  const blob = await canvasToBlob(canvas, "image/jpeg", 0.86);
+  return blobToDataUrl(blob);
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("图片读取失败，请重新选择"));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("头像处理失败，请重试"));
+        return;
+      }
+      resolve(blob);
+    }, type, quality);
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("头像编码失败，请重试"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function loadProfileSnapshots({ reset = false } = {}) {
+  if (profileRefreshPromise) {
+    return profileRefreshPromise;
+  }
+
+  if (reset) {
+    homeAnalytics.value = createEmptyHomeAnalytics();
+    profilePortrait.value = createEmptyProfilePortrait();
+    profileProgress.value = createEmptyProfileProgress();
+  }
+
+  profileRefreshPromise = (async () => {
+    await authStore.init();
+    if (!authStore.loaded) {
+      await authStore.loadStatus();
+    }
+
+    const [analyticsSnapshot, portraitSnapshot, progressSnapshot] = await Promise.all([
+      loadHomeAnalyticsSnapshotForAuth(authStore),
+      loadProfilePortraitSnapshotForAuth(authStore),
+      loadProfileProgressSnapshotForAuth(authStore)
+    ]);
+
+    homeAnalytics.value = analyticsSnapshot;
+    profilePortrait.value = portraitSnapshot;
+    profileProgress.value = progressSnapshot;
+  })();
+
+  try {
+    await profileRefreshPromise;
+  } finally {
+    profileRefreshPromise = null;
+  }
+}
+
+function handleProfileFocusRefresh() {
+  void loadProfileSnapshots({ reset: false });
+}
+
+function handleProfileVisibilityChange() {
+  if (typeof document === "undefined") return;
+  if (document.visibilityState !== "visible") return;
+  void loadProfileSnapshots({ reset: false });
+}
+
+onMounted(async () => {
+  await loadProfileSnapshots({ reset: true });
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", handleProfileFocusRefresh);
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handleProfileVisibilityChange);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("focus", handleProfileFocusRefresh);
+  }
+  if (typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", handleProfileVisibilityChange);
+  }
 });
 
 function buildRadarChart(metrics) {
@@ -496,7 +731,37 @@ function resolveRadarAnchor(x, center) {
       <div class="hero">
         <div class="hero-glow" />
         <div class="hero-top">
-          <div class="av">{{ userInitial }}</div>
+          <div class="av-wrap">
+            <button
+              type="button"
+              class="av"
+              :disabled="avatarUploading"
+              title="点击更换头像"
+              aria-label="点击更换头像"
+              @click="triggerAvatarPicker"
+            >
+              <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" class="av__img" />
+              <span v-else>{{ userInitial }}</span>
+            </button>
+            <span class="av-crown" aria-hidden="true">
+              <svg viewBox="0 0 24 24" class="av-crown__icon" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M4 17h16l-1.4-8-4.8 3.5L12 5 10.2 12.5 5.4 9 4 17Z" fill="currentColor" stroke="none" />
+                <path d="M6 19h12" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span class="av-spark" aria-hidden="true">
+              <svg viewBox="0 0 16 16" class="av-spark__icon" fill="currentColor">
+                <path d="M8 1.2 9.6 6.4 14.8 8l-5.2 1.6L8 14.8 6.4 9.6 1.2 8l5.2-1.6Z" />
+              </svg>
+            </span>
+          </div>
+          <input
+            ref="avatarInputRef"
+            type="file"
+            accept="image/*"
+            class="avatar-input"
+            @change="handleAvatarFileChange"
+          />
           <div>
             <div class="hero-name">{{ userDisplayName }}</div>
             <div v-if="userEmail" class="hero-email">{{ userEmail }}</div>
@@ -504,19 +769,182 @@ function resolveRadarAnchor(x, center) {
               <div class="trial-pill__dot" />
               {{ trialPillText }}
             </div>
+            <div v-if="avatarUploadError" class="hero-avatar-error">{{ avatarUploadError }}</div>
           </div>
         </div>
 
         <div class="hero-stats">
-          <div v-for="stat in heroStats" :key="stat.label" class="hs">
-            <div class="hs-n">{{ stat.value }}</div>
-            <div class="hs-l">{{ stat.label }}</div>
+          <div v-for="(stat, index) in heroStats" :key="stat.label" class="hs">
+            <div v-if="heroStatIcons[index]" class="hs-icon" aria-hidden="true">{{ heroStatIcons[index] }}</div>
+            <div class="hs-copy">
+              <div class="hs-n">{{ formatHeroStatValue(stat.value) }}</div>
+              <div class="hs-l">{{ stat.label }}</div>
+            </div>
           </div>
+        </div>
+
+        <div class="hero-study-rail">
+          <section class="hero-study-card">
+            <div class="hero-study-card__title">学习状态</div>
+            <div class="hero-study-card__ring" :style="{ '--hero-study-progress': heroStudyRingDegree }">
+              <div class="hero-study-card__ring-inner">
+                <div class="hero-study-card__ring-value">{{ heroStudyScore }}</div>
+                <div class="hero-study-card__ring-label">平均分</div>
+              </div>
+            </div>
+            <p class="hero-study-card__message">{{ heroStudyStatus }}</p>
+            <ul class="hero-study-card__facts">
+              <li v-for="item in heroStudyFacts" :key="item">{{ item }}</li>
+            </ul>
+          </section>
+
+          <section class="hero-week-card">
+            <div class="hero-week-card__title">本周练习频率</div>
+            <p class="hero-week-card__summary">{{ heroWeekSummary }}</p>
+            <div class="hero-week-card__days">
+              <div v-for="item in heroWeekDots" :key="item.key" class="hero-week-card__day">
+                <span class="hero-week-card__label">{{ item.label }}</span>
+                <span
+                  class="hero-week-card__dot"
+                  :class="{
+                    'hero-week-card__dot--active': item.active,
+                    'hero-week-card__dot--today': item.today
+                  }"
+                >
+                  <span
+                    v-if="item.active"
+                    class="hero-week-card__dot-core"
+                    :class="{ 'hero-week-card__dot-core--today': item.today }"
+                  >
+                    {{ item.today ? "🔥" : "" }}
+                  </span>
+                </span>
+              </div>
+            </div>
+            <div class="hero-week-card__legend">
+              <span class="hero-week-card__legend-item">
+                <span class="hero-week-card__legend-dot hero-week-card__legend-dot--active" />
+                练习日
+              </span>
+              <span class="hero-week-card__legend-item">
+                <span class="hero-week-card__legend-dot" />
+                未练习
+              </span>
+            </div>
+          </section>
+
+          <section class="hero-atmosphere">
+            <div class="hero-atmosphere__copy">
+              <p v-for="line in heroQuoteLines" :key="line" class="hero-atmosphere__line">{{ line }}</p>
+            </div>
+
+            <div class="hero-atmosphere__scene" aria-hidden="true">
+              <svg viewBox="0 0 320 360" class="hero-atmosphere__svg" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="profileSceneGlow" cx="72%" cy="82%" r="48%">
+                  <stop offset="0%" stop-color="rgba(255,226,174,0.92)" />
+                  <stop offset="35%" stop-color="rgba(255,226,174,0.34)" />
+                  <stop offset="100%" stop-color="rgba(255,226,174,0)" />
+                </radialGradient>
+                <linearGradient id="profileScenePath" x1="18%" y1="100%" x2="80%" y2="0%">
+                  <stop offset="0%" stop-color="#FFF3B1" />
+                  <stop offset="42%" stop-color="#FFE08A" />
+                  <stop offset="100%" stop-color="#FFF8DE" />
+                </linearGradient>
+                <linearGradient id="profileSceneHillBack" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#18396E" />
+                  <stop offset="100%" stop-color="#0E2751" />
+                </linearGradient>
+                <linearGradient id="profileSceneHillFront" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#10284F" />
+                  <stop offset="100%" stop-color="#091731" />
+                </linearGradient>
+                <filter id="profileSceneBlur" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="7" />
+                </filter>
+                <linearGradient id="profileSceneNebula" x1="16%" y1="0%" x2="84%" y2="100%">
+                  <stop offset="0%" stop-color="rgba(255,255,255,0)" />
+                  <stop offset="30%" stop-color="rgba(195,224,255,0.12)" />
+                  <stop offset="52%" stop-color="rgba(164,204,255,0.3)" />
+                  <stop offset="72%" stop-color="rgba(255,255,255,0.14)" />
+                  <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+                </linearGradient>
+                <linearGradient id="profileSceneMist" x1="8%" y1="16%" x2="88%" y2="78%">
+                  <stop offset="0%" stop-color="rgba(125,164,245,0.03)" />
+                  <stop offset="46%" stop-color="rgba(125,164,245,0.18)" />
+                  <stop offset="100%" stop-color="rgba(125,164,245,0.02)" />
+                </linearGradient>
+              </defs>
+
+              <ellipse cx="236" cy="112" rx="126" ry="80" fill="#87AFFF" opacity="0.11" filter="url(#profileSceneBlur)" />
+              <ellipse cx="210" cy="176" rx="126" ry="88" fill="url(#profileSceneMist)" opacity="0.95" />
+              <ellipse cx="258" cy="314" rx="104" ry="36" fill="url(#profileSceneGlow)" opacity="0.75" />
+              <path d="M24 96C78 64 156 80 218 110C256 127 280 130 320 112" fill="none" stroke="url(#profileSceneNebula)" stroke-width="22" stroke-linecap="round" opacity="0.62" />
+              <path d="M42 150C96 122 150 126 192 146C228 162 264 168 320 152" fill="none" stroke="rgba(146,186,255,0.06)" stroke-width="16" stroke-linecap="round" opacity="0.7" />
+              <g fill="#FFFFFF" opacity="0.9">
+                <circle cx="34" cy="28" r="1.4" />
+                <circle cx="64" cy="42" r="1.2" />
+                <circle cx="102" cy="24" r="1.6" />
+                <circle cx="146" cy="48" r="1.2" />
+                <circle cx="188" cy="26" r="1.4" />
+                <circle cx="236" cy="38" r="1.3" />
+                <circle cx="276" cy="22" r="1.5" />
+                <circle cx="292" cy="54" r="1.1" />
+                <circle cx="52" cy="90" r="1" />
+                <circle cx="92" cy="74" r="1.1" />
+                <circle cx="254" cy="78" r="1" />
+                <circle cx="126" cy="82" r="1" />
+                <circle cx="284" cy="96" r="1.2" />
+                <circle cx="26" cy="142" r="1" />
+                <circle cx="298" cy="136" r="1" />
+              </g>
+
+              <path d="M0 240C36 216 78 206 126 214C164 220 199 214 236 186C264 166 291 164 320 174V360H0Z" fill="url(#profileSceneHillBack)" opacity="0.92" />
+              <path d="M0 282C40 258 78 256 118 268C156 280 190 273 227 244C260 220 288 218 320 230V360H0Z" fill="url(#profileSceneHillFront)" />
+
+              <path
+                d="M104 360C118 337 136 318 158 300C181 281 198 268 214 245C228 225 237 205 255 188C262 181 267 177 271 174"
+                fill="none"
+                stroke="url(#profileScenePath)"
+                stroke-width="10"
+                stroke-linecap="round"
+                opacity="0.96"
+              />
+              <path
+                d="M104 360C118 337 136 318 158 300C181 281 198 268 214 245C228 225 237 205 255 188C262 181 267 177 271 174"
+                fill="none"
+                stroke="#FFFFFF"
+                stroke-width="2.8"
+                stroke-linecap="round"
+                opacity="0.82"
+              />
+              <path
+                d="M104 360C116 343 132 328 151 312C173 293 188 282 205 258C218 239 225 220 244 201C255 190 262 183 271 177"
+                fill="none"
+                stroke="rgba(255,255,255,0.18)"
+                stroke-width="18"
+                stroke-linecap="round"
+                opacity="0.38"
+              />
+
+              <circle cx="266" cy="168" r="18" fill="#FFE8A8" opacity="0.2" />
+              <rect x="261" y="144" width="10" height="36" rx="3" fill="#F8F4EA" />
+              <rect x="256.5" y="158" width="19" height="10" rx="3" fill="#EAD49B" />
+              <rect x="263.4" y="137" width="5.2" height="12" rx="2.4" fill="#FFF3C8" />
+              <circle cx="266" cy="139" r="6" fill="#FFE59C" />
+
+              <path d="M30 318C40 292 51 280 64 271C82 258 100 258 118 268C104 282 93 299 86 318Z" fill="#08162F" />
+              <circle cx="84" cy="264" r="13" fill="#08162F" />
+              <path d="M72 270C81 278 89 288 95 302" fill="none" stroke="#15305F" stroke-width="4.5" stroke-linecap="round" />
+              <path d="M83 289C91 293 98 301 104 314" fill="none" stroke="#1C3D7A" stroke-width="3.6" stroke-linecap="round" />
+              </svg>
+            </div>
+          </section>
         </div>
       </div>
 
       <div class="content">
-        <div class="vip-card">
+        <div class="vip-card profile-section profile-section--vip">
           <div class="vip-top">
             <div class="vip-title">🚀 升级 VIP · 解锁无限练习</div>
             <div class="vip-sub">试用期结束后继续练习，选一个最适合你的方案</div>
@@ -553,7 +981,8 @@ function resolveRadarAnchor(x, center) {
           </div>
         </div>
 
-        <div class="sec">
+        <div class="content-column content-column--primary">
+        <div class="sec profile-section profile-section--portrait">
           <div class="sec-hdr">
             <div class="sec-title">📊 口语能力画像</div>
             <div class="sec-action">{{ portraitSampleLabel }}</div>
@@ -638,7 +1067,7 @@ function resolveRadarAnchor(x, center) {
           </div>
         </div>
 
-        <div class="ms-card">
+        <div class="ms-card profile-section profile-section--streak">
           <div class="ms-hdr">
             <div class="ms-hdr-title">🔥 连续打卡 · 本周练习</div>
           </div>
@@ -652,7 +1081,7 @@ function resolveRadarAnchor(x, center) {
                       <stop offset="100%" style="stop-color: #E8845A" />
                     </linearGradient>
                   </defs>
-                  <circle cx="55" cy="55" r="44" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="9" />
+                  <circle cx="55" cy="55" r="44" fill="none" stroke="#DDE3EE" stroke-width="9" />
                   <circle
                     cx="55"
                     cy="55"
@@ -665,10 +1094,10 @@ function resolveRadarAnchor(x, center) {
                     :stroke-dashoffset="streakRingDashoffset"
                     transform="rotate(-90 55 55)"
                   />
-                  <text x="55" y="50" text-anchor="middle" font-size="26" font-weight="700" fill="white" font-family="sans-serif">
+                  <text x="55" y="50" text-anchor="middle" font-size="26" font-weight="700" fill="#143164" font-family="sans-serif">
                     {{ homeAnalytics.loading ? "--" : formatInteger(currentStreak) }}
                   </text>
-                  <text x="55" y="64" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.32)" font-family="sans-serif">
+                  <text x="55" y="64" text-anchor="middle" font-size="10" fill="#8CA0C0" font-family="sans-serif">
                     / {{ currentGoalDays }} 天目标
                   </text>
                 </svg>
@@ -721,13 +1150,16 @@ function resolveRadarAnchor(x, center) {
           </div>
         </div>
 
-        <div class="sec">
+        </div>
+
+        <div class="content-column content-column--secondary">
+        <div class="sec profile-section profile-section--progress">
           <div class="sec-hdr">
             <div class="sec-title">📈 各题型进度</div>
           </div>
           <div class="sec-body" style="padding: 4px 18px">
             <div class="prog-list">
-              <div v-for="item in progressItems" :key="item.name" class="prog-row">
+              <div v-for="item in liveProgressItems" :key="item.name" class="prog-row">
                 <div class="prog-icon" :style="{ background: item.iconBg }">{{ item.icon }}</div>
                 <div class="prog-meta">
                   <div class="prog-name">{{ item.name }}</div>
@@ -744,22 +1176,7 @@ function resolveRadarAnchor(x, center) {
           </div>
         </div>
 
-        <div class="sec">
-          <div class="sec-hdr">
-            <div class="sec-title">🏅 练习成就</div>
-            <div class="sec-action">3 / 8 已解锁</div>
-          </div>
-          <div class="sec-body">
-            <div class="ach-grid">
-              <div v-for="item in achievements" :key="item.name" class="ach-item">
-                <div class="ach-box" :class="item.unlocked ? 'on' : 'off'">{{ item.icon }}</div>
-                <div class="ach-name">{{ item.name }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="sec">
+        <div class="sec profile-section profile-section--settings">
           <div class="sec-hdr">
             <div class="sec-title">⚙️ 设置</div>
           </div>
@@ -779,7 +1196,8 @@ function resolveRadarAnchor(x, center) {
           </div>
         </div>
 
-        <button type="button" class="logout-btn" @click="handleLogout">退出登录</button>
+        <button type="button" class="logout-btn profile-section profile-section--logout" @click="handleLogout">退出登录</button>
+        </div>
         <div class="pb" />
       </div>
     </div>
@@ -813,13 +1231,15 @@ function resolveRadarAnchor(x, center) {
   --r: 16px;
   min-height: 100vh;
   font-family: -apple-system, "SF Pro Text", "DM Sans", "PingFang SC", sans-serif;
-  background: var(--navy);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.9) 0, rgba(255, 255, 255, 0) 22%),
+    linear-gradient(180deg, #eef4fb 0, #f6f8fc 220px, #f7f9fc 100%);
   -webkit-font-smoothing: antialiased;
   color: var(--tx);
 }
 
 .nav {
-  background: var(--navy);
+  background: rgba(255, 255, 255, 0.92);
   height: 52px;
   display: flex;
   align-items: center;
@@ -828,7 +1248,8 @@ function resolveRadarAnchor(x, center) {
   position: sticky;
   top: 0;
   z-index: 30;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #dbe4f0;
+  backdrop-filter: blur(10px);
 }
 
 .nav-back {
@@ -836,14 +1257,14 @@ function resolveRadarAnchor(x, center) {
   border: none;
   background: none;
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
+  color: #6c7a93;
   cursor: pointer;
 }
 
 .nav-title {
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: #143164;
 }
 
 .nav-spacer {
@@ -851,13 +1272,17 @@ function resolveRadarAnchor(x, center) {
 }
 
 .wrap {
-  max-width: 660px;
+  width: min(100%, 1240px);
   margin: 0 auto;
+  padding: 24px 20px 56px;
 }
 
 .hero {
   background: linear-gradient(180deg, var(--navy) 0%, var(--navy2) 100%);
-  padding: 24px 16px 36px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  box-shadow: 0 18px 40px rgba(15, 36, 68, 0.12);
+  padding: 28px 24px 30px;
   position: relative;
   overflow: hidden;
 }
@@ -869,31 +1294,99 @@ function resolveRadarAnchor(x, center) {
   width: 180px;
   height: 180px;
   border-radius: 50%;
-  background: rgba(232, 132, 90, 0.07);
+  background: rgba(232, 132, 90, 0.08);
   pointer-events: none;
 }
 
 .hero-top {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 22px;
+  gap: 18px;
+  margin-bottom: 24px;
   position: relative;
 }
 
-.av {
+.av-wrap {
   width: 58px;
   height: 58px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.av {
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--orange), #C4622A);
+  background: radial-gradient(circle at 32% 28%, #5b79b3 0%, #344f80 34%, #1b315d 72%, #13274b 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 1.55rem;
+  font-weight: 800;
   color: #fff;
-  flex-shrink: 0;
-  border: 3px solid rgba(255, 255, 255, 0.15);
+  border: 3px solid #dce6f8;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  padding: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 6px 12px rgba(19, 39, 75, 0.1);
+  overflow: hidden;
+}
+
+.av:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(8, 20, 38, 0.2);
+}
+
+.av:disabled {
+  cursor: progress;
+  opacity: 0.88;
+}
+
+.av__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.av-crown {
+  position: absolute;
+  top: -8px;
+  left: 11px;
+  width: 20px;
+  height: 20px;
+  color: #f4b53f;
+  filter: drop-shadow(0 2px 2px rgba(167, 109, 0, 0.18));
+  pointer-events: none;
+}
+
+.av-spark {
+  position: absolute;
+  top: 6px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  color: #7e96c9;
+  pointer-events: none;
+}
+
+.av-crown__icon,
+.av-spark__icon {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-input {
+  display: none;
+}
+
+.hero-avatar-error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: rgba(255, 211, 201, 0.95);
+  font-weight: 600;
 }
 
 .hero-name {
@@ -932,49 +1425,266 @@ function resolveRadarAnchor(x, center) {
 
 .hero-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hero-study-rail {
+  display: none;
 }
 
 .hs {
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 11px 0;
+  border-radius: 14px;
+  padding: 16px 12px;
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.hs-icon {
+  display: none;
+}
+
+.hs-copy {
+  min-width: 0;
+}
+
 .hs-n {
-  font-size: 19px;
+  font-size: 24px;
   font-weight: 600;
   color: #fff;
   letter-spacing: -0.3px;
 }
 
 .hs-l {
-  font-size: 9px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.3);
-  margin-top: 3px;
+  margin-top: 5px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
+.hero-study-card,
+.hero-week-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 16px 15px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.hero-study-card__title,
+.hero-week-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.hero-study-card__ring {
+  --hero-study-progress: 0deg;
+  width: 132px;
+  height: 132px;
+  margin: 14px auto 12px;
+  border-radius: 50%;
+  padding: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    conic-gradient(from -90deg, #3C82FF 0deg var(--hero-study-progress), rgba(226, 234, 246, 0.26) var(--hero-study-progress) 360deg);
+}
+
+.hero-study-card__ring-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(19, 40, 77, 0.98) 0%, rgba(16, 32, 65, 0.98) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.hero-study-card__ring-value {
+  font-size: 30px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.04em;
+}
+
+.hero-study-card__ring-label {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(222, 233, 247, 0.6);
+}
+
+.hero-study-card__message {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.hero-study-card__facts {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hero-study-card__facts li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 12px;
+  color: rgba(219, 229, 245, 0.72);
+}
+
+.hero-study-card__facts li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(94, 186, 255, 0.9);
+  transform: translateY(-50%);
+}
+
+.hero-week-card__summary {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: rgba(219, 229, 245, 0.56);
+}
+
+.hero-week-card__days {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hero-week-card__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-week-card__label {
+  font-size: 12px;
+  color: rgba(219, 229, 245, 0.64);
+}
+
+.hero-week-card__dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(219, 229, 245, 0.28);
+  background: rgba(9, 23, 49, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.hero-week-card__dot--active {
+  background: linear-gradient(180deg, #51D38D 0%, #1DAA6A 100%);
+  border-color: rgba(146, 255, 199, 0.72);
+  box-shadow: 0 10px 20px rgba(29, 170, 106, 0.2);
+}
+
+.hero-week-card__dot-core {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  display: block;
+}
+
+.hero-week-card__dot-core--today {
+  width: auto;
+  height: auto;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.hero-week-card__legend {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.hero-week-card__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(219, 229, 245, 0.62);
+}
+
+.hero-week-card__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(219, 229, 245, 0.28);
+  background: rgba(9, 23, 49, 0.35);
+}
+
+.hero-week-card__legend-dot--active {
+  background: linear-gradient(180deg, #51D38D 0%, #1DAA6A 100%);
+  border-color: rgba(146, 255, 199, 0.72);
+}
+
+.hero-atmosphere {
+  display: none;
+}
+
+.hero-atmosphere__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .content {
-  background: var(--bg);
-  border-radius: 24px 24px 0 0;
-  padding: 20px 16px 0;
-  margin-top: -20px;
+  margin-top: 18px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.profile-section {
+  min-width: 0;
+}
+
+.content-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
 }
 
 .vip-card {
   background: linear-gradient(135deg, var(--navy2) 0%, var(--navy) 100%);
   border-radius: var(--r);
-  margin-bottom: 14px;
+  margin-bottom: 0;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 32px rgba(15, 36, 68, 0.12);
 }
 
 .vip-top {
@@ -1045,7 +1755,7 @@ function resolveRadarAnchor(x, center) {
 }
 
 .plan.featured .plan-name {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .plan-price {
@@ -1054,6 +1764,10 @@ function resolveRadarAnchor(x, center) {
   color: #fff;
   letter-spacing: -0.5px;
   line-height: 1;
+}
+
+.plan.featured .plan-price {
+  color: #fff;
 }
 
 .plan-unit {
@@ -1221,16 +1935,17 @@ function resolveRadarAnchor(x, center) {
 }
 
 .ms-card {
-  background: linear-gradient(160deg, var(--navy2), var(--navy3));
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  border: 1px solid var(--bd);
   border-radius: var(--r);
-  margin-bottom: 12px;
+  margin-bottom: 0;
   overflow: hidden;
+  box-shadow: 0 16px 32px rgba(15, 36, 68, 0.05);
 }
 
 .ms-hdr {
   padding: 14px 18px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--bd);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1239,7 +1954,7 @@ function resolveRadarAnchor(x, center) {
 .ms-hdr-title {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--tx);
 }
 
 .ms-body {
@@ -1262,14 +1977,14 @@ function resolveRadarAnchor(x, center) {
 .ms-ring-n {
   font-size: 15px;
   font-weight: 600;
-  color: #fff;
+  color: var(--tx);
   text-align: center;
   margin-bottom: 3px;
 }
 
 .ms-ring-sub {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--mu);
   text-align: center;
 }
 
@@ -1304,7 +2019,7 @@ function resolveRadarAnchor(x, center) {
   left: calc(-50% + 13px);
   right: calc(50% - 13px);
   height: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: #E3EAF4;
   border-radius: 2px;
 }
 
@@ -1322,9 +2037,9 @@ function resolveRadarAnchor(x, center) {
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.25);
+  border: 2px solid #DBE4F0;
+  background: #F6F9FD;
+  color: #9AACBF;
 }
 
 .ms-dot-circle.done {
@@ -1343,7 +2058,7 @@ function resolveRadarAnchor(x, center) {
 .ms-dot-days {
   font-size: 9px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--hi);
 }
 
 .ms-dot-days.done {
@@ -1359,8 +2074,8 @@ function resolveRadarAnchor(x, center) {
 }
 
 .ms-tip {
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--navy-soft);
+  border: 1px solid var(--bd);
   border-radius: 10px;
   padding: 11px 14px;
   display: flex;
@@ -1372,18 +2087,18 @@ function resolveRadarAnchor(x, center) {
 .ms-tip-title {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--tx);
   margin-bottom: 2px;
 }
 
 .ms-tip-sub {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--mu);
 }
 
 .ms-week-title {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--mu);
   font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -1412,7 +2127,7 @@ function resolveRadarAnchor(x, center) {
   width: 100%;
   border-radius: 4px 4px 0 0;
   min-height: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #E2E9F2;
 }
 
 .ms-spark-bar.has {
@@ -1426,7 +2141,7 @@ function resolveRadarAnchor(x, center) {
 
 .ms-spark-label {
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.2);
+  color: #9AA7BB;
 }
 
 .ms-spark-label.today {
@@ -1499,44 +2214,6 @@ function resolveRadarAnchor(x, center) {
   font-size: 10px;
   color: var(--mu);
   margin-top: 2px;
-}
-
-.ach-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.ach-item {
-  text-align: center;
-}
-
-.ach-box {
-  width: 46px;
-  height: 46px;
-  border-radius: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 6px;
-  font-size: 20px;
-}
-
-.ach-box.on {
-  background: var(--og-bg);
-}
-
-.ach-box.off {
-  background: #EEF1F7;
-  filter: grayscale(1);
-  opacity: 0.35;
-}
-
-.ach-name {
-  font-size: 10px;
-  color: var(--mu);
-  font-weight: 500;
-  line-height: 1.3;
 }
 
 .menu-item {
@@ -1619,4 +2296,397 @@ function resolveRadarAnchor(x, center) {
 .plan.selected {
   border-color: rgba(255, 255, 255, 0.5);
 }
+
+@media (max-width: 620px) {
+  .wrap {
+    padding: 20px 16px 40px;
+  }
+
+  .hero {
+    padding: 24px 18px 26px;
+  }
+
+  .hero-top {
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .hs {
+    padding: 12px 8px;
+  }
+
+  .hs-n {
+    font-size: 20px;
+  }
+
+  .hs-l {
+    font-size: 8px;
+    margin-top: 3px;
+  }
+}
+
+@media (max-width: 520px) {
+  .hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .hs {
+    padding: 10px 6px;
+  }
+
+  .hs-n {
+    font-size: 17px;
+  }
+
+  .hs-l {
+    font-size: 7px;
+    margin-top: 2px;
+  }
+}
+
+@media (max-width: 430px) {
+  .hero-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .hs {
+    padding: 9px 5px;
+  }
+
+  .hs-n {
+    font-size: 15px;
+  }
+
+  .hs-l {
+    font-size: 6px;
+    margin-top: 2px;
+  }
+}
+
+@media (max-width: 360px) {
+  .hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .hs {
+    padding: 14px 12px;
+  }
+
+  .hs-n {
+    font-size: 19px;
+  }
+
+  .hs-l {
+    font-size: 9px;
+    margin-top: 3px;
+  }
+}
+
+@media (min-width: 960px) {
+  .profile-page {
+    background:
+      radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0) 22%),
+      radial-gradient(circle at 82% 8%, rgba(232, 132, 90, 0.12) 0, rgba(232, 132, 90, 0) 18%),
+      linear-gradient(180deg, #edf3fb 0, #eaf0f9 220px, #f6f8fc 220px, #f6f8fc 100%);
+  }
+
+  .nav {
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 10px 30px rgba(10, 22, 40, 0.08);
+  }
+
+  .wrap {
+    max-width: 1320px;
+    padding: 28px 24px 72px;
+  }
+
+  .content {
+    margin-top: 26px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  .content-column {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
+  }
+
+  .profile-section--vip {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  .content-column > .profile-section {
+    margin-bottom: 0;
+  }
+
+  .vip-card,
+  .sec,
+  .ms-card,
+  .logout-btn {
+    box-shadow: 0 18px 42px rgba(15, 36, 68, 0.08);
+  }
+
+  .profile-section--portrait .sec-body,
+  .profile-section--progress .sec-body {
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
+  .radar-wrap {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 18px;
+  }
+
+  .portrait-radar {
+    align-self: center;
+    width: 272px;
+    height: 248px;
+  }
+
+  .sec-body {
+    padding: 18px 20px;
+  }
+
+  .ms-body {
+    padding: 22px 24px;
+  }
+
+  .ms-sparkline {
+    height: 72px;
+  }
+
+  .logout-btn {
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 1080px) {
+  .nav {
+    background: rgba(15, 36, 68, 0.96);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: none;
+  }
+
+  .nav-back {
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .nav-title {
+    color: #fff;
+  }
+
+  .wrap {
+    width: min(calc(100vw - 48px), 1720px);
+    max-width: 1720px;
+    padding: 28px 16px 72px;
+    display: grid;
+    grid-template-columns: 340px minmax(0, 1fr);
+    gap: 28px;
+    align-items: stretch;
+  }
+
+  .hero {
+    height: 100%;
+    min-height: 100%;
+    padding: 22px 18px 22px;
+    border-radius: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .hero-top {
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 0;
+  }
+
+  .hero-stats {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .hero-study-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1;
+  }
+
+  .hs {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-align: left;
+    padding: 16px 16px;
+    border-radius: 18px;
+  }
+
+  .hs-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    font-size: 18px;
+    flex: none;
+  }
+
+  .hs-copy {
+    flex: 1;
+  }
+
+  .hs-n {
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .hs-l {
+    font-size: 12px;
+    margin-top: 8px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .hero-study-card,
+  .hero-week-card {
+    padding: 18px 16px;
+    border-radius: 22px;
+  }
+
+  .hero-atmosphere {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: flex-start;
+    min-height: 338px;
+    margin: 6px -18px -22px;
+    padding: 26px 28px 0;
+    overflow: hidden;
+  }
+
+  .hero-atmosphere::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 72% 26%, rgba(125, 167, 255, 0.12) 0, rgba(125, 167, 255, 0) 26%),
+      linear-gradient(180deg, rgba(33, 70, 131, 0.02) 0%, rgba(19, 45, 89, 0.08) 22%, rgba(12, 31, 64, 0.18) 100%);
+    z-index: 0;
+  }
+
+  .hero-atmosphere::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(18, 41, 80, 0) 0%, rgba(18, 41, 80, 0.12) 12%, rgba(8, 24, 50, 0.42) 100%);
+    z-index: 0;
+  }
+
+  .hero-atmosphere__copy {
+    position: relative;
+    z-index: 2;
+    width: min(69%, 194px);
+    padding-left: 2px;
+    padding-top: 8px;
+  }
+
+  .hero-atmosphere__line {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.62;
+    font-weight: 670;
+    color: rgba(255, 255, 255, 0.95);
+    letter-spacing: 0.012em;
+    text-shadow: 0 3px 10px rgba(4, 14, 29, 0.22);
+  }
+
+  .hero-atmosphere__scene {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: 0.98;
+  }
+
+  .content {
+    margin-top: 0;
+  }
+
+  .vip-card {
+    box-shadow: 0 18px 42px rgba(15, 36, 68, 0.08);
+  }
+
+  .ms-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+    border: 1px solid var(--bd);
+    box-shadow: 0 18px 42px rgba(15, 36, 68, 0.08);
+  }
+
+  .ms-hdr {
+    border-bottom: 1px solid var(--bd);
+  }
+
+  .ms-hdr-title,
+  .ms-ring-n {
+    color: var(--tx);
+  }
+
+  .ms-ring-sub {
+    color: var(--mu);
+  }
+
+  .ms-dot-segment {
+    background: #E3EAF4;
+  }
+
+  .ms-dot-circle {
+    border: 2px solid #DBE4F0;
+    background: #F6F9FD;
+    color: #9AACBF;
+  }
+
+  .ms-dot-days {
+    color: var(--hi);
+  }
+
+  .ms-tip {
+    background: var(--navy-soft);
+    border: 1px solid var(--bd);
+  }
+
+  .ms-tip-title {
+    color: var(--tx);
+  }
+
+  .ms-tip-sub,
+  .ms-week-title,
+  .ms-spark-label {
+    color: var(--mu);
+  }
+
+  .ms-spark-bar {
+    background: #E2E9F2;
+  }
+}
 </style>
+
+
+
+
+
