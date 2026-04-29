@@ -1,10 +1,13 @@
 import { supabase } from "@/lib/supabase";
 
 const DASHBOARD_PAGE_SIZE = 1000;
+const DASHBOARD_WEAKNESS_PAGE_SIZE = 100;
+const DASHBOARD_WEAKNESS_LOOKBACK_DAYS = 30;
+const DASHBOARD_RECENT_PRACTICE_LIMIT = 3;
 const MAX_DURATION_SEC = 60 * 60 * 3;
 const MAX_SCORE = 90;
 const DISPLAY_TASKS = ["RA", "WFD", "RTS", "DI", "WE"];
-const WEAKNESS_TASKS = ["RA", "RS", "RL", "RTS", "DI", "WE"];
+const WEAKNESS_TASKS = ["RA", "WFD", "RTS", "DI", "WE"];
 const TARGET_WEEKLY_SCORE = 70;
 const WEEKDAY_SHORT_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 const ESTIMATED_TASK_DURATION_MINUTES = {
@@ -70,7 +73,7 @@ export function createEmptyDesktopDashboardState(homeAnalytics) {
       previousAverage: null,
       difference: null
     },
-    weakPoints: buildPlaceholderWeakPoints(),
+    weakPoints: [],
     recentPractices: []
   };
 }
@@ -124,6 +127,41 @@ export async function fetchDashboardWeeklyPracticeRowsForAuth(authStore, today =
   return Array.isArray(data) ? data : [];
 }
 
+export async function fetchDashboardWeaknessRowsForAuth(authStore, today = new Date()) {
+  const userId = await resolveCurrentUserId(authStore);
+  if (!userId) return [];
+
+  const start = addDays(startOfDay(today), -DASHBOARD_WEAKNESS_LOOKBACK_DAYS + 1);
+  const { data, error } = await supabase
+    .from("practice_logs")
+    .select("id, task_type, question_id, score_json, feedback, created_at")
+    .eq("user_id", userId)
+    .in("task_type", WEAKNESS_TASKS)
+    .gte("created_at", start.toISOString())
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(DASHBOARD_WEAKNESS_PAGE_SIZE);
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function fetchDashboardRecentPracticeRowsForAuth(authStore) {
+  const userId = await resolveCurrentUserId(authStore);
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from("practice_logs")
+    .select("id, task_type, question_id, score_json, feedback, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(DASHBOARD_RECENT_PRACTICE_LIMIT);
+
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
 export async function fetchDashboardScoreTrendRowsForAuth(authStore, today = new Date()) {
   const userId = await resolveCurrentUserId(authStore);
   if (!userId) {
@@ -170,18 +208,21 @@ export function buildDesktopDashboardState(homeAnalytics, rows, options = {}) {
   const displayTasks = DISPLAY_TASKS.filter((taskType) => (taskType === "DI" ? options.diEnabled !== false : true));
   const weaknessTasks = WEAKNESS_TASKS.filter((taskType) => (taskType === "DI" ? options.diEnabled !== false : true));
   const weeklyRows = Array.isArray(options.weeklyRows) ? options.weeklyRows : safeRows;
+  const optionWeaknessRows = Array.isArray(options.weaknessRows) ? options.weaknessRows : [];
+  const weaknessRows = optionWeaknessRows.length ? optionWeaknessRows : safeRows.slice(0, DASHBOARD_WEAKNESS_PAGE_SIZE);
+  const recentRows = Array.isArray(options.recentRows) ? options.recentRows : safeRows.slice(0, DASHBOARD_RECENT_PRACTICE_LIMIT);
   const trendRows = normalizeTrendRows(options.trendRows);
   const weeklyStudy = buildWeeklyStudySummary(weeklyRows, displayTasks);
 
   const moduleMetrics = buildModuleMetrics(snapshot, safeRows, displayTasks);
-  const weakPoints = buildWeakPoints(safeRows, weaknessTasks);
+  const weakPoints = buildWeakPoints(weaknessRows, weaknessTasks);
   const weeklyGoal = buildWeeklyGoal(snapshot);
   const heroTask = buildHeroTask(snapshot, moduleMetrics, options.diEnabled !== false, safeRows, displayTasks);
   const coach = buildCoach(snapshot, weakPoints);
   const reminder = buildReminder(moduleMetrics);
   const heatmapMatrix = buildHeatmapMatrix(weeklyStudy, displayTasks);
   const scoreTrend = buildScoreTrend(trendRows.currentRows, trendRows.previousRows);
-  const recentPractices = buildRecentPractices(safeRows);
+  const recentPractices = buildRecentPractices(recentRows);
 
   return {
     loading: false,
@@ -777,54 +818,141 @@ function formatTrendComparison(difference, previousAverage) {
 
 function buildWeakPoints(rows, allowedTasks) {
   const buckets = {};
+  const currentStart = addDays(startOfDay(new Date()), -6);
+  const currentEnd = addDays(startOfDay(new Date()), 1);
+  const previousStart = addDays(currentStart, -7);
 
   rows.forEach((row) => {
     const taskType = normalizeTaskType(row?.task_type);
     if (!taskType || !allowedTasks.includes(taskType)) return;
 
-    const overall = resolveOverallScore(taskType, row?.score_json);
-    if (overall === null) return;
+    const createdAt = new Date(row?.created_at);
+    const bucket = buckets[taskType] || {
+      taskType,
+      attempts: 0,
+      scoredRows: [],
+      currentScores: [],
+      previousScores: [],
+      accuracyValues: []
+    };
 
-    buckets[taskType] = buckets[taskType] || [];
-    buckets[taskType].push(overall);
+    bucket.attempts += 1;
+
+    const score = resolveWeaknessScore(taskType, row);
+    if (score === null) {
+      buckets[taskType] = bucket;
+      return;
+    }
+
+    bucket.scoredRows.push({
+      score,
+      createdAt: Number.isFinite(createdAt.getTime()) ? createdAt : new Date(0)
+    });
+
+    const accuracy = resolveAccuracyPercent(row);
+    if (accuracy !== null) {
+      bucket.accuracyValues.push(accuracy);
+    }
+
+    if (Number.isFinite(createdAt.getTime())) {
+      if (createdAt >= currentStart && createdAt < currentEnd) {
+        bucket.currentScores.push(score);
+      } else if (createdAt >= previousStart && createdAt < currentStart) {
+        bucket.previousScores.push(score);
+      }
+    }
+
+    buckets[taskType] = bucket;
   });
 
   const realItems = Object.entries(buckets)
-    .map(([taskType, scores]) => {
-      const averageScore = Number((scores.reduce((sum, value) => sum + value, 0) / scores.length).toFixed(1));
+    .map(([taskType, bucket]) => {
+      const scores = bucket.scoredRows.map((item) => item.score);
+      if (!scores.length) return null;
+
+      const averageScore = averageScores(scores);
+      if (averageScore === null) return null;
+
+      const recentAverageScore = averageScores(
+        [...bucket.scoredRows]
+          .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+          .slice(0, 5)
+          .map((item) => item.score)
+      );
+      const currentAverageScore = averageScores(bucket.currentScores);
+      const previousAverageScore = averageScores(bucket.previousScores);
+      const changeFromLastWeek = currentAverageScore !== null && previousAverageScore !== null
+        ? Number((currentAverageScore - previousAverageScore).toFixed(1))
+        : null;
+      const averageAccuracy = averageScores(bucket.accuracyValues);
       const meta = TASK_META[taskType] || { label: taskType, title: taskType, accent: "#5B6FFF" };
+      const metricType = taskType === "WFD" && averageAccuracy !== null ? "accuracy" : "score";
+      const metricLabel = metricType === "accuracy"
+        ? `正确率 ${formatInteger(averageAccuracy)}%`
+        : `均分 ${formatNumericScore(averageScore)}`;
+
       return {
         taskType,
         label: meta.label,
         title: meta.title,
         accent: meta.accent,
+        attempts: bucket.attempts,
+        scoredCount: scores.length,
         averageScore,
-        accuracy: Math.max(35, Math.min(95, Math.round((averageScore / MAX_SCORE) * 100))),
-        deltaText: averageScore < 60 ? "较上周 ↓ 10%" : averageScore < 70 ? "较上周 ↓ 6%" : "较上周 ↑ 4%",
+        recentAverageScore,
+        currentAverageScore,
+        previousAverageScore,
+        changeFromLastWeek,
+        metricType,
+        metricLabel,
+        accuracy: averageAccuracy,
+        deltaText: formatTrendComparison(changeFromLastWeek, previousAverageScore),
         isPlaceholder: false
       };
     })
-    .sort((left, right) => left.averageScore - right.averageScore);
+    .filter(Boolean)
+    .sort((left, right) => {
+      const scoreGap = left.averageScore - right.averageScore;
+      if (Math.abs(scoreGap) >= 3) return scoreGap;
 
-  if (realItems.length >= 3) return realItems.slice(0, 3);
+      const recentLeft = left.recentAverageScore ?? left.averageScore;
+      const recentRight = right.recentAverageScore ?? right.averageScore;
+      const recentGap = recentLeft - recentRight;
+      if (Math.abs(recentGap) >= 3) return recentGap;
 
-  return [...realItems, ...buildPlaceholderWeakPoints()].slice(0, 3);
+      return right.attempts - left.attempts;
+    });
+
+  return realItems.slice(0, 3);
 }
 
 function buildRecentPractices(rows) {
-  return rows.slice(0, 3).map((row) => {
+  return rows.slice(0, DASHBOARD_RECENT_PRACTICE_LIMIT).map((row, index) => {
     const taskType = normalizeTaskType(row?.task_type);
     const meta = TASK_META[taskType] || { label: taskType || "PTE", title: "练习", accent: "#5B6FFF" };
     const score = resolveOverallScore(taskType, row?.score_json);
+    const accuracy = score === null ? resolveAccuracyPercent(row) : null;
     const questionId = `${row?.question_id || ""}`.trim();
+    const id = `${row?.id || ""}`.trim();
+    const createdAt = `${row?.created_at || ""}`.trim();
+    const metricLabel = score !== null
+      ? `得分 ${formatNumericScore(score)}/90`
+      : accuracy !== null
+        ? `正确率 ${formatInteger(accuracy)}%`
+        : "暂无分数";
+
     return {
-      id: `${row?.id || `${taskType}_${row?.created_at || ""}`}`.trim(),
+      id: id || `${questionId || taskType || "log"}-${createdAt || index}`,
+      key: `${id || questionId || "log"}-${createdAt || index}-${index}`,
       taskType,
       label: meta.label,
       accent: meta.accent,
       title: `${meta.label} 练习`,
       subtitle: questionId ? `· ${questionId}` : "",
-      scoreLabel: score === null ? "--/90" : `${formatNumericScore(score)}/90`,
+      score,
+      accuracy,
+      metricLabel,
+      scoreLabel: metricLabel,
       timeLabel: formatDateTime(row?.created_at)
     };
   });
@@ -862,41 +990,6 @@ function buildPlaceholderHeatmapMatrix() {
       level: 0
     }))
   }));
-}
-
-function buildPlaceholderWeakPoints() {
-  return [
-    {
-      taskType: "DI",
-      label: "DI",
-      title: "数据表格题",
-      accent: TASK_META.DI.accent,
-      averageScore: 48,
-      accuracy: 48,
-      deltaText: "较上周 ↓ 10%",
-      isPlaceholder: true
-    },
-    {
-      taskType: "WE",
-      label: "WE",
-      title: "论证充分性",
-      accent: TASK_META.WE.accent,
-      averageScore: 59,
-      accuracy: 59,
-      deltaText: "较上周 ↓ 6%",
-      isPlaceholder: true
-    },
-    {
-      taskType: "RS",
-      label: "RS",
-      title: "细节理解",
-      accent: TASK_META.RS.accent,
-      averageScore: 56,
-      accuracy: 56,
-      deltaText: "较上周 ↑ 4%",
-      isPlaceholder: true
-    }
-  ];
 }
 
 function createHomeAnalyticsFallback() {
@@ -999,6 +1092,75 @@ function extractTrendOverallScore(log) {
   return null;
 }
 
+function resolveWeaknessScore(taskType, row) {
+  const overall = resolveOverallScore(taskType, row?.score_json);
+  if (overall !== null) return overall;
+
+  const accuracy = resolveAccuracyPercent(row);
+  if (accuracy === null) return null;
+
+  return Number(((accuracy / 100) * MAX_SCORE).toFixed(1));
+}
+
+function resolveAccuracyPercent(row) {
+  const score = toObject(row?.score_json) || {};
+  const nestedScores = toObject(score?.scores) || {};
+  const feedback = toObject(row?.feedback) || {};
+  const feedbackScores = toObject(feedback?.scores) || {};
+  const candidates = [
+    score?.accuracy,
+    score?.accuracy_percent,
+    score?.accuracy_pct,
+    score?.accuracy_rate,
+    score?.correct_rate,
+    score?.correctRate,
+    score?.word_accuracy,
+    score?.wordAccuracy,
+    score?.wfd_accuracy,
+    score?.wfdAccuracy,
+    nestedScores?.accuracy,
+    nestedScores?.accuracy_percent,
+    nestedScores?.correct_rate,
+    feedback?.accuracy,
+    feedback?.accuracy_percent,
+    feedback?.accuracy_rate,
+    feedback?.correct_rate,
+    feedbackScores?.accuracy
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePercentCandidate(candidate);
+    if (normalized !== null) return normalized;
+  }
+
+  const correct = pickFirstNumeric(
+    score?.correct_count,
+    score?.correctCount,
+    score?.correct,
+    score?.matched_count,
+    score?.matchedCount,
+    nestedScores?.correct_count,
+    feedback?.correct_count,
+    feedback?.correct
+  );
+  const total = pickFirstNumeric(
+    score?.total_count,
+    score?.totalCount,
+    score?.total,
+    score?.word_count,
+    score?.wordCount,
+    nestedScores?.total_count,
+    feedback?.total_count,
+    feedback?.total
+  );
+
+  if (correct !== null && total !== null && total > 0) {
+    return Number(Math.max(0, Math.min(100, (correct / total) * 100)).toFixed(1));
+  }
+
+  return null;
+}
+
 function resolveOverallScore(taskType, scoreJson) {
   const score = toObject(scoreJson) || {};
   const candidates = [
@@ -1093,7 +1255,28 @@ function normalizeTrendScoreCandidate(value) {
 
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) return null;
-  return Number(numeric.toFixed(1));
+  return Number(Math.max(0, Math.min(MAX_SCORE, numeric)).toFixed(1));
+}
+
+function normalizePercentCandidate(value) {
+  if (value === null || value === undefined || value === "") return null;
+
+  const numeric = typeof value === "string" ? Number(value.replace("%", "").trim()) : Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+
+  const percent = numeric <= 1 ? numeric * 100 : numeric;
+  if (percent > 100) return null;
+  return Number(percent.toFixed(1));
+}
+
+function pickFirstNumeric(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined || candidate === "") continue;
+
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
 }
 
 function toObject(value) {
@@ -1117,6 +1300,14 @@ function formatNumericScore(value) {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1
   }).format(numeric);
+}
+
+function formatInteger(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "--";
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: 0
+  }).format(Math.round(numeric));
 }
 
 function formatDateTime(value) {

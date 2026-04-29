@@ -363,13 +363,13 @@ function isLocalHostname(hostname) {
 
 function resolveUserDisplayName(user, profile) {
   const candidates = [
-    user?.user_metadata?.username,
-    user?.user_metadata?.display_name,
-    user?.user_metadata?.name,
-    profile?.username,
     profile?.display_name,
+    profile?.username,
     profile?.name,
     profile?.full_name,
+    user?.user_metadata?.display_name,
+    user?.user_metadata?.username,
+    user?.user_metadata?.name,
     getEmailLocalPart(user?.email)
   ];
 
@@ -397,14 +397,15 @@ function normalizeDisplayValue(value) {
 
 function resolveAvatarUrl(user, profile) {
   const candidates = [
+    profile?.avatar_url,
+    profile?.avatarUrl,
+    profile?.photo_url,
+    profile?.photoUrl,
     user?.user_metadata?.avatar_url,
     user?.user_metadata?.avatarUrl,
     user?.user_metadata?.photo_url,
     user?.user_metadata?.photoUrl,
-    profile?.avatar_url,
-    profile?.avatarUrl,
-    profile?.photo_url,
-    profile?.photoUrl
+    user?.user_metadata?.picture
   ];
 
   for (const candidate of candidates) {

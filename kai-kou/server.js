@@ -5,6 +5,7 @@ import express from "express";
 import registerWithCodeHandler from "./api/auth/register-with-code.js";
 import sendRegisterCodeHandler from "./api/auth/send-register-code.js";
 import agentChatHandler from "./api/agent/chat.js";
+import agentDailySuggestionHandler from "./api/agent/daily-suggestion.js";
 import questionsHandler from "./api/questions.js";
 import scoreHandler from "./api/score.js";
 
@@ -18,6 +19,8 @@ app.options("/api/score", scoreHandler);
 app.post("/api/score", scoreHandler);
 app.options("/api/agent/chat", agentChatHandler);
 app.post("/api/agent/chat", agentChatHandler);
+app.options("/api/agent/daily-suggestion", agentDailySuggestionHandler);
+app.post("/api/agent/daily-suggestion", agentDailySuggestionHandler);
 app.options("/api/auth/send-register-code", sendRegisterCodeHandler);
 app.post("/api/auth/send-register-code", sendRegisterCodeHandler);
 app.options("/api/auth/register-with-code", registerWithCodeHandler);

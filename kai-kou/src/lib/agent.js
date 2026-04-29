@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/stores/auth";
 
 const AGENT_CHAT_PATH = "/api/agent/chat";
+const AGENT_DAILY_SUGGESTION_PATH = "/api/agent/daily-suggestion";
 const AGENT_CLIENT_TIMEOUT_MS = 45000;
 const MAX_RECENT_MESSAGES = 10;
 const MAX_RECENT_MESSAGE_CONTENT_LENGTH = 1000;
@@ -77,6 +78,68 @@ export async function sendAgentMessage(message, conversationId = "", recentMessa
   };
 }
 
+export async function requestDailyAiSuggestion({ force = false, practiceSignature = "" } = {}) {
+  const token = await resolveAccessToken();
+  if (!token) {
+    return {
+      ok: false,
+      message: "请先登录后再查看今日 AI 建议。",
+      reason_code: "auth_failed"
+    };
+  }
+
+  const requestPayload = {
+    force: Boolean(force),
+    practice_signature: normalizeText(practiceSignature) || undefined
+  };
+
+  let result = await performAgentRequest({
+    token,
+    path: AGENT_DAILY_SUGGESTION_PATH,
+    payload: requestPayload
+  });
+
+  if (result.status === 401) {
+    const refreshedToken = await resolveAccessToken({ forceRefresh: true });
+    if (refreshedToken && refreshedToken !== token) {
+      result = await performAgentRequest({
+        token: refreshedToken,
+        path: AGENT_DAILY_SUGGESTION_PATH,
+        payload: requestPayload
+      });
+    }
+  }
+
+  if (result.networkError) {
+    return result.networkError;
+  }
+
+  if (result.payload && result.status >= 400) {
+    return normalizeFailurePayload(result.payload, result.status);
+  }
+
+  if (result.payload) {
+    return {
+      ok: result.payload.ok !== false,
+      suggestion: isPlainObject(result.payload.suggestion) ? result.payload.suggestion : null,
+      generated_at: normalizeText(result.payload.generated_at),
+      source: normalizeText(result.payload.source) || "fallback",
+      practice_signature: normalizeText(result.payload.practice_signature),
+      summary: isPlainObject(result.payload.summary) ? result.payload.summary : null,
+      model: normalizeText(result.payload.model),
+      provider: normalizeText(result.payload.provider),
+      reason_code: normalizeText(result.payload.reason_code) || "ok",
+      request_id: normalizeText(result.payload.request_id)
+    };
+  }
+
+  return {
+    ok: false,
+    message: "网络连接不太稳定，请稍后再试。",
+    reason_code: "network_error"
+  };
+}
+
 function sanitizeRecentMessages(recentMessages) {
   return (Array.isArray(recentMessages) ? recentMessages : [])
     .map((item) => ({
@@ -87,7 +150,7 @@ function sanitizeRecentMessages(recentMessages) {
     .slice(-MAX_RECENT_MESSAGES);
 }
 
-async function performAgentRequest({ token, payload } = {}) {
+async function performAgentRequest({ token, payload, path = AGENT_CHAT_PATH } = {}) {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutId = controller
     ? setTimeout(() => {
@@ -96,7 +159,7 @@ async function performAgentRequest({ token, payload } = {}) {
     : null;
 
   try {
-    const response = await fetch(getApiUrl(AGENT_CHAT_PATH), {
+    const response = await fetch(getApiUrl(path || AGENT_CHAT_PATH), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

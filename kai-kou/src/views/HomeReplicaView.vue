@@ -1,21 +1,25 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { isDIEnabled } from "@/lib/di-feature";
+import { requestDailyAiSuggestion } from "@/lib/agent";
 import { formatInteger, formatScore, loadHomeAnalyticsSnapshotForAuth } from "@/lib/home-analytics";
 import {
   buildDesktopDashboardState,
   createEmptyDesktopDashboardState,
   fetchDashboardPracticeRowsForAuth,
+  fetchDashboardRecentPracticeRowsForAuth,
   fetchDashboardScoreTrendRowsForAuth,
+  fetchDashboardWeaknessRowsForAuth,
   fetchDashboardWeeklyPracticeRowsForAuth
 } from "@/lib/home-desktop-dashboard";
 
 const DESIGN_WIDTH = 2560;
 const DESIGN_HEIGHT = 1399;
+const DESKTOP_BOTTOM_SAFE_SPACE = 160;
 const MAX_DESKTOP_SCALE = 0.67;
 const TREND_MIN_SCORE = 10;
 const TREND_MAX_SCORE = 90;
@@ -26,6 +30,13 @@ const TREND_CHART = {
   top: 34,
   bottom: 176
 };
+const WEEKLY_GOAL_TASKS = [
+  { type: "RA", name: "朗读句子", accent: "#6d5df7" },
+  { type: "WFD", name: "写作填空", accent: "#20c887" },
+  { type: "WE", name: "写作议论文", accent: "#3e7bff" },
+  { type: "DI", name: "描述图表", accent: "#7062f7" },
+  { type: "RTS", name: "复述句子", accent: "#ff8a24" }
+];
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -33,8 +44,13 @@ const practiceStore = usePracticeStore();
 const { tasks } = storeToRefs(practiceStore);
 const dashboard = ref(createEmptyDesktopDashboardState());
 const replicaScale = ref(MAX_DESKTOP_SCALE);
+const weeklyGoalState = ref(createWeeklyGoalState());
+const goalModalOpen = ref(false);
+const goalDraft = ref(createEmptyWeeklyGoals());
+const dailyAiSuggestionState = ref(createDailySuggestionState());
 const DASHBOARD_REFRESH_DEBOUNCE_MS = 1000;
 let dashboardLoadPromise = null;
+let dailySuggestionLoadPromise = null;
 let lastPassiveDashboardRefreshAt = 0;
 
 const fallbackNavItems = [
@@ -85,18 +101,6 @@ const fallbackHeatDays = [
 ];
 const heatLegendLevels = [1, 2, 3, 4];
 
-const fallbackWeakItems = [
-  { rank: 1, title: "DI 数据表描述", accuracy: "48%", delta: "较上周 ↓ 10%" },
-  { rank: 2, title: "WE 论证充分性", accuracy: "59%", delta: "较上周 ↓ 6%" },
-  { rank: 3, title: "RS 细节理解", accuracy: "56%", delta: "较上周 ↓ 4%" }
-];
-
-const fallbackRecentItems = [
-  { type: "RA", title: "RA 练习 - 20题", score: "72/90", time: "05-16 10:32", color: "#7868ff" },
-  { type: "DI", title: "DI 练习 - 数据图表题", score: "64/90", time: "05-16 09:41", color: "#8478ff" },
-  { type: "WFD", title: "WFD 练习 - 20题", score: "70/90", time: "05-15 21:36", color: "#20c887" }
-];
-
 const taskVisuals = {
   RA: { title: "RA", subtitle: "朗读句子\n流利表达", color: "#6d5df7", icon: "●", path: "/ra" },
   WFD: { title: "WFD", subtitle: "写作填空\n语法拼写", color: "#20c887", icon: "◆", path: "/wfd" },
@@ -120,26 +124,45 @@ const navItems = computed(() =>
   })
 );
 
-const userDisplayName = computed(() => authStore.displayName || "小K");
-const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim() || "/agent/user-avatar.png");
+const avatarLoadFailed = ref(false);
+const userDisplayName = computed(() => {
+  if (!authStore.isLoggedIn && authStore.loaded) return "未登录";
+  return authStore.displayName || "同学";
+});
+const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
+const userInitial = computed(() => {
+  const first = `${userDisplayName.value || ""}`.trim().charAt(0);
+  return first ? first.toUpperCase() : "K";
+});
+const showUserAvatar = computed(() => Boolean(userAvatarUrl.value) && !avatarLoadFailed.value);
 const homeAnalytics = computed(() => dashboard.value.homeAnalytics || {});
 const heroSubtitle = computed(() => dashboard.value.heroTask?.subtitle || "根据真实练习记录自动生成今日任务");
 const focusTitle = computed(() => dashboard.value.heroTask?.title || "今日重点");
-const notificationCount = computed(() => {
-  let count = 0;
-  if (!homeAnalytics.value.todayCount) count += 1;
-  if ((dashboard.value.weeklyGoal?.percent || 0) < 100) count += 1;
-  return Math.max(1, count);
-});
 
 const scaledSlotStyle = computed(() => ({
   width: `${Math.ceil(DESIGN_WIDTH * replicaScale.value)}px`,
-  height: `${Math.ceil(DESIGN_HEIGHT * replicaScale.value)}px`
+  height: `${Math.ceil((DESIGN_HEIGHT + DESKTOP_BOTTOM_SAFE_SPACE) * replicaScale.value)}px`
 }));
 
 const canvasScaleStyle = computed(() => ({
+  height: `${DESIGN_HEIGHT + DESKTOP_BOTTOM_SAFE_SPACE}px`,
   transform: `scale(${replicaScale.value})`
 }));
+
+const currentWeekStartKey = computed(() => getWeekStartKey());
+const weeklyGoalStorageKey = computed(() => {
+  const userId = `${authStore.user?.id || ""}`.trim();
+  return userId ? `pte_weekly_goals:${userId}:${currentWeekStartKey.value}` : "";
+});
+
+watch(userAvatarUrl, () => {
+  avatarLoadFailed.value = false;
+});
+
+watch(() => authStore.user?.id, () => {
+  loadWeeklyGoals();
+  loadCachedDailySuggestion();
+});
 
 const focusTasks = computed(() => {
   const realTasks = dashboard.value.heroTask?.checklist;
@@ -215,10 +238,92 @@ const coachSummaries = computed(() => {
   return source.map((item) => (typeof item === "string" ? { text: item, time: "" } : item)).slice(0, 2);
 });
 
-const reminderTitle = computed(() => dashboard.value.reminder?.title || "今日有 3 个学习任务待完成");
-const reminderDetail = computed(() => dashboard.value.reminder?.detail || "建议合理安排时间，保持连续学习");
-const weeklyGoalPercent = computed(() => Math.max(0, Math.min(100, Math.round(Number(dashboard.value.weeklyGoal?.percent || 68)))));
-const weeklyGoalCaption = computed(() => dashboard.value.weeklyGoal?.caption || "目标：平均分达到 70 分");
+const dailySuggestionCacheKey = computed(() => {
+  const userId = `${authStore.user?.id || ""}`.trim();
+  return userId ? `pte_daily_ai_suggestion:${userId}:${getTodayDateKey()}` : "";
+});
+const dailyPracticeSummary = computed(() => buildDailyPracticeSummaryFromDashboard());
+const dailyAiSuggestion = computed(() => dailyAiSuggestionState.value.suggestion || createNewUserDailySuggestion());
+const dailyAiSuggestionTasks = computed(() => sanitizeDailySuggestionTasks(dailyAiSuggestion.value.tasks, dailyAiSuggestion.value.main_task_type));
+const dailyAiSuggestionStatusLabel = computed(() => {
+  if (dailyAiSuggestionState.value.loading) return "生成中";
+  if (dailyAiSuggestionState.value.source === "new_user") return "新手建议";
+  if (dailyAiSuggestionState.value.source === "fallback") return "临时建议";
+  return "AI 已生成";
+});
+const dailyAiSuggestionTimeLabel = computed(() => {
+  if (dailyAiSuggestionState.value.loading) return "正在生成今日 AI 建议...";
+  if (dailyAiSuggestionState.value.source === "new_user") return "新手建议";
+  if (dailyAiSuggestionState.value.source === "fallback") {
+    return `临时建议 · ${formatSuggestionGeneratedAt(dailyAiSuggestionState.value.generated_at)}`;
+  }
+  return formatSuggestionGeneratedAt(dailyAiSuggestionState.value.generated_at);
+});
+const dailyAiMainTaskPath = computed(() => {
+  const taskType = normalizeDailyTaskType(dailyAiSuggestion.value.main_task_type) || "RA";
+  return taskVisuals[taskType]?.path || "/ra";
+});
+const weeklyCompletionCounts = computed(() => {
+  const source = dashboard.value.weeklyStudy?.taskCounts || {};
+  return Object.fromEntries(
+    WEEKLY_GOAL_TASKS.map((task) => [task.type, Math.max(0, Math.floor(Number(source[task.type] || 0)))])
+  );
+});
+const weeklyGoalTargets = computed(() => normalizeWeeklyGoals(weeklyGoalState.value.goals));
+const weeklyGoalTargetTotal = computed(() => sumGoalValues(weeklyGoalTargets.value));
+const weeklyGoalEffectiveCompletedTotal = computed(() =>
+  calculateEffectiveGoalCompleted(weeklyGoalTargets.value, weeklyCompletionCounts.value)
+);
+const weeklyGoalProgressRatio = computed(() => {
+  if (weeklyGoalTargetTotal.value <= 0) return 0;
+  return Math.min(1, weeklyGoalEffectiveCompletedTotal.value / weeklyGoalTargetTotal.value);
+});
+const weeklyGoalPercent = computed(() => Math.round(weeklyGoalProgressRatio.value * 100));
+const weeklyGoalIsSet = computed(() => weeklyGoalTargetTotal.value > 0);
+const weeklyGoalIsComplete = computed(() =>
+  weeklyGoalIsSet.value && weeklyGoalEffectiveCompletedTotal.value >= weeklyGoalTargetTotal.value
+);
+const weeklyGoalStatusLabel = computed(() => {
+  if (!weeklyGoalIsSet.value) return "未设置";
+  return weeklyGoalIsComplete.value ? "已达成" : "进行中";
+});
+const weeklyGoalSummary = computed(() => {
+  if (!weeklyGoalIsSet.value) return "尚未设置本周目标";
+  const base = `已完成 ${formatInteger(weeklyGoalEffectiveCompletedTotal.value)} / ${formatInteger(weeklyGoalTargetTotal.value)} 题`;
+  return weeklyGoalIsComplete.value ? `${base}，目标已达成` : base;
+});
+const weeklyGoalButtonLabel = computed(() => (weeklyGoalIsSet.value ? "调整目标" : "去设置目标"));
+const weeklyGoalRingStyle = computed(() => ({
+  background: `conic-gradient(#5b6fff ${weeklyGoalPercent.value * 3.6}deg, #edf2fb 0deg)`
+}));
+const weeklyGoalChips = computed(() =>
+  WEEKLY_GOAL_TASKS.map((task) => {
+    const target = Number(weeklyGoalTargets.value[task.type] || 0);
+    const completed = Number(weeklyCompletionCounts.value[task.type] || 0);
+    return {
+      ...task,
+      target,
+      completed,
+      active: target > 0,
+      complete: target > 0 && completed >= target
+    };
+  })
+);
+const goalDraftRows = computed(() =>
+  WEEKLY_GOAL_TASKS.map((task) => ({
+    ...task,
+    target: Number(goalDraft.value[task.type] || 0),
+    completed: Number(weeklyCompletionCounts.value[task.type] || 0)
+  }))
+);
+const goalDraftTargetTotal = computed(() => sumGoalValues(goalDraft.value));
+const goalDraftCompletedTotal = computed(() =>
+  calculateEffectiveGoalCompleted(goalDraft.value, weeklyCompletionCounts.value)
+);
+const goalDraftProgressPercent = computed(() => {
+  if (goalDraftTargetTotal.value <= 0) return 0;
+  return Math.min(100, Math.round((goalDraftCompletedTotal.value / goalDraftTargetTotal.value) * 100));
+});
 
 const heatDays = computed(() => {
   const weekDays = dashboard.value.weeklyStudy?.weekDays;
@@ -381,26 +486,548 @@ const trendEmptyText = computed(() => {
 
 const weakItems = computed(() => {
   const realItems = dashboard.value.weakPoints;
-  const source = Array.isArray(realItems) && realItems.length ? realItems : fallbackWeakItems;
+  const source = Array.isArray(realItems) ? realItems : [];
   return source.slice(0, 3).map((item, index) => ({
     rank: index + 1,
     title: item.title ? `${item.label || ""} ${item.title}`.trim() : item.title,
-    accuracy: typeof item.accuracy === "number" ? `${formatInteger(item.accuracy)}%` : (item.accuracy || "--"),
-    delta: item.deltaText || item.delta || "较上周 ↓ 4%"
+    metricLabel: item.metricLabel || (typeof item.averageScore === "number" ? `均分 ${formatScore(item.averageScore)}` : "--"),
+    delta: item.deltaText || "暂无上周对比"
   }));
 });
 
+const hasWeakItems = computed(() => weakItems.value.length > 0);
+
 const recentItems = computed(() => {
   const realItems = dashboard.value.recentPractices;
-  const source = Array.isArray(realItems) && realItems.length ? realItems : fallbackRecentItems;
-  return source.slice(0, 3).map((item) => ({
+  const source = Array.isArray(realItems) ? realItems : [];
+  return source.slice(0, 3).map((item, index) => ({
+    key: item.key || `${item.id || item.question_id || "log"}-${item.created_at || item.timeLabel || index}-${index}`,
     type: item.taskType || item.type,
     title: item.title,
-    score: item.scoreLabel || item.score || "--",
+    score: item.metricLabel || item.scoreLabel || item.score || "暂无分数",
     time: item.timeLabel || item.time || "--",
     color: item.accent || item.color || "#7868ff"
   }));
 });
+
+const hasRecentItems = computed(() => recentItems.value.length > 0);
+
+function createDailySuggestionState(payload = {}) {
+  return {
+    date: payload.date || getTodayDateKey(),
+    user_id: payload.user_id || "",
+    practice_signature: payload.practice_signature || "",
+    suggestion: sanitizeDailySuggestion(payload.suggestion || createNewUserDailySuggestion()),
+    generated_at: payload.generated_at || "",
+    source: payload.source || "new_user",
+    summary: payload.summary || null,
+    loading: Boolean(payload.loading),
+    reason_code: payload.reason_code || ""
+  };
+}
+
+function createNewUserDailySuggestion() {
+  return {
+    title: "今日 AI 建议",
+    main_task_type: "RA",
+    headline: "先完成一轮基础测温",
+    reason: "你还没有足够练习记录，我需要先了解你的表现。",
+    advice: "建议先做 RA 2 道、DI 2 道、WFD 5 道。完成后我会根据真实数据给你下一步建议。",
+    tasks: [
+      { task_type: "RA", count: 2 },
+      { task_type: "DI", count: 2 },
+      { task_type: "WFD", count: 5 }
+    ],
+    cta_text: "开始练习"
+  };
+}
+
+function createFallbackDailySuggestion(summary = {}) {
+  const mainTaskType = normalizeDailyTaskType(summary.weakest_task_type || summary.latest_task_type) || "RA";
+  const taskMethods = {
+    RA: "重点保持不断句，卡顿超过 3 秒就重读一遍。",
+    WFD: "先听主干，再补冠词、复数和时态细节。",
+    WE: "先列结构，再写正文，避免边想边写。",
+    DI: "先说主图信息，再补 2 个细节，最后总结一句。",
+    RTS: "先抓场景和任务，再复述关键动作。"
+  };
+
+  return {
+    title: "今日 AI 建议",
+    main_task_type: mainTaskType,
+    headline: `今天先稳住 ${mainTaskType} 表现`,
+    reason: summary.weakest_task_type ? `最近 ${mainTaskType} 更值得优先补强。` : "AI 建议暂时不可用，先用保守计划兜底。",
+    advice: taskMethods[mainTaskType] || taskMethods.RA,
+    tasks: [
+      { task_type: mainTaskType, count: mainTaskType === "WFD" ? 5 : 3 },
+      { task_type: mainTaskType === "RA" ? "DI" : "RA", count: 2 }
+    ],
+    cta_text: `开始 ${mainTaskType} 训练`
+  };
+}
+
+function sanitizeDailySuggestion(suggestion) {
+  const source = suggestion && typeof suggestion === "object" ? suggestion : {};
+  const mainTaskType = normalizeDailyTaskType(source.main_task_type) || "RA";
+  return {
+    title: "今日 AI 建议",
+    main_task_type: mainTaskType,
+    headline: limitText(source.headline, "先完成一轮基础测温", 30),
+    reason: limitText(source.reason, "根据你的练习记录，今天先做一组稳定训练。", 62),
+    advice: limitText(source.advice, "每题只盯一个训练动作，完成后再看反馈。", 92),
+    tasks: sanitizeDailySuggestionTasks(source.tasks, mainTaskType),
+    cta_text: limitText(source.cta_text, `开始 ${mainTaskType} 训练`, 18)
+  };
+}
+
+function sanitizeDailySuggestionTasks(tasks, mainTaskType = "RA") {
+  const normalized = (Array.isArray(tasks) ? tasks : [])
+    .map((item) => ({
+      task_type: normalizeDailyTaskType(item?.task_type),
+      count: Math.max(0, Math.min(10, Math.floor(Number(item?.count || 0))))
+    }))
+    .filter((item) => item.task_type && item.count > 0)
+    .slice(0, 3);
+
+  if (normalized.length) return normalized;
+  return [{ task_type: normalizeDailyTaskType(mainTaskType) || "RA", count: 2 }];
+}
+
+function normalizeDailyTaskType(value) {
+  const normalized = `${value || ""}`.trim().toUpperCase();
+  return ["RA", "WFD", "WE", "DI", "RTS"].includes(normalized) ? normalized : "";
+}
+
+function buildDailyPracticeSummaryFromDashboard() {
+  const analytics = dashboard.value.homeAnalytics || {};
+  const recent = Array.isArray(dashboard.value.recentPractices) ? dashboard.value.recentPractices[0] : null;
+  const weak = Array.isArray(dashboard.value.weakPoints) ? dashboard.value.weakPoints[0] : null;
+  const weeklyStudy = dashboard.value.weeklyStudy || {};
+  const todayKey = resolveDashboardTodayKey(weeklyStudy) || getTodayDateKey();
+  const todayTaskCounts = Object.fromEntries(
+    WEEKLY_GOAL_TASKS.map((task) => {
+      const count = Number(weeklyStudy.counters?.[task.type]?.[todayKey] || 0);
+      return [task.type, Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0];
+    })
+  );
+  const todayAttempts = Number(analytics.todayCount || 0) || Object.values(todayTaskCounts).reduce((total, count) => total + Number(count || 0), 0);
+
+  const summary = {
+    total_attempts: Math.max(0, Math.floor(Number(analytics.totalCount || 0))),
+    today_attempts: Math.max(0, Math.floor(Number(todayAttempts || 0))),
+    latest_practice_id: `${recent?.id || ""}`.trim(),
+    latest_practice_at: `${recent?.timeLabel || recent?.created_at || ""}`.trim(),
+    latest_task_type: normalizeDailyTaskType(recent?.taskType || recent?.type),
+    recent_7_days_attempts: Math.max(0, Math.floor(Number(weeklyStudy.totalCount || 0))),
+    recent_7_days_average_score: normalizeNullableNumber(dashboard.value.trendMeta?.currentAverage ?? analytics.averageScore),
+    weakest_task_type: normalizeDailyTaskType(weak?.taskType),
+    weakest_task_average_score: normalizeNullableNumber(weak?.averageScore),
+    today_task_counts: todayTaskCounts
+  };
+
+  return {
+    ...summary,
+    practice_signature: createDailyPracticeSignature(summary)
+  };
+}
+
+function createDailyPracticeSignature(summary) {
+  return [
+    `total=${formatSignatureInteger(summary.total_attempts)}`,
+    `today=${formatSignatureInteger(summary.today_attempts)}`,
+    `latest=${summary.latest_practice_id || ""}`,
+    `latestAt=${summary.latest_practice_at || ""}`,
+    `r7=${formatSignatureInteger(summary.recent_7_days_attempts)}`,
+    `avg7=${formatSignatureNumber(summary.recent_7_days_average_score)}`,
+    `weak=${summary.weakest_task_type || ""}:${formatSignatureNumber(summary.weakest_task_average_score)}`
+  ].join("|");
+}
+
+function shouldRegenerateSuggestion(cache, summary, force = false) {
+  if (force) return true;
+  if (!cache?.suggestion) return true;
+  if (cache.date !== getTodayDateKey()) return true;
+  if (Number(summary.total_attempts || 0) <= 0) return false;
+  if (cache.source === "new_user") return true;
+  if (cache.source === "fallback") return isFallbackSuggestionRetryDue(cache);
+  if (!cache.practice_signature) return true;
+  if (cache.practice_signature === summary.practice_signature) return false;
+
+  const cachedSummary = cache.summary || {};
+  const todayIncrease = Number(summary.today_attempts || 0) - Number(cachedSummary.today_attempts || 0);
+  const latestChanged = Boolean(summary.latest_practice_id)
+    && summary.latest_practice_id !== cachedSummary.latest_practice_id;
+  const mainTaskType = normalizeDailyTaskType(cache.suggestion?.main_task_type);
+
+  if (latestChanged && todayIncrease >= 2) return true;
+  if (latestChanged && mainTaskType && summary.latest_task_type === mainTaskType) return true;
+
+  const averageGap = Math.abs(Number(summary.recent_7_days_average_score || 0) - Number(cachedSummary.recent_7_days_average_score || 0));
+  if (Number.isFinite(averageGap) && averageGap >= 5) return true;
+
+  if (
+    summary.weakest_task_type
+    && cachedSummary.weakest_task_type
+    && summary.weakest_task_type !== cachedSummary.weakest_task_type
+  ) {
+    return true;
+  }
+
+  const currentCounts = summary.today_task_counts || {};
+  const cachedCounts = cachedSummary.today_task_counts || {};
+  return WEEKLY_GOAL_TASKS.some((task) => Number(currentCounts[task.type] || 0) - Number(cachedCounts[task.type] || 0) >= 3);
+}
+
+function isFallbackSuggestionRetryDue(cache) {
+  const generatedAt = new Date(cache?.generated_at || "");
+  if (!Number.isFinite(generatedAt.getTime())) return true;
+  return Date.now() - generatedAt.getTime() >= 10 * 60 * 1000;
+}
+
+function readDailySuggestionCache() {
+  const key = dailySuggestionCacheKey.value;
+  if (!key || typeof window === "undefined") return null;
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "null");
+    if (!parsed || typeof parsed !== "object") return null;
+    return createDailySuggestionState(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function persistDailySuggestionCache(payload) {
+  const key = dailySuggestionCacheKey.value;
+  if (!key || typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify({
+      date: payload.date || getTodayDateKey(),
+      user_id: payload.user_id || authStore.user?.id || "",
+      practice_signature: payload.practice_signature || "",
+      suggestion: sanitizeDailySuggestion(payload.suggestion),
+      generated_at: payload.generated_at || new Date().toISOString(),
+      source: payload.source || "fallback",
+      summary: payload.summary || null,
+      reason_code: payload.reason_code || ""
+    }));
+  } catch (error) {
+    console.warn("Daily AI suggestion cache save failed:", error);
+  }
+}
+
+function loadCachedDailySuggestion() {
+  const cache = readDailySuggestionCache();
+  if (cache) {
+    dailyAiSuggestionState.value = {
+      ...cache,
+      loading: false
+    };
+    return cache;
+  }
+
+  dailyAiSuggestionState.value = createDailySuggestionState({
+    source: "new_user",
+    suggestion: createNewUserDailySuggestion()
+  });
+  return null;
+}
+
+async function refreshDailyAiSuggestion({ force = false } = {}) {
+  if (dailySuggestionLoadPromise) return dailySuggestionLoadPromise;
+
+  const currentLoad = (async () => {
+    const summary = dailyPracticeSummary.value;
+    const userId = `${authStore.user?.id || ""}`.trim();
+    const cache = readDailySuggestionCache();
+
+    if (!userId || Number(summary.total_attempts || 0) <= 0) {
+      const nextState = createDailySuggestionState({
+        date: getTodayDateKey(),
+        user_id: userId,
+        practice_signature: summary.practice_signature,
+        suggestion: createNewUserDailySuggestion(),
+        generated_at: new Date().toISOString(),
+        source: "new_user",
+        summary,
+        reason_code: "new_user"
+      });
+      dailyAiSuggestionState.value = nextState;
+      persistDailySuggestionCache(nextState);
+      return nextState;
+    }
+
+    if (cache && !shouldRegenerateSuggestion(cache, summary, force)) {
+      dailyAiSuggestionState.value = {
+        ...cache,
+        loading: false
+      };
+      return cache;
+    }
+
+    dailyAiSuggestionState.value = {
+      ...(cache || dailyAiSuggestionState.value),
+      loading: true
+    };
+
+    try {
+      const result = await requestDailyAiSuggestion({
+        force,
+        practiceSignature: summary.practice_signature
+      });
+
+      if (!result.ok || !result.suggestion) {
+        throw new Error(result.reason_code || "daily_suggestion_failed");
+      }
+
+      const nextState = createDailySuggestionState({
+        date: getTodayDateKey(),
+        user_id: userId,
+        practice_signature: result.practice_signature || summary.practice_signature,
+        suggestion: result.suggestion,
+        generated_at: result.generated_at || new Date().toISOString(),
+        source: result.source || "agent",
+        summary: result.summary || summary,
+        reason_code: result.reason_code || "ok"
+      });
+      dailyAiSuggestionState.value = nextState;
+      persistDailySuggestionCache(nextState);
+      return nextState;
+    } catch (error) {
+      console.warn("Daily AI suggestion load failed:", error);
+      const nextState = createDailySuggestionState({
+        date: getTodayDateKey(),
+        user_id: userId,
+        practice_signature: summary.practice_signature,
+        suggestion: createFallbackDailySuggestion(summary),
+        generated_at: new Date().toISOString(),
+        source: "fallback",
+        summary,
+        reason_code: "fallback_error"
+      });
+      dailyAiSuggestionState.value = nextState;
+      persistDailySuggestionCache(nextState);
+      return nextState;
+    }
+  })();
+
+  dailySuggestionLoadPromise = currentLoad;
+  try {
+    return await currentLoad;
+  } finally {
+    if (dailySuggestionLoadPromise === currentLoad) {
+      dailySuggestionLoadPromise = null;
+    }
+  }
+}
+
+function resolveDashboardTodayKey(weeklyStudy) {
+  const today = Array.isArray(weeklyStudy?.weekDays)
+    ? weeklyStudy.weekDays.find((day) => day?.isToday)
+    : null;
+  return `${today?.key || ""}`.trim();
+}
+
+function getTodayDateKey(date = new Date()) {
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (!Number.isFinite(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsed.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatSuggestionGeneratedAt(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "今日更新";
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  if (getTodayDateKey(date) === getTodayDateKey()) {
+    return `今日 ${hours}:${minutes} 更新`;
+  }
+  return `${date.getMonth() + 1}-${`${date.getDate()}`.padStart(2, "0")} ${hours}:${minutes} 更新`;
+}
+
+function openDailySuggestionPractice() {
+  openPath(dailyAiMainTaskPath.value);
+}
+
+function limitText(value, fallback, maxLength) {
+  const text = `${value || fallback || ""}`.trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function normalizeNullableNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Number(numeric.toFixed(1)) : null;
+}
+
+function formatSignatureInteger(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${Math.max(0, Math.floor(numeric))}` : "0";
+}
+
+function formatSignatureNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(1) : "na";
+}
+
+function createEmptyWeeklyGoals() {
+  return Object.fromEntries(WEEKLY_GOAL_TASKS.map((task) => [task.type, 0]));
+}
+
+function createWeeklyGoalState(goals = createEmptyWeeklyGoals()) {
+  return {
+    week_start: getWeekStartKey(),
+    goals: normalizeWeeklyGoals(goals),
+    updated_at: ""
+  };
+}
+
+function normalizeWeeklyGoals(goals) {
+  const source = goals && typeof goals === "object" ? goals : {};
+  return Object.fromEntries(
+    WEEKLY_GOAL_TASKS.map((task) => [task.type, normalizeGoalNumber(source[task.type])])
+  );
+}
+
+function normalizeGoalNumber(value) {
+  const numeric = Math.floor(Number(value));
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.min(numeric, 999);
+}
+
+function sumGoalValues(goals) {
+  const normalized = normalizeWeeklyGoals(goals);
+  return WEEKLY_GOAL_TASKS.reduce((total, task) => total + Number(normalized[task.type] || 0), 0);
+}
+
+function calculateEffectiveGoalCompleted(goals, completedCounts) {
+  const normalizedGoals = normalizeWeeklyGoals(goals);
+  const completed = completedCounts && typeof completedCounts === "object" ? completedCounts : {};
+
+  return WEEKLY_GOAL_TASKS.reduce((total, task) => {
+    const target = Number(normalizedGoals[task.type] || 0);
+    const done = Math.max(0, Math.floor(Number(completed[task.type] || 0)));
+    return total + Math.min(done, target);
+  }, 0);
+}
+
+function getWeekStartKey(date = new Date()) {
+  const localDate = new Date(date);
+  localDate.setHours(0, 0, 0, 0);
+  const day = localDate.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  localDate.setDate(localDate.getDate() + mondayOffset);
+  return formatLocalDateKey(localDate);
+}
+
+function formatLocalDateKey(date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function loadWeeklyGoals() {
+  const emptyState = createWeeklyGoalState();
+  if (typeof window === "undefined") {
+    weeklyGoalState.value = emptyState;
+    return;
+  }
+
+  const key = weeklyGoalStorageKey.value;
+  if (!key) {
+    weeklyGoalState.value = emptyState;
+    return;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      weeklyGoalState.value = emptyState;
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (parsed?.week_start !== currentWeekStartKey.value) {
+      weeklyGoalState.value = emptyState;
+      return;
+    }
+
+    weeklyGoalState.value = {
+      week_start: currentWeekStartKey.value,
+      goals: normalizeWeeklyGoals(parsed.goals),
+      updated_at: `${parsed.updated_at || ""}`
+    };
+  } catch (error) {
+    console.warn("Replica weekly goals load failed:", error);
+    weeklyGoalState.value = emptyState;
+  }
+}
+
+function persistWeeklyGoals(goals) {
+  const normalized = normalizeWeeklyGoals(goals);
+  const key = weeklyGoalStorageKey.value;
+  const nextState = {
+    week_start: currentWeekStartKey.value,
+    goals: normalized,
+    updated_at: new Date().toISOString()
+  };
+
+  if (typeof window === "undefined" || !key) {
+    weeklyGoalState.value = nextState;
+    return;
+  }
+
+  try {
+    if (sumGoalValues(normalized) <= 0) {
+      window.localStorage.removeItem(key);
+      weeklyGoalState.value = createWeeklyGoalState();
+      return;
+    }
+
+    window.localStorage.setItem(key, JSON.stringify(nextState));
+    weeklyGoalState.value = nextState;
+  } catch (error) {
+    console.warn("Replica weekly goals save failed:", error);
+    weeklyGoalState.value = nextState;
+  }
+}
+
+function openGoalModal() {
+  loadWeeklyGoals();
+  goalDraft.value = { ...weeklyGoalTargets.value };
+  goalModalOpen.value = true;
+}
+
+function closeGoalModal() {
+  goalModalOpen.value = false;
+}
+
+function updateGoalDraft(taskType, event) {
+  goalDraft.value = {
+    ...goalDraft.value,
+    [taskType]: normalizeGoalNumber(event?.target?.value)
+  };
+}
+
+function clearGoalDraft() {
+  goalDraft.value = createEmptyWeeklyGoals();
+}
+
+function clearWeeklyGoals() {
+  persistWeeklyGoals(createEmptyWeeklyGoals());
+  goalDraft.value = createEmptyWeeklyGoals();
+  goalModalOpen.value = false;
+}
+
+function saveWeeklyGoals() {
+  persistWeeklyGoals(goalDraft.value);
+  goalModalOpen.value = false;
+}
 
 async function loadDashboard(options = {}) {
   if (dashboardLoadPromise) return dashboardLoadPromise;
@@ -411,13 +1038,16 @@ async function loadDashboard(options = {}) {
       dashboard.value = createEmptyDesktopDashboardState();
     }
     try {
-      if (!authStore.loaded) {
+      if (authStore.user || !authStore.loaded) {
         await authStore.loadStatus();
       }
+      loadWeeklyGoals();
 
       const analyticsSnapshot = await loadHomeAnalyticsSnapshotForAuth(authStore);
       let rows = [];
       let weeklyRows = [];
+      let weaknessRows = [];
+      let recentRows = [];
       let trendRows = { currentRows: [], previousRows: [] };
 
       try {
@@ -433,6 +1063,18 @@ async function loadDashboard(options = {}) {
       }
 
       try {
+        weaknessRows = await fetchDashboardWeaknessRowsForAuth(authStore);
+      } catch (error) {
+        console.warn("Replica dashboard weakness rows load failed:", error);
+      }
+
+      try {
+        recentRows = await fetchDashboardRecentPracticeRowsForAuth(authStore);
+      } catch (error) {
+        console.warn("Replica dashboard recent rows load failed:", error);
+      }
+
+      try {
         trendRows = await fetchDashboardScoreTrendRowsForAuth(authStore);
       } catch (error) {
         console.warn("Replica dashboard trend rows load failed:", error);
@@ -441,14 +1083,18 @@ async function loadDashboard(options = {}) {
       dashboard.value = buildDesktopDashboardState(analyticsSnapshot, rows, {
         diEnabled: isDIEnabled(),
         weeklyRows,
+        weaknessRows,
+        recentRows,
         trendRows
       });
+      void refreshDailyAiSuggestion();
     } catch (error) {
       console.warn("Replica dashboard load failed:", error);
       dashboard.value = {
         ...createEmptyDesktopDashboardState(),
         loading: false
       };
+      void refreshDailyAiSuggestion();
     }
   })();
 
@@ -493,7 +1139,12 @@ function refreshDashboardOnFocus() {
   if (now - lastPassiveDashboardRefreshAt < DASHBOARD_REFRESH_DEBOUNCE_MS) return;
 
   lastPassiveDashboardRefreshAt = now;
+  loadWeeklyGoals();
   loadDashboard({ showLoading: false });
+}
+
+function handleAvatarError() {
+  avatarLoadFailed.value = true;
 }
 
 function handleVisibilityChange() {
@@ -502,10 +1153,19 @@ function handleVisibilityChange() {
   }
 }
 
+function handleGlobalKeydown(event) {
+  if (event.key === "Escape" && goalModalOpen.value) {
+    closeGoalModal();
+  }
+}
+
 onMounted(() => {
   updateReplicaScale();
+  loadWeeklyGoals();
+  loadCachedDailySuggestion();
   window.addEventListener("resize", updateReplicaScale);
   window.addEventListener("focus", refreshDashboardOnFocus);
+  window.addEventListener("keydown", handleGlobalKeydown);
   document.addEventListener("visibilitychange", handleVisibilityChange);
   loadDashboard();
 });
@@ -513,6 +1173,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateReplicaScale);
   window.removeEventListener("focus", refreshDashboardOnFocus);
+  window.removeEventListener("keydown", handleGlobalKeydown);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 </script>
@@ -561,19 +1222,15 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="replica-top-actions">
-            <label class="replica-search">
-              <span class="replica-search-icon">⌕</span>
-              <input type="text" value="" placeholder="搜索题目、技巧、课程..." readonly />
-              <span class="replica-keycap">⌘ /</span>
-            </label>
-            <button class="replica-bell" type="button" aria-label="通知">
-              <span>♧</span>
-              <em>{{ notificationCount }}</em>
-            </button>
             <button class="replica-profile" type="button" @click="openPath('/profile')">
-              <img :src="userAvatarUrl" alt="小K" />
+              <span class="replica-profile-avatar" aria-hidden="true">
+                <img v-if="showUserAvatar" :src="userAvatarUrl" :alt="`${userDisplayName}头像`" @error="handleAvatarError" />
+                <b v-else>{{ userInitial }}</b>
+              </span>
               <strong>{{ userDisplayName }}</strong>
-              <span>⌄</span>
+              <svg class="replica-profile-chevron" viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M5.5 7.5 10 12l4.5-4.5" />
+              </svg>
             </button>
           </div>
         </header>
@@ -665,19 +1322,61 @@ onBeforeUnmount(() => {
             </section>
 
             <div class="replica-side-card-grid">
-              <section class="replica-card replica-mini-card">
-                <div class="replica-mini-title"><span>♧</span><strong>学习提醒</strong><em>›</em></div>
-                <p class="replica-reminder-main">{{ reminderTitle }}</p>
-                <p class="replica-reminder-copy">{{ reminderDetail }}</p>
-                <button type="button" @click="handleNav({ target: '#quick' })">去查看任务</button>
+              <section class="replica-card replica-mini-card replica-daily-ai-card">
+                <div class="replica-mini-title replica-daily-ai-title">
+                  <span>✦</span>
+                  <strong>今日 AI 建议</strong>
+                  <em>{{ dailyAiSuggestionStatusLabel }}</em>
+                </div>
+                <p class="replica-daily-ai-headline">{{ dailyAiSuggestion.headline }}</p>
+                <p class="replica-daily-ai-reason">{{ dailyAiSuggestion.reason }}</p>
+                <p class="replica-daily-ai-advice">{{ dailyAiSuggestion.advice }}</p>
+                <div class="replica-daily-ai-pills">
+                  <span v-for="task in dailyAiSuggestionTasks" :key="`${task.task_type}-${task.count}`">
+                    {{ task.task_type }} {{ task.count }} 道
+                  </span>
+                </div>
+                <div class="replica-daily-ai-footer">
+                  <time>{{ dailyAiSuggestionTimeLabel }}</time>
+                  <div>
+                    <button type="button" class="replica-daily-ai-primary" @click="openDailySuggestionPractice">
+                      {{ dailyAiSuggestion.cta_text || "开始练习" }}
+                    </button>
+                    <button type="button" class="replica-daily-ai-secondary" @click="openPath('/agent')">问 AI 私教</button>
+                  </div>
+                </div>
               </section>
 
-              <section id="goal" class="replica-card replica-mini-card">
-                <div class="replica-mini-title"><span>◎</span><strong>本周目标进度</strong><em>›</em></div>
-                <div class="replica-goal-percent">{{ weeklyGoalPercent }}%</div>
+              <section id="goal" class="replica-card replica-goal-card">
+                <div class="replica-goal-head">
+                  <div class="replica-goal-title"><span>◎</span><strong>本周目标进度</strong></div>
+                  <div class="replica-goal-head-actions">
+                    <em :class="{ 'is-complete': weeklyGoalIsComplete, 'is-empty': !weeklyGoalIsSet }">{{ weeklyGoalStatusLabel }}</em>
+                    <i>›</i>
+                  </div>
+                </div>
+                <div class="replica-goal-body">
+                  <div>
+                    <div class="replica-goal-percent">{{ weeklyGoalPercent }}%</div>
+                    <p>{{ weeklyGoalSummary }}</p>
+                  </div>
+                  <div class="replica-goal-ring" :style="weeklyGoalRingStyle">
+                    <span>{{ weeklyGoalPercent }}%</span>
+                  </div>
+                </div>
                 <div class="replica-goal-track"><span :style="{ width: `${weeklyGoalPercent}%` }"></span></div>
-                <p class="replica-reminder-copy">{{ weeklyGoalCaption }}</p>
-                <button type="button">去调整目标</button>
+                <div class="replica-goal-chip-list">
+                  <span
+                    v-for="chip in weeklyGoalChips"
+                    :key="chip.type"
+                    class="replica-goal-chip"
+                    :class="{ 'is-muted': !chip.active, 'is-complete': chip.complete }"
+                  >
+                    <b>{{ chip.type }}</b>
+                    <i>{{ chip.completed }}/{{ chip.target }}</i>
+                  </span>
+                </div>
+                <button type="button" class="replica-goal-button" @click="openGoalModal">{{ weeklyGoalButtonLabel }}</button>
               </section>
             </div>
           </div>
@@ -751,33 +1450,37 @@ onBeforeUnmount(() => {
             </article>
 
             <article id="weakness" class="replica-card replica-weak-card">
-              <div class="replica-bottom-title replica-bottom-title--link">
+              <div class="replica-bottom-title">
                 <h3>我的弱项 Top 3</h3>
-                <a href="#">查看全部 →</a>
               </div>
-              <div class="replica-weak-list">
+              <div v-if="hasWeakItems" class="replica-weak-list">
                 <div v-for="item in weakItems" :key="item.rank" class="replica-weak-row">
                   <span>{{ item.rank }}</span>
                   <strong>{{ item.title }}</strong>
-                  <em>正确率 {{ item.accuracy }}</em>
+                  <em>{{ item.metricLabel }}</em>
                   <i>{{ item.delta }}</i>
                 </div>
+              </div>
+              <div v-else class="replica-weak-empty">
+                练习数据还不够，完成几道题后我会帮你识别弱项。
               </div>
             </article>
 
             <article class="replica-card replica-recent-card">
-              <div class="replica-bottom-title replica-bottom-title--link">
+              <div class="replica-bottom-title">
                 <h3>最近练习</h3>
-                <a href="#">查看全部 →</a>
               </div>
-              <div class="replica-recent-list">
-                <div v-for="item in recentItems" :key="item.title" class="replica-recent-row">
+              <div v-if="hasRecentItems" class="replica-recent-list">
+                <div v-for="item in recentItems" :key="item.key" class="replica-recent-row">
                   <span :style="{ backgroundColor: item.color }">{{ item.type }}</span>
                   <strong>{{ item.title }}</strong>
-                  <em>得分 {{ item.score }}</em>
+                  <em>{{ item.score }}</em>
                   <time>{{ item.time }}</time>
                   <i>›</i>
                 </div>
+              </div>
+              <div v-else class="replica-recent-empty">
+                暂无练习记录，完成一次练习后这里会自动更新。
               </div>
             </article>
           </section>
@@ -785,13 +1488,57 @@ onBeforeUnmount(() => {
       </main>
       </div>
     </div>
+    <div v-if="goalModalOpen" class="replica-goal-modal-layer" @click.self="closeGoalModal">
+      <section class="replica-goal-modal" role="dialog" aria-modal="true" aria-labelledby="weekly-goal-modal-title">
+        <header>
+          <div>
+            <h2 id="weekly-goal-modal-title">设置本周目标</h2>
+            <p>填写你本周每个题型想完成的题数</p>
+          </div>
+          <button type="button" class="replica-goal-modal-close" aria-label="关闭" @click="closeGoalModal">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5 14.5 14.5M14.5 5.5 5.5 14.5" /></svg>
+          </button>
+        </header>
+
+        <div class="replica-goal-form">
+          <label v-for="row in goalDraftRows" :key="row.type" class="replica-goal-form-row">
+            <span class="replica-goal-form-badge" :style="{ backgroundColor: row.accent }">{{ row.type }}</span>
+            <strong>{{ row.name }}<small>已完成 {{ formatInteger(row.completed) }} 题</small></strong>
+            <input
+              type="number"
+              min="0"
+              max="999"
+              step="1"
+              inputmode="numeric"
+              :value="row.target"
+              @input="updateGoalDraft(row.type, $event)"
+            />
+            <em>题</em>
+          </label>
+        </div>
+
+        <div class="replica-goal-modal-summary">
+          <span>目标总数 <b>{{ formatInteger(goalDraftTargetTotal) }}</b> 题</span>
+          <span>本周已完成 <b>{{ formatInteger(goalDraftCompletedTotal) }}</b> 题</span>
+          <span>当前进度 <b>{{ goalDraftProgressPercent }}%</b></span>
+        </div>
+
+        <footer>
+          <button type="button" class="replica-goal-modal-secondary" @click="closeGoalModal">取消</button>
+          <button type="button" class="replica-goal-modal-clear" @click="clearWeeklyGoals">清空目标</button>
+          <button type="button" class="replica-goal-modal-save" @click="saveWeeklyGoals">保存目标</button>
+        </footer>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .home-replica-page {
+  box-sizing: border-box;
   width: 100%;
   min-height: 100vh;
+  padding-bottom: max(48px, env(safe-area-inset-bottom, 0px));
   overflow-x: hidden;
   overflow-y: auto;
   background: #f8faff;
@@ -1076,84 +1823,6 @@ onBeforeUnmount(() => {
   gap: 24px;
 }
 
-.replica-search {
-  display: flex;
-  align-items: center;
-  width: 568px;
-  height: 62px;
-  gap: 15px;
-  padding: 0 17px 0 23px;
-  border: 1px solid #dfe7f4;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
-}
-
-.replica-search-icon {
-  color: #7082ad;
-  font-size: 30px;
-  line-height: 1;
-}
-
-.replica-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #697798;
-  font: inherit;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.replica-search input::placeholder {
-  color: #7f8fac;
-  opacity: 1;
-}
-
-.replica-keycap {
-  display: grid;
-  place-items: center;
-  min-width: 62px;
-  height: 37px;
-  border-radius: 999px;
-  background: #fbfcff;
-  box-shadow: inset 0 0 0 1px #e4ebf6;
-  color: #8b98b1;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.replica-bell {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border: 0;
-  background: transparent;
-  color: #7887a6;
-  font-size: 31px;
-}
-
-.replica-bell em {
-  position: absolute;
-  top: 0;
-  right: 2px;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 3px solid #fff;
-  border-radius: 999px;
-  background: #ff333d;
-  color: #fff;
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 900;
-}
-
 .replica-profile {
   display: flex;
   align-items: center;
@@ -1162,24 +1831,67 @@ onBeforeUnmount(() => {
   background: transparent;
   color: #16213f;
   font: inherit;
+  cursor: pointer;
+  transition: color 0.18s ease;
 }
 
-.replica-profile img {
+.replica-profile:hover {
+  color: #315dff;
+}
+
+.replica-profile-avatar {
+  display: grid;
+  place-items: center;
   width: 56px;
   height: 56px;
   border-radius: 999px;
-  object-fit: cover;
+  overflow: hidden;
+  background: linear-gradient(135deg, #eef3ff 0%, #dfe7ff 100%);
+  color: #496aff;
+  font-size: 22px;
+  font-weight: 950;
   box-shadow: 0 0 0 4px #fff;
 }
 
-.replica-profile strong {
-  font-size: 21px;
-  font-weight: 900;
+.replica-profile-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.replica-profile span {
-  color: #6f7fa1;
-  font-size: 22px;
+.replica-profile-avatar b {
+  font: inherit;
+  line-height: 1;
+}
+
+.replica-profile strong {
+  max-width: 190px;
+  overflow: hidden;
+  font-size: 21px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replica-profile-chevron {
+  width: 16px;
+  height: 16px;
+  color: #7180a1;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.replica-profile-chevron path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+}
+
+.replica-profile:hover .replica-profile-chevron {
+  color: #4f63ff;
+  transform: translateY(1px);
 }
 
 .replica-content {
@@ -1664,56 +2376,496 @@ onBeforeUnmount(() => {
   line-height: 1;
 }
 
-.replica-reminder-main {
-  margin: 28px 0 0;
+.replica-daily-ai-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(91, 111, 255, 0.08), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.replica-daily-ai-title em {
+  height: 27px;
+  border: 1px solid #dfe7ff;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #f5f8ff;
+  color: #566dff;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 25px;
+}
+
+.replica-daily-ai-headline {
+  margin: 18px 0 0;
   color: #24304d;
-  font-size: 22px;
-  line-height: 1.3;
+  font-size: 21px;
+  line-height: 1.22;
   font-weight: 950;
 }
 
-.replica-reminder-copy {
-  margin: 13px 0 0;
+.replica-daily-ai-reason,
+.replica-daily-ai-advice {
+  margin: 9px 0 0;
   color: #7a87a3;
-  font-size: 17px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.42;
   font-weight: 750;
 }
 
-.replica-mini-card button {
-  height: 45px;
-  margin-top: 27px;
-  border: 1px solid #e4eaf8;
-  border-radius: 10px;
-  padding: 0 25px;
-  background: #f8faff;
+.replica-daily-ai-advice {
+  color: #5f6d8b;
+}
+
+.replica-daily-ai-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.replica-daily-ai-pills span {
+  height: 27px;
+  border: 1px solid #dfe6ff;
+  border-radius: 999px;
+  padding: 0 11px;
+  background: #f4f7ff;
   color: #536dff;
-  font-size: 16px;
+  font-size: 13px;
+  line-height: 25px;
   font-weight: 950;
 }
 
+.replica-daily-ai-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.replica-daily-ai-footer time {
+  color: #9aa6bb;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.replica-daily-ai-footer div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.replica-daily-ai-footer button {
+  height: 34px;
+  border: 1px solid #e4eaf8;
+  border-radius: 9px;
+  padding: 0 13px;
+  font-size: 13px;
+  font-weight: 950;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.replica-daily-ai-footer button:hover {
+  transform: translateY(-1px);
+}
+
+.replica-daily-ai-primary {
+  background: linear-gradient(90deg, #4d6dff, #767cff);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(83, 109, 255, 0.2);
+}
+
+.replica-daily-ai-secondary {
+  background: #f8faff;
+  color: #536dff;
+}
+
+.replica-goal-card {
+  height: 284px;
+  padding: 20px 25px 18px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(116, 133, 255, 0.13), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96));
+}
+
+.replica-goal-head,
+.replica-goal-body,
+.replica-goal-head-actions,
+.replica-goal-title {
+  display: flex;
+  align-items: center;
+}
+
+.replica-goal-head {
+  justify-content: space-between;
+}
+
+.replica-goal-title {
+  gap: 12px;
+}
+
+.replica-goal-title span {
+  color: #536dff;
+  font-size: 25px;
+}
+
+.replica-goal-title strong {
+  color: #24304d;
+  font-size: 21px;
+  font-weight: 950;
+}
+
+.replica-goal-head-actions {
+  gap: 9px;
+}
+
+.replica-goal-head-actions em {
+  display: inline-flex;
+  align-items: center;
+  height: 27px;
+  border: 1px solid #dfe7ff;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: #f5f7ff;
+  color: #5d6eff;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.replica-goal-head-actions em.is-empty {
+  color: #8390ab;
+}
+
+.replica-goal-head-actions em.is-complete {
+  border-color: #c8f0df;
+  background: #effcf7;
+  color: #17a86f;
+}
+
+.replica-goal-head-actions i {
+  color: #8390ab;
+  font-size: 28px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.replica-goal-body {
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
 .replica-goal-percent {
-  margin-top: 26px;
   color: #17213e;
-  font-size: 43px;
+  font-size: 38px;
   line-height: 1;
   font-weight: 950;
 }
 
+.replica-goal-body p {
+  max-width: 215px;
+  margin: 5px 0 0;
+  color: #7785a3;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 850;
+}
+
+.replica-goal-ring {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(99, 116, 255, 0.16), 0 12px 24px rgba(86, 103, 180, 0.12);
+}
+
+.replica-goal-ring span {
+  display: grid;
+  place-items: center;
+  width: 47px;
+  height: 47px;
+  border-radius: inherit;
+  background: #fff;
+  color: #32405f;
+  font-size: 16px;
+  font-weight: 950;
+}
+
 .replica-goal-track {
-  height: 9px;
-  margin-top: 18px;
+  height: 11px;
+  margin-top: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e7ecf6;
+  background: #e8eef8;
 }
 
 .replica-goal-track span {
   display: block;
-  width: 68%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #4a6dff, #7984ff);
+  background: linear-gradient(90deg, #4a6dff, #7e86ff);
+  box-shadow: 0 0 14px rgba(91, 111, 255, 0.35);
+}
+
+.replica-goal-chip-list {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.replica-goal-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid #e4eaff;
+  border-radius: 10px;
+  padding: 5px 4px 4px;
+  background: #f9fbff;
+  text-align: center;
+}
+
+.replica-goal-chip b {
+  color: #31405f;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.replica-goal-chip i {
+  color: #667594;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.replica-goal-chip.is-muted {
+  opacity: 0.46;
+}
+
+.replica-goal-chip.is-complete {
+  border-color: #ccefe1;
+  background: #f2fbf7;
+}
+
+.replica-goal-button {
+  height: 34px;
+  margin-top: 9px;
+  border: 1px solid #dfe7ff;
+  border-radius: 11px;
+  padding: 0 18px;
+  background: #f8faff;
+  color: #536dff;
+  font-size: 15px;
+  font-weight: 950;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.replica-goal-button:hover {
+  transform: translateY(-1px);
+  border-color: #c8d3ff;
+  background: #eef3ff;
+}
+
+.replica-goal-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgba(28, 38, 70, 0.24);
+  backdrop-filter: blur(10px);
+}
+
+.replica-goal-modal {
+  width: min(720px, calc(100vw - 48px));
+  border: 1px solid rgba(224, 231, 255, 0.96);
+  border-radius: 28px;
+  padding: 30px;
+  background:
+    radial-gradient(circle at 86% 8%, rgba(111, 128, 255, 0.14), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 30px 80px rgba(34, 49, 92, 0.24);
+  color: #17213f;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif;
+}
+
+.replica-goal-modal header,
+.replica-goal-modal footer,
+.replica-goal-form-row,
+.replica-goal-modal-summary {
+  display: flex;
+  align-items: center;
+}
+
+.replica-goal-modal header {
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.replica-goal-modal h2 {
+  margin: 0;
+  color: #1a2544;
+  font-size: 28px;
+  line-height: 1.18;
+  font-weight: 950;
+}
+
+.replica-goal-modal header p {
+  margin: 8px 0 0;
+  color: #7a87a3;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.replica-goal-modal-close {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #e3eaff;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #7180a1;
+}
+
+.replica-goal-modal-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.replica-goal-modal-close path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+}
+
+.replica-goal-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.replica-goal-form-row {
+  min-height: 64px;
+  border: 1px solid #e6ecf8;
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.replica-goal-form-badge {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 950;
+  box-shadow: 0 10px 22px rgba(83, 109, 255, 0.16);
+}
+
+.replica-goal-form-row strong {
+  flex: 1;
+  min-width: 0;
+  margin-left: 14px;
+  color: #24304d;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.replica-goal-form-row small {
+  display: block;
+  margin-top: 4px;
+  color: #8390aa;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.replica-goal-form-row input {
+  width: 92px;
+  height: 42px;
+  border: 1px solid #dfe7ff;
+  border-radius: 13px;
+  background: #f9fbff;
+  color: #1d2948;
+  font-size: 18px;
+  font-weight: 950;
+  text-align: center;
+  outline: none;
+}
+
+.replica-goal-form-row input:focus {
+  border-color: #8fa0ff;
+  box-shadow: 0 0 0 4px rgba(91, 111, 255, 0.12);
+}
+
+.replica-goal-form-row em {
+  margin-left: 9px;
+  color: #7684a1;
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.replica-goal-modal-summary {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+  border: 1px solid #e2e9fb;
+  border-radius: 18px;
+  padding: 15px 18px;
+  background: linear-gradient(90deg, rgba(241, 245, 255, 0.95), rgba(248, 251, 255, 0.95));
+  color: #6f7d9b;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.replica-goal-modal-summary b {
+  color: #24304d;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.replica-goal-modal footer {
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.replica-goal-modal footer button {
+  height: 44px;
+  border-radius: 13px;
+  padding: 0 20px;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.replica-goal-modal-secondary,
+.replica-goal-modal-clear {
+  border: 1px solid #e2e9fb;
+  background: #fff;
+  color: #697794;
+}
+
+.replica-goal-modal-clear {
+  color: #5366d9;
+}
+
+.replica-goal-modal-save {
+  border: 0;
+  background: linear-gradient(90deg, #4a6dff, #7c84ff);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(83, 109, 255, 0.24);
 }
 
 .replica-bottom-grid {
@@ -1751,10 +2903,14 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 
+.replica-heatmap-card {
+  overflow: hidden;
+}
+
 .replica-heatmap {
   display: grid;
-  gap: 10px;
-  margin-top: 20px;
+  gap: 8px;
+  margin-top: 15px;
 }
 
 .replica-heatmap-days,
@@ -1794,7 +2950,7 @@ onBeforeUnmount(() => {
   display: block;
   justify-self: center;
   width: 32px;
-  height: 25px;
+  height: 23px;
   border-radius: 8px;
   border: 1px solid #dfe5ff;
   background: #f6f7ff;
@@ -1841,7 +2997,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 17px;
+  margin-top: 11px;
   color: #8994ad;
   font-size: 13px;
   font-weight: 850;
@@ -1857,14 +3013,14 @@ onBeforeUnmount(() => {
 .replica-bottom-foot {
   display: inline-flex;
   align-items: center;
-  height: 32px;
-  margin: 17px 0 0;
+  height: 28px;
+  margin: 9px 0 0;
   border-radius: 7px;
   border: 1px solid #dce5ff;
-  padding: 0 17px;
+  padding: 0 15px;
   background: #eef2ff;
   color: #586a9c;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
 }
 
@@ -1940,6 +3096,30 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 14px;
   margin-top: 21px;
+}
+
+.replica-weak-empty {
+  display: grid;
+  min-height: 205px;
+  place-items: center;
+  padding: 0 34px;
+  color: #7d89a5;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.replica-recent-empty {
+  display: grid;
+  min-height: 205px;
+  place-items: center;
+  padding: 0 34px;
+  color: #7d89a5;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.8;
+  text-align: center;
 }
 
 .replica-weak-row {
