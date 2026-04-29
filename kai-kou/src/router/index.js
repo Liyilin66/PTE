@@ -8,6 +8,7 @@ const routes = [
   { path: "/forgot-password", name: "forgot-password", component: () => import("@/views/ForgotPasswordView.vue") },
   { path: "/reset-password", name: "reset-password", component: () => import("@/views/ResetPasswordView.vue") },
   { path: "/home", name: "home", component: () => import("@/views/HomeView.vue"), meta: { requiresAuth: true } },
+  { path: "/agent", name: "agent", component: () => import("@/views/AgentView.vue"), meta: { requiresAuth: true } },
   { path: "/ra", name: "ra", component: () => import("@/views/RAView.vue"), meta: { requiresAuth: true } },
   { path: "/ra/list", name: "ra-list", component: () => import("@/views/RAListView.vue"), meta: { requiresAuth: true } },
   { path: "/ra/result", name: "ra-result", component: () => import("@/views/RAResultView.vue"), meta: { requiresAuth: true } },

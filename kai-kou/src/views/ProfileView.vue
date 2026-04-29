@@ -2007,6 +2007,8 @@ function resolveRadarAnchor(x, center) {
 }
 
 .ms-dot-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2021,6 +2023,7 @@ function resolveRadarAnchor(x, center) {
   height: 2px;
   background: #E3EAF4;
   border-radius: 2px;
+  z-index: 0;
 }
 
 .ms-dot-segment--done {
@@ -2029,6 +2032,8 @@ function resolveRadarAnchor(x, center) {
 }
 
 .ms-dot-circle {
+  position: relative;
+  z-index: 1;
   width: 26px;
   height: 26px;
   border-radius: 50%;

@@ -1,9 +1,10 @@
 ﻿<script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
+import HomeDesktopDashboard from "@/views/HomeReplicaView.vue";
 import { supabase } from "@/lib/supabase";
 import { getDIQuestionCatalog } from "@/lib/di-data";
 import { isDIEnabled } from "@/lib/di-feature";
@@ -64,6 +65,8 @@ const loadingDIFavorites = ref(false);
 const rtsFavoriteQuestionIds = ref([]);
 const loadingRTSFavorites = ref(false);
 const homeAnalytics = ref(createEmptyHomeAnalytics());
+const isDesktopViewport = ref(typeof window === "undefined" ? true : window.innerWidth >= 1024);
+const mobileHomeReady = ref(false);
 
 const taskMap = computed(() =>
   tasks.value.reduce((acc, item) => {
@@ -652,6 +655,18 @@ async function loadHomeAnalytics() {
   homeAnalytics.value = await loadHomeAnalyticsSnapshotForAuth(authStore);
 }
 
+async function loadMobileHomeData() {
+  if (mobileHomeReady.value) return;
+
+  await Promise.all([
+    loadHomeAnalytics(),
+    loadDIFavorites(),
+    loadRTSFavorites()
+  ]);
+
+  mobileHomeReady.value = true;
+}
+
 async function loadDIFavorites() {
   if (!diEnabled.value || !authStore.canPractice) {
     diFavoriteQuestionIds.value = [];
@@ -804,21 +819,43 @@ function openOtherTaskTertiary(task) {
   router.push(to);
 }
 
+function syncViewportMode() {
+  if (typeof window === "undefined") return;
+  isDesktopViewport.value = window.innerWidth >= 1024;
+}
+
 onMounted(async () => {
+  syncViewportMode();
+  if (typeof window !== "undefined") {
+    window.addEventListener("resize", syncViewportMode);
+  }
+
   if (!authStore.loaded) {
     await authStore.loadStatus();
   }
 
-  await Promise.all([
-    loadHomeAnalytics(),
-    loadDIFavorites(),
-    loadRTSFavorites()
-  ]);
+  if (!isDesktopViewport.value) {
+    await loadMobileHomeData();
+  }
+});
+
+watch(isDesktopViewport, async (nextValue) => {
+  if (!nextValue) {
+    await loadMobileHomeData();
+  }
+});
+
+onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("resize", syncViewportMode);
+  }
 });
 </script>
 
 <template>
-  <div class="home-page">
+  <HomeDesktopDashboard v-if="isDesktopViewport" />
+
+  <div v-else class="home-page">
     <header class="home-topbar">
       <div class="topbar-inner">
         <div class="brand">

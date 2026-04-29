@@ -1,6 +1,13 @@
 const FALLBACK_HTTP_STATUS = new Set([429, 502, 503, 504]);
 const NON_FALLBACK_HTTP_STATUS = new Set([400, 401, 403]);
-const NETWORK_ERROR_CODES = new Set(["ETIMEDOUT", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
+const NETWORK_ERROR_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "UND_ERR_CONNECT_TIMEOUT"
+]);
 
 export class ProviderError extends Error {
   constructor(message, details = {}) {
@@ -86,16 +93,20 @@ function resolveFallbackAllowed(status, details) {
 function isTimeoutError(error) {
   const name = `${error?.name || ""}`.toLowerCase();
   const code = `${error?.code || ""}`.toUpperCase();
+  const causeCode = `${error?.cause?.code || ""}`.toUpperCase();
   const message = `${error?.message || ""}`.toLowerCase();
   if (name === "aborterror") return true;
-  if (code === "ABORT_ERR" || code === "ETIMEDOUT") return true;
+  if (code === "ABORT_ERR" || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT") return true;
+  if (causeCode === "ETIMEDOUT" || causeCode === "UND_ERR_CONNECT_TIMEOUT") return true;
   return message.includes("timed out") || message.includes("timeout");
 }
 
 function isNetworkError(error) {
   const code = `${error?.code || ""}`.toUpperCase();
+  const causeCode = `${error?.cause?.code || ""}`.toUpperCase();
   const message = `${error?.message || ""}`.toLowerCase();
   if (NETWORK_ERROR_CODES.has(code)) return true;
+  if (NETWORK_ERROR_CODES.has(causeCode)) return true;
   return (
     message.includes("fetch failed")
     || message.includes("network")

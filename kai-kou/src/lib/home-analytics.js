@@ -14,9 +14,14 @@ export function createEmptyHomeAnalytics() {
     todayCount: 0,
     weekMinutes: 0,
     averageScore: null,
+    currentPeriodAverageScore: null,
+    previousPeriodAverageScore: null,
+    scoreDelta: null,
+    scoreComparisonText: "暂无上周对比",
     scoredCount: 0,
     durationTrackedCount: 0,
     currentStreak: 0,
+    longestStreak: 0,
     activeDaysCount: 0,
     recentDays: buildRecentDaysSnapshot(),
     taskWeekCounts: buildTaskCounterSeed(),
@@ -113,6 +118,8 @@ export async function loadHomeAnalyticsSnapshotForAuth(authStore) {
       };
     });
     const latestCreatedAt = rows.find((row) => toDateKey(row?.created_at))?.created_at || "";
+    const streakStats = calculateStreakStats(practicedDaySet);
+    const scoreComparison = calculateScoreComparison(rows);
 
     return {
       loading: false,
@@ -120,9 +127,14 @@ export async function loadHomeAnalyticsSnapshotForAuth(authStore) {
       todayCount,
       weekMinutes: Math.round(weekDurationSec / 60),
       averageScore: scoredCount ? Number((scoreTotal / scoredCount).toFixed(1)) : null,
+      currentPeriodAverageScore: scoreComparison.currentAverage,
+      previousPeriodAverageScore: scoreComparison.previousAverage,
+      scoreDelta: scoreComparison.difference,
+      scoreComparisonText: scoreComparison.text,
       scoredCount,
       durationTrackedCount,
-      currentStreak: calculateCurrentStreak(practicedDaySet),
+      currentStreak: streakStats.current,
+      longestStreak: streakStats.longest,
       activeDaysCount: practicedDaySet.size,
       recentDays: normalizedDays,
       taskWeekCounts,
@@ -200,14 +212,99 @@ function formatMonthDay(value) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function calculateStreakStats(practicedDaySet) {
+  return {
+    current: calculateCurrentStreak(practicedDaySet),
+    longest: calculateLongestStreak(practicedDaySet)
+  };
+}
+
 function calculateCurrentStreak(practicedDaySet) {
   let streak = 0;
   let cursor = startOfDay(new Date());
+  if (!practicedDaySet.has(toDateKey(cursor))) {
+    cursor = addDays(cursor, -1);
+  }
+
   while (practicedDaySet.has(toDateKey(cursor))) {
     streak += 1;
     cursor = addDays(cursor, -1);
   }
   return streak;
+}
+
+function calculateLongestStreak(practicedDaySet) {
+  const dateKeys = [...practicedDaySet].sort();
+  if (!dateKeys.length) return 0;
+
+  let longest = 1;
+  let current = 1;
+
+  for (let index = 1; index < dateKeys.length; index += 1) {
+    const previous = startOfDay(dateKeys[index - 1]);
+    const next = startOfDay(dateKeys[index]);
+    const diffDays = Math.round((next.getTime() - previous.getTime()) / 86400000);
+
+    if (diffDays === 1) {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 1;
+    }
+  }
+
+  return longest;
+}
+
+function calculateScoreComparison(rows, today = new Date()) {
+  const currentStart = addDays(startOfDay(today), -6);
+  const currentEnd = addDays(startOfDay(today), 1);
+  const previousStart = addDays(currentStart, -7);
+  const currentRows = [];
+  const previousRows = [];
+
+  rows.forEach((row) => {
+    const createdAt = new Date(row?.created_at);
+    if (!Number.isFinite(createdAt.getTime())) return;
+
+    if (createdAt >= currentStart && createdAt < currentEnd) {
+      currentRows.push(row);
+      return;
+    }
+
+    if (createdAt >= previousStart && createdAt < currentStart) {
+      previousRows.push(row);
+    }
+  });
+
+  const currentAverage = calculateRowsAverage(currentRows);
+  const previousAverage = calculateRowsAverage(previousRows);
+  const difference = currentAverage !== null && previousAverage !== null
+    ? Number((currentAverage - previousAverage).toFixed(1))
+    : null;
+
+  return {
+    currentAverage,
+    previousAverage,
+    difference,
+    text: formatScoreComparison(difference, previousAverage)
+  };
+}
+
+function calculateRowsAverage(rows) {
+  const scores = rows
+    .map((row) => resolveOverallScore(row?.task_type, row?.score_json))
+    .filter((score) => score !== null);
+
+  if (!scores.length) return null;
+  return Number((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(1));
+}
+
+function formatScoreComparison(difference, previousAverage) {
+  if (previousAverage === null || difference === null) return "暂无上周对比";
+  if (Math.abs(difference) < 0.05) return `较上周 ${formatScore(0)}`;
+  const direction = difference > 0 ? "↑" : "↓";
+  return `较上周 ${direction} ${formatScore(Math.abs(difference))}`;
 }
 
 function resolveHeatLevel(count, maxCount) {
@@ -250,12 +347,17 @@ function resolveDurationSec(scoreJson) {
 }
 
 function resolveOverallScore(taskType, scoreJson) {
-  const normalizedTaskType = normalizeTaskType(taskType);
-  if (normalizedTaskType === "WFD") return null;
-
   const score = toObject(scoreJson) || {};
   const candidates = [
+    score?.overall,
+    score?.score_overall,
+    score?.overall_score,
     score?.overall_estimated,
+    score?.total_score,
+    score?.final_score,
+    score?.scores?.overall,
+    score?.score,
+    score?.estimated_score,
     score?.ai_review?.display_scores?.overall,
     score?.ai_review?.diagnostics?.display_scores?.overall,
     score?.ai_review?.product?.overall,
@@ -272,6 +374,7 @@ function resolveOverallScore(taskType, scoreJson) {
     if (normalized !== null) return normalized;
   }
 
+  const normalizedTaskType = normalizeTaskType(taskType);
   if (normalizedTaskType === "RS" || normalizedTaskType === "RL") {
     return resolveLegacySpeechOverall(score);
   }

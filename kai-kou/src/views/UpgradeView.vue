@@ -3,6 +3,8 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import {
+  BILLING_PAUSED,
+  BILLING_PAUSED_MESSAGE,
   BILLING_PLANS,
   createBillingOrder,
   getBillingErrorMessage,
@@ -22,6 +24,7 @@ const selectedPlan = computed(() => {
 });
 
 const payButtonText = computed(() => {
+  if (BILLING_PAUSED) return "支付功能暂停中";
   if (submitting.value) return "正在跳转支付宝...";
   return `立即支付 ${selectedPlan.value.name} · ¥${selectedPlan.value.price}`;
 });
@@ -46,6 +49,10 @@ function selectPlan(planKey) {
 }
 
 async function handlePay() {
+  if (BILLING_PAUSED) {
+    submitError.value = BILLING_PAUSED_MESSAGE;
+    return;
+  }
   if (submitting.value) return;
 
   submitting.value = true;
@@ -82,6 +89,13 @@ async function handlePay() {
           </p>
         </div>
 
+        <p
+          v-if="BILLING_PAUSED"
+          class="mt-4 rounded-xl border border-[#F2D6D3] bg-[#FFF7F6] px-4 py-3 text-sm text-[#B42318]"
+        >
+          {{ BILLING_PAUSED_MESSAGE }}
+        </p>
+
         <div class="mt-6 grid gap-3 md:grid-cols-3">
           <button
             v-for="plan in BILLING_PLANS"
@@ -89,7 +103,7 @@ async function handlePay() {
             type="button"
             class="rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed"
             :class="selectedPlanKey === plan.key ? 'border-orange bg-[#FFF7F2] shadow-sm' : 'border-[#E7EDF5] bg-white hover:border-[#C7D4E5]'"
-            :disabled="submitting"
+            :disabled="submitting || BILLING_PAUSED"
             @click="selectPlan(plan.key)"
           >
             <div class="flex items-center justify-between gap-3">
@@ -125,7 +139,7 @@ async function handlePay() {
           <button
             type="button"
             class="w-full rounded-xl bg-orange py-4 text-base font-bold text-white shadow-md transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
-            :disabled="submitting"
+            :disabled="submitting || BILLING_PAUSED"
             @click="handlePay"
           >
             {{ payButtonText }}

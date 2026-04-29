@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import {
+  BILLING_PAUSED,
+  BILLING_PAUSED_MESSAGE,
   BILLING_MAX_POLL_ATTEMPTS,
   BILLING_POLL_INTERVAL_MS,
   clearBillingOrderNo,
@@ -143,6 +145,11 @@ async function pollStatus(attempt = 0) {
 }
 
 async function refreshStatus() {
+  if (BILLING_PAUSED) {
+    viewState.value = "pending";
+    statusMessage.value = BILLING_PAUSED_MESSAGE;
+    return;
+  }
   clearPollTimer();
   viewState.value = "processing";
   statusMessage.value = "正在确认支付结果...";
@@ -160,6 +167,12 @@ async function initializeResultView() {
   }
 
   orderNo.value = routeOrderNo || readBillingOrderNo();
+  if (BILLING_PAUSED) {
+    clearBillingOrderNo();
+    viewState.value = "pending";
+    statusMessage.value = BILLING_PAUSED_MESSAGE;
+    return;
+  }
   if (!orderNo.value) {
     viewState.value = "pending";
     statusMessage.value = "未找到订单信息，请返回升级页重新发起支付。";

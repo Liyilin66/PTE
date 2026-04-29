@@ -10,6 +10,7 @@
     "check:score-api": "node scripts/check-score-api.js",
     "build": "vite build",
     "preview": "vite preview",
+    "scrape:firefly:rs": "node scripts/scrape-firefly-rs-predictions.mjs",
     "wfd:tts:test": "node scripts/test-google-tts.js",
     "wfd:tts:test:rest": "node scripts/test-google-tts-rest.js",
     "wfd:tts:generate": "node scripts/generate-wfd-tts.js",

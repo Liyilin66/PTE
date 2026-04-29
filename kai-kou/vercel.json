@@ -4,8 +4,6 @@
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/questions/(.*)", "destination": "/api/questions?type=$1" },
-    { "source": "/api/payment/create", "destination": "/api/payment-create" },
-    { "source": "/api/payment/webhook", "destination": "/api/payment-webhook" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

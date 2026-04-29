@@ -5,6 +5,8 @@ import { useAuthStore } from "@/stores/auth";
 export const BILLING_ORDER_NO_STORAGE_KEY = "kai_kou_billing_order_no";
 export const BILLING_POLL_INTERVAL_MS = 1800;
 export const BILLING_MAX_POLL_ATTEMPTS = 8;
+export const BILLING_PAUSED = true;
+export const BILLING_PAUSED_MESSAGE = "支付功能已暂停，当前页面仅保留展示，不会发起线上支付请求。";
 
 export const BILLING_PLANS = [
   {
@@ -98,6 +100,10 @@ export async function createBillingOrder(plan) {
     throw createBillingError("billing_plan_invalid", "请选择有效的会员套餐");
   }
 
+  if (BILLING_PAUSED) {
+    throw createBillingError("billing_paused", BILLING_PAUSED_MESSAGE);
+  }
+
   const token = await getBillingAuthToken();
   const response = await fetch(getApiUrl("/api/billing/alipay/create-order"), {
     method: "POST",
@@ -129,6 +135,10 @@ export async function fetchBillingOrderStatus(orderNo, { sync = true } = {}) {
   const normalizedOrderNo = normalizeTextValue(orderNo);
   if (!normalizedOrderNo) {
     throw createBillingError("billing_order_missing", "缺少订单号");
+  }
+
+  if (BILLING_PAUSED) {
+    throw createBillingError("billing_paused", BILLING_PAUSED_MESSAGE);
   }
 
   const token = await getBillingAuthToken();
