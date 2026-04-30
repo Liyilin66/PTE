@@ -220,6 +220,7 @@ function normalizeSuccessPayload(payload) {
   return {
     ok: true,
     reply: normalizeText(payload?.reply),
+    plan_suggestion: isPlainObject(payload?.plan_suggestion) ? payload.plan_suggestion : null,
     model: normalizeText(payload?.model),
     provider: normalizeText(payload?.provider),
     usage: isPlainObject(payload?.usage) ? payload.usage : {},

@@ -1,6 +1,12 @@
 import { buildAgentContext } from "../../backend/agent/build-agent-context.js";
 import { buildAgentMessages } from "../../backend/agent/agent-prompt.js";
 import {
+  buildPlanReplyFromSuggestion,
+  createPlanSuggestionFromContext,
+  ensureReplyContainsPlanTable,
+  shouldAttachPlanSuggestion
+} from "../../backend/agent/agent-plan-service.js";
+import {
   AgentChatServiceError,
   detectAgentIntent,
   getAgentTokenBudget,
@@ -42,6 +48,7 @@ export default async function handler(req, res) {
   let fastPathUsed = false;
   let outputChars = 0;
   let debugTiming = {};
+  let planSuggestion = null;
 
   try {
     if (req.method !== "POST") {
@@ -110,11 +117,21 @@ export default async function handler(req, res) {
           });
           mergeTiming(timing, contextDiagnostics.timing);
 
-          const fastPathReply = tryBuildFastPathAgentReply({ intent, message, context });
+          if (shouldAttachPlanSuggestion({ intent, message, recentMessages })) {
+            planSuggestion = createPlanSuggestionFromContext({
+              context,
+              message,
+              source: "agent_chat"
+            });
+          }
+
+          const fastPathReply = planSuggestion
+            ? buildPlanReplyFromSuggestion(planSuggestion, message)
+            : tryBuildFastPathAgentReply({ intent, message, context });
           if (fastPathReply) {
             fastPathUsed = true;
             model = "";
-            provider = "backend_fast_path";
+            provider = planSuggestion ? "backend_plan_builder" : "backend_fast_path";
             reply = normalizeText(fastPathReply);
             usage = {};
             debugTiming = {
@@ -134,6 +151,9 @@ export default async function handler(req, res) {
             model = normalizeText(chatResult?.model);
             provider = normalizeText(chatResult?.provider);
             reply = normalizeText(chatResult?.reply);
+            if (planSuggestion) {
+              reply = ensureReplyContainsPlanTable(reply, planSuggestion, message);
+            }
             usage = isPlainObject(chatResult?.usage) ? chatResult.usage : {};
             selectedMaxTokens = toRoundedInt(chatResult?.selected_max_tokens, selectedMaxTokens);
             globalMaxTokens = toRoundedInt(chatResult?.global_max_tokens, globalMaxTokens);
@@ -147,6 +167,7 @@ export default async function handler(req, res) {
           responsePayload = {
             ok: true,
             reply,
+            ...(planSuggestion ? { plan_suggestion: planSuggestion } : {}),
             model,
             provider,
             usage,

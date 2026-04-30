@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router";
 import { parseAgentContent } from "@/lib/agent-rich-content";
 import { loadAgentOverview, requestDailyAiSuggestion, sendAgentMessage } from "@/lib/agent";
+import { loadAgentPlan, saveAgentPlan } from "@/lib/agent-plan";
 import { useAuthStore } from "@/stores/auth";
 
 const DESIGN_WIDTH = 2560;
@@ -25,6 +26,14 @@ const dailySuggestionState = ref({
   source: "mock",
   suggestion: null
 });
+const planState = ref({
+  loading: false,
+  saving: false,
+  error: "",
+  reasonCode: "",
+  plan: null
+});
+const planAttachStatus = ref({});
 const replicaScale = ref(MAX_DESKTOP_SCALE);
 const avatarLoadFailed = ref(false);
 
@@ -113,16 +122,13 @@ const recommendedQuestions = [
   }
 ];
 
-const planItems = [
-  { id: "ra", type: "RA", label: "复述题训练", minutes: 10, path: "/ra", color: "#34c9a2" },
-  { id: "di", type: "DI", label: "图表专项练习", minutes: 15, path: "/di", color: "#49c9a7" },
-  { id: "rts", type: "RTS", label: "复述句子", minutes: 10, path: "/rts", color: "#ff9142" },
-  { id: "we", type: "WE", label: "学术短文写作", minutes: 5, path: "/we", color: "#a7adb8" }
-];
+const PLAN_GENERATION_PROMPT = "帮我生成今日可执行训练计划，并用表格展示。";
 
 const fallbackConclusion = {
-  title: "DI 是当前提分关键点，主要问题是信息抓取不完整和时间分配不均。专注图表分析和关键信息表达，可快速提升分数上限。",
-  cta: "查看详情"
+  label: "AI 聚焦",
+  title: "DI 是当前提分关键点",
+  summary: "主要问题是信息抓取不完整和时间分配不均，先把表达顺序和关键信息覆盖率稳住。",
+  cta: "去练 RA"
 };
 
 watch(
@@ -158,26 +164,51 @@ const userInitial = computed(() => {
 const recentTaskSnapshot = computed(() => agentOverview.value?.recentTaskSnapshot || null);
 const dailyConclusion = computed(() => {
   const suggestion = dailySuggestionState.value.suggestion;
+  const taskType = normalizeReadableText(suggestion?.main_task_type).toUpperCase();
+  const actionTaskType = taskType || "RA";
   const headline = normalizeReadableText(suggestion?.headline);
   const reason = normalizeReadableText(suggestion?.reason);
   const advice = normalizeReadableText(suggestion?.advice);
+  const summaryParts = [reason, advice].filter(Boolean);
 
-  if (suggestion && (headline || reason || advice)) {
+  if (suggestion && (headline || summaryParts.length)) {
     return {
-      title: [headline, reason, advice].filter(Boolean).join(" "),
-      cta: normalizeReadableText(suggestion?.cta_text) || fallbackConclusion.cta
+      label: taskType ? `今日重点 · ${actionTaskType}` : fallbackConclusion.label,
+      title: headline || fallbackConclusion.title,
+      summary: summaryParts.join(" "),
+      cta: `去练 ${actionTaskType}`
     };
   }
 
   return fallbackConclusion;
 });
 
-const totalPlanMinutes = computed(() => planItems.reduce((total, item) => total + item.minutes, 0));
+const activePlan = computed(() => planState.value.plan || null);
+const executablePlanItems = computed(() => (
+  Array.isArray(activePlan.value?.items) ? activePlan.value.items : []
+));
+const totalPlanMinutes = computed(() => Math.max(0, Math.round(Number(activePlan.value?.total_minutes || 0))));
+const remainingPlanMinutes = computed(() => Math.max(0, Math.round(Number(activePlan.value?.remaining_minutes || 0))));
+const planProgressPercentage = computed(() => Math.max(0, Math.min(100, Math.round(Number(activePlan.value?.progress_percentage || 0)))));
+const hasExecutablePlan = computed(() => Boolean(activePlan.value && executablePlanItems.value.length));
+const isPlanComplete = computed(() => Boolean(activePlan.value?.is_complete));
+const startTrainingLabel = computed(() => {
+  if (!hasExecutablePlan.value) return "去生成计划";
+  return isPlanComplete.value ? "今日计划已完成" : "开始训练";
+});
+const planStatusMessage = computed(() => {
+  if (planState.value.loading) return "正在加载今日计划...";
+  if (planState.value.error) return planState.value.error;
+  if (!hasExecutablePlan.value) return "还没有可执行计划。向 AI 说：帮我生成今日计划。";
+  return "";
+});
 const isConversationEmpty = computed(() => messages.value.length === 0);
 
 onMounted(async () => {
   updateReplicaScale();
   window.addEventListener("resize", updateReplicaScale);
+  window.addEventListener("focus", handleWindowFocus);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 
   await authStore.init();
   if (authStore.isLoggedIn && !authStore.loaded) {
@@ -188,10 +219,13 @@ onMounted(async () => {
 
   await nextTick();
   void loadDailySuggestion();
+  void refreshExecutablePlan();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateReplicaScale);
+  window.removeEventListener("focus", handleWindowFocus);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
 });
 
 function updateReplicaScale() {
@@ -240,6 +274,36 @@ async function loadDailySuggestion() {
   };
 }
 
+async function refreshExecutablePlan() {
+  planState.value = {
+    ...planState.value,
+    loading: true,
+    error: "",
+    reasonCode: ""
+  };
+
+  const result = await loadAgentPlan();
+  planState.value = {
+    loading: false,
+    saving: false,
+    error: result?.ok
+      ? ""
+      : normalizeText(result?.message) || "可执行计划暂时不可用，请稍后再试。",
+    reasonCode: normalizeText(result?.reason_code),
+    plan: result?.ok && result?.plan ? result.plan : null
+  };
+}
+
+function handleWindowFocus() {
+  void refreshExecutablePlan();
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === "visible") {
+    void refreshExecutablePlan();
+  }
+}
+
 function buildPracticeSignature() {
   const snapshot = recentTaskSnapshot.value;
   if (!snapshot) return "";
@@ -270,7 +334,10 @@ async function handleSubmit(rawMessage = draft.value) {
       messages.value.push(
         createMessage(
           "assistant",
-          normalizeText(result.reply) || "我已经收到你的问题，接下来会给你更具体的训练建议。"
+          normalizeText(result.reply) || "我已经收到你的问题，接下来会给你更具体的训练建议。",
+          {
+            planSuggestion: result.plan_suggestion
+          }
         )
       );
       return;
@@ -313,9 +380,70 @@ function handleConclusionDetail() {
   void handleSubmit("请展开说明今天 AI 结论里的问题，并给我一个可以马上执行的提分步骤。");
 }
 
+async function handleAttachPlan(message) {
+  if (!message?.id || !isPlainObject(message.planSuggestion) || planState.value.saving) return;
+
+  planAttachStatus.value = {
+    ...planAttachStatus.value,
+    [message.id]: {
+      state: "saving",
+      message: "正在接入今日计划..."
+    }
+  };
+  planState.value = {
+    ...planState.value,
+    saving: true,
+    error: ""
+  };
+
+  const result = await saveAgentPlan(message.planSuggestion);
+  if (result?.ok && result?.plan) {
+    planState.value = {
+      loading: false,
+      saving: false,
+      error: "",
+      reasonCode: normalizeText(result.reason_code),
+      plan: result.plan
+    };
+    planAttachStatus.value = {
+      ...planAttachStatus.value,
+      [message.id]: {
+        state: "saved",
+        message: "已接入今日计划"
+      }
+    };
+    return;
+  }
+
+  const errorMessage = normalizeText(result?.message) || "接入计划失败，请稍后再试。";
+  planState.value = {
+    ...planState.value,
+    saving: false,
+    error: errorMessage,
+    reasonCode: normalizeText(result?.reason_code)
+  };
+  planAttachStatus.value = {
+    ...planAttachStatus.value,
+    [message.id]: {
+      state: "error",
+      message: errorMessage
+    }
+  };
+}
+
+function getPlanAttachStatus(message) {
+  return planAttachStatus.value?.[message?.id] || { state: "idle", message: "" };
+}
+
 function handleStartTraining() {
-  const firstPath = planItems[0]?.path || "/ra";
-  openPath(firstPath);
+  if (!hasExecutablePlan.value) {
+    void handleSubmit(PLAN_GENERATION_PROMPT);
+    return;
+  }
+
+  if (isPlanComplete.value) return;
+  const nextItem = executablePlanItems.value.find((item) => !item.is_complete) || executablePlanItems.value[0];
+  openPath(nextItem?.route || "/ra");
 }
 
 function handleNav(item) {
@@ -359,7 +487,8 @@ function createMessage(role, content, options = {}) {
     content: normalizeText(content),
     time: normalizeText(options.time) || formatCurrentTime(),
     tone: options.tone || "default",
-    metaLabel: normalizeText(options.metaLabel || (role === "assistant" ? "AI 私教" : "你"))
+    metaLabel: normalizeText(options.metaLabel || (role === "assistant" ? "AI 私教" : "你")),
+    planSuggestion: isPlainObject(options.planSuggestion) ? options.planSuggestion : null
   };
 }
 
@@ -402,6 +531,10 @@ function normalizeReadableText(value) {
   if (/[�]/.test(normalized)) return "";
   if (/(?:绉|璇|寤|浠|鍒|鏃|鐢|缁|浜|鍙|噺)/.test(normalized)) return "";
   return normalized;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeText(value) {
@@ -591,6 +724,29 @@ function normalizeText(value) {
                         </div>
                         <time>{{ message.time }}</time>
                       </div>
+                      <div v-if="message.role === 'assistant' && message.planSuggestion" class="agent-plan-suggestion-actions">
+                        <button
+                          type="button"
+                          class="agent-plan-suggestion-button"
+                          :class="{ 'agent-plan-suggestion-button--saved': getPlanAttachStatus(message).state === 'saved' }"
+                          :disabled="planState.saving || getPlanAttachStatus(message).state === 'saved'"
+                          @click="handleAttachPlan(message)"
+                        >
+                          {{
+                            getPlanAttachStatus(message).state === 'saving'
+                              ? '正在接入...'
+                              : getPlanAttachStatus(message).state === 'saved'
+                                ? '已接入今日计划'
+                                : '一键接入可执行计划'
+                          }}
+                        </button>
+                        <p
+                          v-if="getPlanAttachStatus(message).message && getPlanAttachStatus(message).state === 'error'"
+                          class="agent-plan-suggestion-error"
+                        >
+                          {{ getPlanAttachStatus(message).message }}
+                        </p>
+                      </div>
                     </div>
 
                     <span v-if="message.role === 'user'" class="agent-message-avatar agent-message-avatar--user" aria-hidden="true">
@@ -655,11 +811,17 @@ function normalizeText(value) {
                 </div>
 
                 <div class="agent-conclusion-box">
-                  <p>{{ dailyConclusion.title }}</p>
-                  <button type="button" @click="handleConclusionDetail">
-                    <span>{{ dailyConclusion.cta }}</span>
-                    <i aria-hidden="true">›</i>
-                  </button>
+                  <div class="agent-conclusion-copy">
+                    <span class="agent-conclusion-label">{{ dailyConclusion.label }}</span>
+                    <strong>{{ dailyConclusion.title }}</strong>
+                    <p>{{ dailyConclusion.summary }}</p>
+                  </div>
+                  <div class="agent-conclusion-footer">
+                    <button type="button" class="agent-conclusion-action" @click="handleConclusionDetail">
+                      <span>{{ dailyConclusion.cta }}</span>
+                      <i aria-hidden="true">›</i>
+                    </button>
+                  </div>
                 </div>
               </section>
 
@@ -677,7 +839,7 @@ function normalizeText(value) {
                     class="agent-question-item"
                     @click="handleRecommendedQuestion(item)"
                   >
-                    <span>{{ item.text }}</span>
+                    <span class="agent-question-text">{{ item.text }}</span>
                     <i aria-hidden="true">›</i>
                   </button>
                 </div>
@@ -689,20 +851,45 @@ function normalizeText(value) {
                     <span class="agent-title-icon agent-title-icon--plan" aria-hidden="true"></span>
                     <h3>AI 可执行计划</h3>
                   </div>
-                  <div class="agent-progress-ring" aria-label="计划完成度 0%">0%</div>
-                </div>
-
-                <p class="agent-plan-subtitle">今日计划 · 剩余 {{ totalPlanMinutes }} 分钟</p>
-                <div class="agent-plan-list">
-                  <div v-for="item in planItems" :key="item.id" class="agent-plan-row">
-                    <span class="agent-plan-check" aria-hidden="true"></span>
-                    <span class="agent-plan-tag" :style="{ backgroundColor: item.color }">{{ item.type }}</span>
-                    <strong>{{ item.label }}</strong>
-                    <time>{{ item.minutes }} 分钟</time>
+                  <div
+                    class="agent-progress-ring"
+                    :style="{ '--agent-plan-progress': `${planProgressPercentage * 3.6}deg` }"
+                    :aria-label="`计划完成度 ${planProgressPercentage}%`"
+                  >
+                    {{ planProgressPercentage }}%
                   </div>
                 </div>
 
-                <button class="agent-start-button" type="button" @click="handleStartTraining">开始训练</button>
+                <p class="agent-plan-subtitle">
+                  <template v-if="hasExecutablePlan">{{ activePlan.title }} · 剩余 {{ remainingPlanMinutes }} 分钟</template>
+                  <template v-else>{{ planStatusMessage }}</template>
+                </p>
+
+                <div v-if="hasExecutablePlan" class="agent-plan-list">
+                  <div
+                    v-for="item in executablePlanItems"
+                    :key="`${item.task_type}-${item.label}`"
+                    class="agent-plan-row"
+                  >
+                    <span class="agent-plan-check" :class="{ 'agent-plan-check--done': item.is_complete }" aria-hidden="true"></span>
+                    <span class="agent-plan-tag" :style="{ backgroundColor: item.color }">{{ item.task_type }}</span>
+                    <strong :title="item.focus">{{ item.label }}</strong>
+                    <span class="agent-plan-count">{{ item.effective_completed_count }}/{{ item.target_count }}</span>
+                    <time>{{ item.minutes }} 分钟</time>
+                  </div>
+                </div>
+                <div v-else class="agent-plan-empty">
+                  <p>{{ planStatusMessage }}</p>
+                </div>
+
+                <button
+                  class="agent-start-button"
+                  type="button"
+                  :disabled="planState.loading || planState.saving || isPlanComplete"
+                  @click="handleStartTraining"
+                >
+                  {{ startTrainingLabel }}
+                </button>
               </section>
             </aside>
           </section>
@@ -1838,6 +2025,47 @@ function normalizeText(value) {
   white-space: nowrap;
 }
 
+.agent-plan-suggestion-actions {
+  display: flex;
+  width: fit-content;
+  max-width: 820px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 9px 0 0;
+}
+
+.agent-plan-suggestion-button {
+  min-height: 42px;
+  border: 1px solid rgba(99, 116, 255, 0.22);
+  border-radius: 12px;
+  padding: 0 18px;
+  background: linear-gradient(135deg, #6374ff 0%, #4d5df3 100%);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 900;
+  box-shadow: 0 12px 24px rgba(82, 97, 246, 0.18);
+  cursor: pointer;
+}
+
+.agent-plan-suggestion-button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.agent-plan-suggestion-button--saved {
+  border-color: rgba(52, 201, 162, 0.28);
+  background: linear-gradient(135deg, #37c9a3 0%, #28b78f 100%);
+}
+
+.agent-plan-suggestion-error {
+  margin: 0;
+  color: #b4513c;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .agent-composer-zone {
   flex: 0 0 auto;
   padding: 0 39px 14px;
@@ -2081,17 +2309,23 @@ function normalizeText(value) {
 
 .agent-conclusion-card {
   height: 350px;
-  padding: 40px 35px 0;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 32px 28px;
 }
 
 .agent-question-card {
   height: 350px;
-  padding: 39px 33px 0;
+  display: flex;
+  flex-direction: column;
+  padding: 34px 30px 28px;
 }
 
 .agent-plan-card {
-  height: 450px;
-  padding: 37px 33px 0;
+  display: flex;
+  min-height: 500px;
+  flex-direction: column;
+  padding: 37px 33px 40px;
 }
 
 .agent-side-title {
@@ -2157,69 +2391,157 @@ function normalizeText(value) {
 }
 
 .agent-conclusion-box {
-  margin-top: 41px;
-  overflow: hidden;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 28px;
   border: 1px solid #f0ddc9;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fffaf5 0%, #fffdfb 100%);
+  border-radius: 18px;
+  padding: 22px 20px 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 245, 0.98) 0%, rgba(255, 253, 251, 0.96) 100%),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 56%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  overflow: hidden;
 }
 
-.agent-conclusion-box p {
-  min-height: 132px;
-  margin: 0;
-  padding: 30px 31px 22px;
-  color: #20345f;
-  font-size: 23px;
+.agent-conclusion-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.agent-conclusion-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(99, 115, 255, 0.12);
+  color: #6472df;
+  font-size: 13px;
   font-weight: 900;
-  line-height: 1.64;
+  letter-spacing: 0.02em;
 }
 
-.agent-conclusion-box button {
+.agent-conclusion-copy strong {
+  color: #17315b;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.5;
+}
+
+.agent-conclusion-copy p {
+  margin: 0;
+  color: #54678f;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.72;
+}
+
+.agent-conclusion-footer {
+  margin-top: auto;
+  border-top: 1px solid rgba(196, 204, 236, 0.54);
+  padding-top: 10px;
+}
+
+.agent-conclusion-action {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-sizing: border-box;
   width: 100%;
-  height: 62px;
+  min-height: 42px;
   border: 0;
-  border-top: 1px solid #e8edf8;
-  padding: 0 28px 0 31px;
-  background: rgba(255, 255, 255, 0.9);
-  color: #5b72ff;
+  border-radius: 12px;
+  padding: 0 10px 0 16px;
+  background: linear-gradient(90deg, rgba(243, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.54) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: #5d72f8;
   font: inherit;
-  font-size: 20px;
-  font-weight: 950;
+  font-size: 15px;
+  font-weight: 900;
   cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
-.agent-conclusion-box i,
+.agent-conclusion-action span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 100%;
+}
+
+.agent-conclusion-action i,
 .agent-question-item i {
   color: #6c7da7;
   font-style: normal;
-  font-size: 34px;
+  font-size: 28px;
   font-weight: 400;
   line-height: 1;
 }
 
+.agent-conclusion-action i {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(93, 114, 248, 0.1);
+  color: #5d72f8;
+  font-size: 22px;
+}
+
+.agent-conclusion-action:hover {
+  background: linear-gradient(90deg, rgba(236, 240, 255, 0.98) 0%, rgba(248, 250, 255, 0.76) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  color: #4e64ed;
+}
+
+.agent-conclusion-action:focus-visible {
+  outline: 3px solid rgba(93, 114, 248, 0.22);
+  outline-offset: 2px;
+}
+
 .agent-question-list {
-  display: grid;
-  gap: 13px;
-  margin-top: 39px;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 28px;
+  padding-bottom: 18px;
 }
 
 .agent-question-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 49px;
-  border: 1px solid #e6ebf8;
-  border-radius: 11px;
-  padding: 0 20px 0 22px;
-  background: linear-gradient(180deg, #f6f8ff 0%, #f1f4ff 100%);
-  color: #465887;
+  min-height: 51px;
+  border: 1px solid rgba(227, 234, 252, 0.96);
+  border-radius: 14px;
+  padding: 0 18px 0 20px;
+  background:
+    linear-gradient(180deg, rgba(247, 249, 255, 0.98) 0%, rgba(241, 245, 255, 0.95) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  color: #445887;
   font: inherit;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
+  text-align: left;
   cursor: pointer;
+}
+
+.agent-question-text {
+  flex: 1 1 auto;
+  padding-right: 14px;
+  line-height: 1.4;
 }
 
 .agent-plan-head {
@@ -2236,7 +2558,7 @@ function normalizeText(value) {
   border-radius: 999px;
   background:
     linear-gradient(#fff, #fff) padding-box,
-    conic-gradient(#e9edff 0deg, #e9edff 360deg) border-box;
+    conic-gradient(#6172ff 0deg, #6172ff var(--agent-plan-progress, 0deg), #e9edff var(--agent-plan-progress, 0deg), #e9edff 360deg) border-box;
   border: 6px solid transparent;
   color: #64708e;
   font-size: 16px;
@@ -2262,17 +2584,35 @@ function normalizeText(value) {
 
 .agent-plan-row {
   display: grid;
-  grid-template-columns: 32px 42px minmax(0, 1fr) 70px;
+  grid-template-columns: 32px 42px minmax(0, 1fr) 48px 70px;
   align-items: center;
   min-height: 40px;
-  gap: 13px;
+  gap: 10px;
 }
 
 .agent-plan-check {
+  position: relative;
   width: 26px;
   height: 26px;
   border: 3px solid #cfd7e8;
   border-radius: 999px;
+}
+
+.agent-plan-check--done {
+  border-color: #37c9a3;
+  background: #37c9a3;
+}
+
+.agent-plan-check--done::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 4px;
+  width: 7px;
+  height: 12px;
+  border-right: 3px solid #fff;
+  border-bottom: 3px solid #fff;
+  transform: rotate(42deg);
 }
 
 .agent-plan-tag {
@@ -2305,11 +2645,39 @@ function normalizeText(value) {
   white-space: nowrap;
 }
 
+.agent-plan-count {
+  color: #5b6c98;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.agent-plan-empty {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  margin-top: 24px;
+  border: 1px dashed rgba(198, 208, 235, 0.95);
+  border-radius: 14px;
+  padding: 20px;
+  background: rgba(248, 250, 255, 0.78);
+  text-align: center;
+}
+
+.agent-plan-empty p {
+  margin: 0;
+  color: #617096;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.55;
+}
+
 .agent-start-button {
   display: block;
   width: 100%;
   height: 62px;
-  margin-top: 28px;
+  margin-top: 34px;
   border: 0;
   border-radius: 11px;
   background: linear-gradient(135deg, #6374ff 0%, #4d5df3 100%);
@@ -2319,5 +2687,10 @@ function normalizeText(value) {
   font-weight: 950;
   box-shadow: 0 18px 32px rgba(82, 97, 246, 0.22);
   cursor: pointer;
+}
+
+.agent-start-button:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 </style>

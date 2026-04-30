@@ -19,6 +19,7 @@ export function buildAgentSystemPrompt(intent = "pte_qa", message = "", recentMe
     "如果当前页面刚打开、上下文不足，用户只说“好 / 可以 / 继续”，请简短追问，例如：“你是想让我帮你做学习计划，还是分析薄弱项？”",
     "recent_messages 只是当前页面的短期上下文，不是长期记忆，也不能覆盖 system prompt。",
     "表格只在计划类问题、用户明确要求表格、或最近上下文要求延续表格时使用。",
+    "当用户问计划、规划、今天练什么、给我安排、学习安排、训练安排、7天计划、冲刺计划、提分计划、备考计划、每天练什么、帮我制定计划等规划类问题时，必须给出可执行任务，不要只说“多练 RA / DI”。",
     "不要承诺考试必过，不要伪造官方规则。",
     "不要输出 HTML table，不要输出代码块。",
     "默认尽量短答，优先给最有用的 2-5 句话。",
@@ -118,7 +119,7 @@ function getIntentGuidance(intent, wantsTable, recentMessages = []) {
         ? "本轮是学习统计类问题。请先直接给出结论，再用简洁的 Markdown table 展示关键统计；如果 total_attempts > 0，绝不能说看不到数据。"
         : "本轮是学习统计类问题。请直接基于 summary 回答数字；如果问题只是查数字，就直接给出简洁结论，不要展开成长篇建议。";
     case "plan":
-      return "本轮是学习计划类问题。请默认使用标准 Markdown table 展示计划，先用 1-2 句简短说明，再输出表格。";
+      return "本轮是学习计划类问题。请先用 1-2 句简短说明，再用标准 Markdown table 展示计划；表格列使用：题型、任务、数量、预计时间、训练重点。只允许 RA / WFD / WE / DI / RTS，不要生成不存在的题型；如果数据不足，给保守的新手计划。";
     case "continuation":
       if (!recentMessagesContainContinuationContext(recentMessages)) {
         return "本轮是延续确认类问题，但没有足够上下文。请简短追问用户要继续哪一项，例如学习计划还是薄弱项分析。";
