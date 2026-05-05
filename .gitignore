@@ -1,0 +1,18 @@
+# Local agent/runtime state
+/.claude/worktrees/
+/.omx/logs/
+/.omx/state/
+/.omx/team/
+/.omx/metrics.json
+
+# Root-level build and dependency output
+/node_modules/
+/dist/
+/dist-ssr/
+
+# Root-level local verification output
+/output/
+
+# Local HTML design drafts generated outside the app
+/ra-project-aligned-design.html
+/ra-warm-paper-redesign.html
