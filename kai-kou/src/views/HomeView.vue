@@ -1,2603 +1,1608 @@
-﻿<script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { storeToRefs } from "pinia";
-import { useRouter } from "vue-router";
-import { useAuthStore } from "@/stores/auth";
-import { usePracticeStore } from "@/stores/practice";
-import HomeDesktopDashboard from "@/views/HomeReplicaView.vue";
-import { supabase } from "@/lib/supabase";
-import { getDIQuestionCatalog } from "@/lib/di-data";
-import { isDIEnabled } from "@/lib/di-feature";
-import { loadHomeAnalyticsSnapshotForAuth } from "@/lib/home-analytics";
-
-const TASK_TYPES = ["RA", "WFD", "RTS", "DI", "RS", "RL", "WE"];
-const HOME_ANALYTICS_PAGE_SIZE = 1000;
-const HOME_ANALYTICS_MAX_DURATION_SEC = 60 * 60 * 3;
-const HOME_ANALYTICS_MAX_SCORE = 90;
-const WEEKDAY_LABELS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-const HEAT_COLORS = ["#E9EEF7", "#F7DFD0", "#F0BB98", "#E78857", "#CD6A31"];
-const MODULE_THEME_MAP = {
-  ra: {
-    accent: "#2D63FF",
-    iconBg: "#EDF3FF",
-    iconColor: "#2D63FF"
-  },
-  wfd: {
-    accent: "#15A86B",
-    iconBg: "#EAF9F1",
-    iconColor: "#15A86B"
-  },
-  rts: {
-    accent: "#7C4DFF",
-    iconBg: "#F3EFFF",
-    iconColor: "#7C4DFF"
-  },
-  di: {
-    accent: "#EB7A3F",
-    iconBg: "#FFF2EA",
-    iconColor: "#EB7A3F"
-  },
-  rs: {
-    accent: "#3067FF",
-    iconBg: "#EEF4FF",
-    iconColor: "#3067FF"
-  },
-  rl: {
-    accent: "#149E6C",
-    iconBg: "#E8F7EF",
-    iconColor: "#149E6C"
-  },
-  we: {
-    accent: "#E36F35",
-    iconBg: "#FFF2EA",
-    iconColor: "#E36F35"
-  }
-};
-
-const router = useRouter();
-const authStore = useAuthStore();
-const practiceStore = usePracticeStore();
-const { tasks } = storeToRefs(practiceStore);
-
-const showDIFavorites = ref(false);
-const diFavoriteQuestionIds = ref([]);
-const loadingDIFavorites = ref(false);
-const rtsFavoriteQuestionIds = ref([]);
-const loadingRTSFavorites = ref(false);
-const homeAnalytics = ref(createEmptyHomeAnalytics());
-const isDesktopViewport = ref(typeof window === "undefined" ? true : window.innerWidth >= 1024);
-const mobileHomeReady = ref(false);
-
-const taskMap = computed(() =>
-  tasks.value.reduce((acc, item) => {
-    acc[item.id] = item;
-    return acc;
-  }, {})
-);
-const raTask = computed(() => taskMap.value.ra || null);
-const wfdTask = computed(() => taskMap.value.wfd || null);
-const rtsTask = computed(() => taskMap.value.rts || null);
-const rsTask = computed(() => taskMap.value.rs || null);
-const rlTask = computed(() => taskMap.value.rl || null);
-const weTask = computed(() => taskMap.value.we || null);
-const diEnabled = computed(() => isDIEnabled());
-const rtsFavoriteCount = computed(() => rtsFavoriteQuestionIds.value.length);
-const diQuestionCatalog = getDIQuestionCatalog();
-const diQuestionMap = new Map(diQuestionCatalog.map((item) => [item.id, item]));
-const diFavoriteQuestions = computed(() =>
-  diFavoriteQuestionIds.value
-    .map((id) => {
-      const found = diQuestionMap.get(id);
-      if (!found) return { id, sourceNumberLabel: id, displayTitle: id, imageType: "" };
-      return found;
-    })
-    .filter(Boolean)
-);
-
-const userDisplayName = computed(() => authStore.displayName);
-
-const userInitial = computed(() => {
-  const first = `${userDisplayName.value || ""}`.trim().charAt(0);
-  return first ? first.toUpperCase() : "K";
-});
-
-const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
-
-const greetingLabel = computed(() => {
-  const hour = new Date().getHours();
-  if (hour < 6) return "凌晨好";
-  if (hour < 12) return "早上好";
-  if (hour < 18) return "下午好";
-  return "晚上好";
-});
-
-const accountStatusMeta = computed(() => {
-  if (!authStore.loaded) {
-    return {
-      label: "状态同步中",
-      detail: "正在读取账号权限",
-      className: "account-pill--neutral"
-    };
-  }
-
-  if (authStore.isPremium) {
-    return {
-      label: "VIP",
-      detail: "无限练习",
-      className: "account-pill--vip"
-    };
-  }
-
-  if (authStore.isInTrial) {
-    return {
-      label: `试用 · ${authStore.trialDaysLeft}天`,
-      detail: "试用期内可正常练习",
-      className: "account-pill--trial"
-    };
-  }
-
-  if (authStore.accessStatus === "trial_expired") {
-    return {
-      label: "试用已结束",
-      detail: "权限已到期",
-      className: "account-pill--neutral"
-    };
-  }
-
-  return {
-    label: "未开通",
-    detail: "当前暂无练习权限",
-    className: "account-pill--neutral"
-  };
-});
-
-const streakGoal = computed(() => resolveNextStreakGoal(homeAnalytics.value.currentStreak));
-const streakGap = computed(() => Math.max(0, streakGoal.value - homeAnalytics.value.currentStreak));
-
-const heroSupportText = computed(() => {
-  if (homeAnalytics.value.loading) return "正在同步你的真实练习记录...";
-  if (homeAnalytics.value.currentStreak > 0) {
-    if (streakGap.value > 0) {
-      return `连续 ${homeAnalytics.value.currentStreak} 天 · 距离 ${streakGoal.value} 天小目标还差 ${streakGap.value} 天`;
-    }
-    return `连续 ${homeAnalytics.value.currentStreak} 天 · 已达成 ${streakGoal.value} 天小目标`;
-  }
-  if (homeAnalytics.value.totalCount > 0) {
-    return "今天开练，就能重新点亮连续记录";
-  }
-  return "从一题开始，streak 和热力图会自动累计";
-});
-
-const streakCardCaption = computed(() => {
-  if (homeAnalytics.value.loading) return "正在统计";
-  if (homeAnalytics.value.currentStreak > 0) {
-    return streakGap.value > 0 ? `目标 ${streakGoal.value} 天，还差 ${streakGap.value} 天完成` : "当前小目标已完成";
-  }
-  if (homeAnalytics.value.lastPracticeAt) {
-    return `最近练习 ${formatMonthDay(homeAnalytics.value.lastPracticeAt)}`;
-  }
-  return "今天开始建立你的练习节奏";
-});
-
-const activeDaysCardCaption = computed(() => {
-  if (homeAnalytics.value.loading) return "正在统计";
-  if (homeAnalytics.value.activeDaysCount > 0) {
-    return homeAnalytics.value.totalCount > 0
-      ? `${formatInteger(homeAnalytics.value.totalCount)} 题分布在 ${formatInteger(homeAnalytics.value.activeDaysCount)} 天里`
-      : "按练习日期去重统计";
-  }
-  return "开始练习后自动累计";
-});
-
-const heroHighlightCards = computed(() => [
-  {
-    key: "active-days",
-    icon: "📅",
-    label: "累计练习天数",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.activeDaysCount),
-    caption: activeDaysCardCaption.value,
-    className: "hero-streak--secondary",
-    iconClass: "hero-streak__icon--secondary",
-    valueClass: "hero-streak__value--secondary"
-  },
-  {
-    key: "current-streak",
-    icon: "🔥",
-    label: "连续练习天数",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.currentStreak),
-    caption: streakCardCaption.value,
-    className: "",
-    iconClass: "",
-    valueClass: ""
-  }
-]);
-
-const heroStats = computed(() => [
-  {
-    key: "today",
-    label: "今日题数",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.todayCount),
-    helper: homeAnalytics.value.todayCount > 0 ? "今天已经开练" : "从一题开始热身",
-    helperClass: homeAnalytics.value.todayCount > 0 ? "hero-stat__hint--positive" : ""
-  },
-  {
-    key: "week-minutes",
-    label: "本周分钟",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.weekMinutes),
-    helper: homeAnalytics.value.durationTrackedCount
-      ? "基于已有时长记录"
-      : "部分题型暂无时长落库",
-    helperClass: homeAnalytics.value.weekMinutes > 0 ? "hero-stat__hint--positive" : ""
-  },
-  {
-    key: "avg-score",
-    label: "平均评分",
-    value: homeAnalytics.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore),
-    suffix: homeAnalytics.value.averageScore !== null ? "/90" : "",
-    helper: homeAnalytics.value.scoredCount
-      ? `已评分 ${formatInteger(homeAnalytics.value.scoredCount)} 条`
-      : "有评分记录后自动更新",
-    helperClass: ""
-  },
-  {
-    key: "total",
-    label: "累计题数",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.totalCount),
-    helper: homeAnalytics.value.activeDaysCount
-      ? `${formatInteger(homeAnalytics.value.activeDaysCount)} 天有练习记录`
-      : "开始练习后持续累计",
-    helperClass: ""
-  }
-]);
-
-const mobileHeroCards = computed(() => [
-  ...heroHighlightCards.value.map((card) => ({
-    key: card.key,
-    icon: card.icon,
-    value: card.value,
-    suffix: "",
-    label: card.label,
-    helper: card.caption,
-    className: card.className === "hero-streak--secondary" ? "hero-mobile-card--secondary" : "",
-    valueClass: card.valueClass === "hero-streak__value--secondary" ? "hero-mobile-card__value--secondary" : "hero-mobile-card__value--accent",
-    helperClass: ""
-  })),
-  ...heroStats.value.map((stat) => ({
-    ...stat,
-    icon: "",
-    className: "",
-    valueClass: "",
-    helperClass: stat.helperClass === "hero-stat__hint--positive" ? "hero-mobile-card__hint--positive" : ""
-  }))
-]);
-
-const heatmapTotal = computed(() =>
-  homeAnalytics.value.recentDays.reduce((sum, item) => sum + Number(item.count || 0), 0)
-);
-
-const diFeatureChips = computed(() => {
-  if (!diEnabled.value) return [];
-  return ["5秒开口", "三连练", "提示降级"];
-});
-
-const otherTaskSelectPathMap = {
-  rs: "/rs",
-  rl: "/rl"
-};
-
-const otherTaskTertiaryMap = {
-  rs: {
-    label: "句型强化",
-    to: "/rs"
-  },
-  rl: {
-    label: "结构模板",
-    to: "/rl"
-  }
-};
-
-function createEmptyHomeAnalytics() {
-  return {
-    loading: true,
-    totalCount: 0,
-    todayCount: 0,
-    weekMinutes: 0,
-    averageScore: null,
-    scoredCount: 0,
-    durationTrackedCount: 0,
-    currentStreak: 0,
-    activeDaysCount: 0,
-    recentDays: buildRecentDaysSnapshot(),
-    taskWeekCounts: buildTaskCounterSeed(),
-    lastPracticeAt: ""
-  };
-}
-
-function buildTaskCounterSeed() {
-  return TASK_TYPES.reduce((acc, key) => {
-    acc[key] = 0;
-    return acc;
-  }, {});
-}
-
-function buildRecentDaysSnapshot(today = new Date()) {
-  const todayKey = toDateKey(today);
-  const weekStart = startOfWeekMonday(today);
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = addDays(weekStart, index);
-    const key = toDateKey(date);
-    const isToday = isTodayDateKey(key, todayKey);
-    return {
-      key,
-      label: isToday ? "今日" : WEEKDAY_LABELS[date.getDay()],
-      dateLabel: formatMonthDay(date),
-      count: 0,
-      color: HEAT_COLORS[0],
-      isToday
-    };
-  });
-}
-
-function startOfWeekMonday(value) {
-  const date = startOfDay(value);
-  const day = date.getDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  return addDays(date, offset);
-}
-
-function startOfDay(value) {
-  const date = new Date(value);
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
-
-function addDays(value, days) {
-  const date = new Date(value);
-  date.setDate(date.getDate() + days);
-  return date;
-}
-
-function toDateKey(value) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function isTodayDateKey(dateKey, todayKey = toDateKey(new Date())) {
-  return Boolean(dateKey) && dateKey === todayKey;
-}
-
-function formatMonthDay(value) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "-";
-  return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function resolveNextStreakGoal(streak) {
-  const normalized = Math.max(0, Number(streak || 0));
-  const checkpoints = [7, 14, 30, 60, 90];
-  const next = checkpoints.find((item) => normalized < item);
-  if (next) return next;
-  return Math.ceil((normalized + 1) / 30) * 30;
-}
-
-function calculateCurrentStreak(practicedDaySet) {
-  let streak = 0;
-  let cursor = startOfDay(new Date());
-  while (practicedDaySet.has(toDateKey(cursor))) {
-    streak += 1;
-    cursor = addDays(cursor, -1);
-  }
-  return streak;
-}
-
-function resolveHeatLevel(count, maxCount) {
-  const normalizedCount = Number(count || 0);
-  const normalizedMax = Number(maxCount || 0);
-  if (!normalizedCount || !normalizedMax) return 0;
-  const ratio = normalizedCount / normalizedMax;
-  if (ratio >= 0.8) return 4;
-  if (ratio >= 0.55) return 3;
-  if (ratio >= 0.3) return 2;
-  return 1;
-}
-
-function resolveDurationSec(scoreJson) {
-  const score = toObject(scoreJson) || {};
-  const analyticsDuration = normalizeDurationSec(
-    score?.analytics?.total_active_sec ?? score?.analytics?.totalActiveSec
-  );
-  if (analyticsDuration > 0) return analyticsDuration;
-
-  const direct = normalizeDurationSec(score?.duration_sec ?? score?.durationSec);
-  if (direct > 0) return direct;
-
-  const metricsDuration = normalizeDurationSec(
-    score?.metrics?.speech_duration_sec ?? score?.metrics?.speechDurationSec
-  );
-  if (metricsDuration > 0) return metricsDuration;
-
-  const audioSignalsDuration = normalizeDurationSec(
-    score?.audio_signals?.duration_sec ?? score?.audio_signals?.durationSec
-  );
-  if (audioSignalsDuration > 0) return audioSignalsDuration;
-
-  const audioSignalsMs = Number(score?.audio_signals?.duration_ms ?? score?.audio_signals?.durationMs);
-  if (Number.isFinite(audioSignalsMs) && audioSignalsMs > 0) {
-    return normalizeDurationSec(audioSignalsMs / 1000);
-  }
-
-  return 0;
-}
-
-function resolveOverallScore(taskType, scoreJson) {
-  const normalizedTaskType = normalizeTaskType(taskType);
-  if (normalizedTaskType === "WFD") return null;
-
-  const score = toObject(scoreJson) || {};
-  const candidates = [
-    score?.overall_estimated,
-    score?.ai_review?.display_scores?.overall,
-    score?.ai_review?.diagnostics?.display_scores?.overall,
-    score?.ai_review?.product?.overall,
-    score?.ai_review?.overall,
-    score?.product?.overall,
-    score?.diagnostics?.display_scores?.overall,
-    score?.display_scores?.overall,
-    score?.scores?.overall,
-    score?.overall
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeOverallCandidate(candidate);
-    if (normalized !== null) return normalized;
-  }
-
-  if (normalizedTaskType === "RS" || normalizedTaskType === "RL") {
-    return resolveLegacySpeechOverall(score);
-  }
-
-  return null;
-}
-
-function normalizeTaskType(value) {
-  return `${value || ""}`.trim().toUpperCase();
-}
-
-function toObject(value) {
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value;
-}
-
-function normalizeDurationSec(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return Math.max(0, Math.min(HOME_ANALYTICS_MAX_DURATION_SEC, Math.round(numeric)));
-}
-
-function normalizeOverallCandidate(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return Number(Math.max(0, Math.min(HOME_ANALYTICS_MAX_SCORE, numeric)).toFixed(1));
-}
-
-function normalizePresentScore(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return null;
-  return Number(Math.max(0, Math.min(HOME_ANALYTICS_MAX_SCORE, numeric)).toFixed(1));
-}
-
-function pickFirstPresentScore(...candidates) {
-  for (const candidate of candidates) {
-    const normalized = normalizePresentScore(candidate);
-    if (normalized !== null) return normalized;
-  }
-  return null;
-}
-
-function resolveLegacySpeechOverall(scoreJson) {
-  const score = toObject(scoreJson) || {};
-  const nestedScores = toObject(score?.scores) || {};
-  const pronunciation = pickFirstPresentScore(score?.pronunciation, nestedScores?.pronunciation);
-  const fluency = pickFirstPresentScore(
-    score?.fluency,
-    score?.oral_fluency,
-    score?.oralFluency,
-    nestedScores?.fluency,
-    nestedScores?.oral_fluency,
-    nestedScores?.oralFluency
-  );
-  const content = pickFirstPresentScore(
-    score?.content,
-    score?.appropriacy,
-    nestedScores?.content,
-    nestedScores?.appropriacy
-  );
-  const validScores = [pronunciation, fluency, content].filter((item) => item !== null);
-  if (validScores.length < 2) return null;
-
-  const average = validScores.reduce((sum, item) => sum + Number(item || 0), 0) / validScores.length;
-  return normalizeOverallCandidate(average);
-}
-
-function formatInteger(value) {
-  const number = Number(value || 0);
-  if (!Number.isFinite(number)) return "0";
-  return new Intl.NumberFormat("zh-CN", {
-    maximumFractionDigits: 0
-  }).format(Math.max(0, Math.round(number)));
-}
-
-function formatScore(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "--";
-  return new Intl.NumberFormat("zh-CN", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
-  }).format(number);
-}
-
-function formatModuleTitle(value) {
-  return `${value || ""}`.replace(/\s*-\s*/g, " - ").trim();
-}
-
-function getModuleTheme(moduleId) {
-  return MODULE_THEME_MAP[moduleId] || MODULE_THEME_MAP.ra;
-}
-
-function getModuleStyle(moduleId) {
-  const theme = getModuleTheme(moduleId);
-  return {
-    "--module-accent": theme.accent,
-    "--module-icon-bg": theme.iconBg,
-    "--module-icon-color": theme.iconColor
-  };
-}
-
-function getTaskWeekCount(taskType) {
-  const key = normalizeTaskType(taskType);
-  return Number(homeAnalytics.value.taskWeekCounts[key] || 0);
-}
-
-function getTaskWeekPercent(taskType) {
-  const values = Object.values(homeAnalytics.value.taskWeekCounts || {});
-  const maxValue = Math.max(...values, 0);
-  const currentValue = getTaskWeekCount(taskType);
-  if (!maxValue || !currentValue) return 0;
-  return Math.max(18, Math.round((currentValue / maxValue) * 100));
-}
-
-function favoriteLocalStorageKey(userId, taskType = "DI") {
-  const normalizedTaskType = `${taskType || "DI"}`.trim().toLowerCase();
-  return `kai_kou_${normalizedTaskType}_favorites_${userId}`;
-}
-
-function readLocalFavorites(userId, taskType = "DI") {
-  const key = favoriteLocalStorageKey(userId, taskType);
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => `${item || ""}`.trim()).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-function writeLocalFavorites(userId, ids, taskType = "DI") {
-  const key = favoriteLocalStorageKey(userId, taskType);
-  try {
-    localStorage.setItem(key, JSON.stringify([...ids]));
-  } catch {
-    // no-op
-  }
-}
-
-function isMissingFavoritesTableError(error) {
-  const code = `${error?.code || ""}`.toUpperCase();
-  const message = `${error?.message || ""}`.toLowerCase();
-  if (code === "42P01") return true;
-  return message.includes("relation") && message.includes("favorites");
-}
-
-async function resolveCurrentUserId() {
-  const authUserId = `${authStore.user?.id || ""}`.trim();
-  if (authUserId) return authUserId;
-  const { data } = await supabase.auth.getSession();
-  return `${data?.session?.user?.id || ""}`.trim();
-}
-
-async function fetchHomeAnalyticsRows(userId) {
-  const normalizedUserId = `${userId || ""}`.trim();
-  if (!normalizedUserId) return [];
-
-  const rows = [];
-  let from = 0;
-
-  while (true) {
-    const to = from + HOME_ANALYTICS_PAGE_SIZE - 1;
-    const { data, error } = await supabase
-      .from("practice_logs")
-      .select("id, task_type, created_at, score_json")
-      .eq("user_id", normalizedUserId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(from, to);
-
-    if (error) throw error;
-
-    const chunk = Array.isArray(data) ? data : [];
-    if (!chunk.length) break;
-
-    rows.push(...chunk);
-
-    if (chunk.length < HOME_ANALYTICS_PAGE_SIZE) break;
-    from = to + 1;
-  }
-
-  return rows;
-}
-
-async function loadHomeAnalytics() {
-  homeAnalytics.value = createEmptyHomeAnalytics();
-  homeAnalytics.value = await loadHomeAnalyticsSnapshotForAuth(authStore);
-}
-
-async function loadMobileHomeData() {
-  if (mobileHomeReady.value) return;
-
-  await Promise.all([
-    loadHomeAnalytics(),
-    loadDIFavorites(),
-    loadRTSFavorites()
-  ]);
-
-  mobileHomeReady.value = true;
-}
-
-async function loadDIFavorites() {
-  if (!diEnabled.value || !authStore.canPractice) {
-    diFavoriteQuestionIds.value = [];
-    return;
-  }
-
-  loadingDIFavorites.value = true;
-  try {
-    const userId = await resolveCurrentUserId();
-    if (!userId) {
-      diFavoriteQuestionIds.value = [];
-      return;
-    }
-
-    const localFavorites = readLocalFavorites(userId, "DI");
-    let orderedIds = [...localFavorites];
-
-    try {
-      const { data, error } = await supabase
-        .from("favorites")
-        .select("question_id, created_at")
-        .eq("user_id", userId)
-        .eq("task_type", "DI")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        if (!isMissingFavoritesTableError(error)) throw error;
-      } else {
-        const remoteIds = (Array.isArray(data) ? data : [])
-          .map((item) => `${item?.question_id || ""}`.trim())
-          .filter(Boolean);
-        const merged = [...remoteIds, ...localFavorites];
-        orderedIds = [...new Set(merged)];
-        writeLocalFavorites(userId, orderedIds, "DI");
-      }
-    } catch {
-      // keep local fallback
-    }
-
-    diFavoriteQuestionIds.value = orderedIds;
-  } finally {
-    loadingDIFavorites.value = false;
-  }
-}
-
-async function loadRTSFavorites() {
-  if (!rtsTask.value) {
-    rtsFavoriteQuestionIds.value = [];
-    return;
-  }
-
-  loadingRTSFavorites.value = true;
-  try {
-    const userId = await resolveCurrentUserId();
-    if (!userId) {
-      rtsFavoriteQuestionIds.value = [];
-      return;
-    }
-
-    const localFavorites = readLocalFavorites(userId, "RTS");
-    let orderedIds = [...localFavorites];
-
-    try {
-      const { data, error } = await supabase
-        .from("favorites")
-        .select("question_id, created_at")
-        .eq("user_id", userId)
-        .eq("task_type", "RTS")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        if (!isMissingFavoritesTableError(error)) throw error;
-      } else {
-        const remoteIds = (Array.isArray(data) ? data : [])
-          .map((item) => `${item?.question_id || ""}`.trim())
-          .filter(Boolean);
-        const merged = [...remoteIds, ...localFavorites];
-        orderedIds = [...new Set(merged)];
-        writeLocalFavorites(userId, orderedIds, "RTS");
-      }
-    } catch {
-      // keep local fallback
-    }
-
-    rtsFavoriteQuestionIds.value = orderedIds;
-  } finally {
-    loadingRTSFavorites.value = false;
-  }
-}
-
-function goLogin() {
-  router.push("/auth");
-}
-
-function openProfile() {
-  router.push("/profile");
-}
-
-function startDIRandomPractice() {
-  router.push("/di");
-}
-
-function startRTSRandomPractice() {
-  router.push("/rts/practice");
-}
-
-function openRTSSelectPractice() {
-  router.push("/rts/list");
-}
-
-function openRTSTemplateLibrary() {
-  router.push("/rts/templates");
-}
-
-function openRTSFavorites() {
-  router.push("/rts/favorites");
-}
-
-function openDIFavoriteQuestion(questionId) {
-  const id = `${questionId || ""}`.trim();
-  if (!id) return;
-  router.push({
-    path: "/di",
-    query: { qid: id }
-  });
-}
-
-function openOtherTaskRandom(task) {
-  const to = `${task?.to || ""}`.trim();
-  if (!to) return;
-  router.push(to);
-}
-
-function openOtherTaskSelect(task) {
-  const taskId = `${task?.id || ""}`.trim();
-  const to = `${otherTaskSelectPathMap[taskId] || task?.to || ""}`.trim();
-  if (!to) return;
-  router.push(to);
-}
-
-function otherTaskTertiaryLabel(task) {
-  const taskId = `${task?.id || ""}`.trim();
-  return otherTaskTertiaryMap[taskId]?.label || "";
-}
-
-function openOtherTaskTertiary(task) {
-  const taskId = `${task?.id || ""}`.trim();
-  const to = `${otherTaskTertiaryMap[taskId]?.to || task?.to || ""}`.trim();
-  if (!to) return;
-  router.push(to);
-}
-
-function syncViewportMode() {
-  if (typeof window === "undefined") return;
-  isDesktopViewport.value = window.innerWidth >= 1024;
-}
-
-onMounted(async () => {
-  syncViewportMode();
-  if (typeof window !== "undefined") {
-    window.addEventListener("resize", syncViewportMode);
-  }
-
-  if (!authStore.loaded) {
-    await authStore.loadStatus();
-  }
-
-  if (!isDesktopViewport.value) {
-    await loadMobileHomeData();
-  }
-});
-
-watch(isDesktopViewport, async (nextValue) => {
-  if (!nextValue) {
-    await loadMobileHomeData();
-  }
-});
-
-onBeforeUnmount(() => {
-  if (typeof window !== "undefined") {
-    window.removeEventListener("resize", syncViewportMode);
-  }
-});
-</script>
-
 <template>
-  <HomeDesktopDashboard v-if="isDesktopViewport" />
+  <div class="shell">
 
-  <div v-else class="home-page">
-    <header class="home-topbar">
-      <div class="topbar-inner">
-        <div class="brand">
-          <div class="brand__mark">
-            <svg viewBox="0 0 24 24" class="brand__icon" fill="none" stroke="currentColor" stroke-width="2.4">
-              <circle cx="12" cy="12" r="8" />
-              <circle cx="12" cy="12" r="3.4" />
-            </svg>
-          </div>
-          <div class="brand__copy">
-            <p class="brand__title">开口</p>
-          </div>
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
+    <aside class="home-agent-sidebar">
+      <RouterLink class="home-agent-logo" to="/home" aria-label="返回首页">
+        <div class="home-agent-logo-icon" aria-hidden="true">
+          <svg width="18" height="18" fill="none" viewBox="0 0 18 18">
+            <rect x="2" y="2" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".95" />
+            <rect x="10" y="2" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".5" />
+            <rect x="2" y="10" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".5" />
+            <rect x="10" y="10" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".75" />
+          </svg>
         </div>
+        <span class="home-agent-logo-name">开口 PTE</span>
+      </RouterLink>
 
-        <div
-          v-if="authStore.isLoggedIn"
-          class="account-card account-card--clickable"
-          role="button"
-          tabindex="0"
-          aria-label="打开个人中心"
-          @click="openProfile"
-          @keydown.enter.prevent="openProfile"
-          @keydown.space.prevent="openProfile"
+      <nav class="home-agent-nav" aria-label="首页导航">
+        <RouterLink
+          v-for="item in displayNavItems"
+          :key="item.key"
+          class="home-agent-nav-item"
+          :class="{ 'home-agent-nav-item--active': isNavActive(item) }"
+          :to="item.to"
+          :aria-current="isNavActive(item) ? 'page' : undefined"
         >
-          <span class="account-pill" :class="accountStatusMeta.className">{{ accountStatusMeta.label }}</span>
-          <div class="account-card__badge-wrap">
-            <div class="account-card__badge">
-              <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" class="account-card__badge-image" />
-              <span v-else>{{ userInitial }}</span>
-            </div>
-            <span class="account-card__crown" aria-hidden="true">
-              <svg viewBox="0 0 24 24" class="account-card__crown-icon" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M4 17h16l-1.4-8-4.8 3.5L12 5 10.2 12.5 5.4 9 4 17Z" fill="currentColor" stroke="none" />
-                <path d="M6 19h12" stroke-linecap="round" />
-              </svg>
-            </span>
-            <span class="account-card__spark" aria-hidden="true">
-              <svg viewBox="0 0 16 16" class="account-card__spark-icon" fill="currentColor">
-                <path d="M8 1.2 9.6 6.4 14.8 8l-5.2 1.6L8 14.8 6.4 9.6 1.2 8l5.2-1.6Z" />
-              </svg>
-            </span>
-          </div>
-          <div class="account-card__panel">
-            <div class="account-card__panel-copy">
-              <p class="account-card__title">个人中心</p>
-              <p class="account-card__subtitle">点击进入</p>
-            </div>
-            <div class="account-card__arrow" aria-hidden="true">
-              <svg viewBox="0 0 24 24" class="account-card__arrow-icon" fill="none" stroke="currentColor" stroke-width="2.2">
-                <path d="m9 6 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </div>
-          </div>
+          <span class="home-agent-nav-icon" aria-hidden="true" v-html="item.icon"></span>
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </nav>
+
+      <div class="home-agent-sidebar-footer">
+        <div class="home-agent-promo">
+          <div class="home-agent-promo-title">PTE 备考资料包</div>
+          <div class="home-agent-promo-sub">真题 · 高频词汇 · 模板</div>
+          <button class="home-agent-promo-button" type="button" @click="goTo('/we/templates')">免费领取</button>
         </div>
-
-        <button v-else type="button" class="account-login" @click="goLogin">登录</button>
       </div>
-    </header>
+    </aside>
 
-    <section class="home-hero">
-      <div class="hero-inner">
-        <div class="hero-grid">
-          <div class="hero-copy">
-            <p class="hero-copy__eyebrow">{{ greetingLabel }}, {{ userDisplayName }} 👋</p>
-            <h1>今天要练点什么？</h1>
-            <p class="hero-copy__support">{{ heroSupportText }}</p>
-          </div>
+    <!-- ═══════════════ MAIN ═══════════════ -->
+    <div class="main">
+      <header class="topbar">
+        <div class="tb-left">
+          <div class="tb-greet">你好，{{ username }} 👋</div>
+          <div class="tb-sub">坚持每天进步一点，PTE 梦想更近一步！</div>
+        </div>
+        <div class="tb-right">
+          <div class="vip-pill" :class="`vip-pill--${membershipPill.kind}`">{{ membershipPill.icon }} {{ membershipPill.label }}</div>
+          <div class="user-av">{{ userInitial }}</div>
+          <span class="user-name">{{ username }}</span>
+        </div>
+      </header>
 
-          <div class="hero-highlight-grid">
-            <article
-              v-for="card in heroHighlightCards"
-              :key="card.key"
-              class="hero-streak"
-              :class="card.className"
-            >
-              <div class="hero-streak__row">
-                <div class="hero-streak__icon" :class="card.iconClass">{{ card.icon }}</div>
+      <div class="scroll">
+
+        <!-- ── ROW 1：控台 + AI 私教 ── -->
+        <div class="row">
+          <div class="card hero-card">
+            <div class="hc-top">
+              <div class="hc-deco" style="width:150px;height:150px;top:-55px;right:20px;"></div>
+              <div class="hc-deco" style="width:80px;height:80px;top:5px;right:140px;"></div>
+              <div class="hc-eyebrow">PTE 学习总控台</div>
+              <div class="hc-title">最近 RA 均分 <em>{{ raAvg }}</em> 分</div>
+              <div class="hc-sub">{{ heroSubtitle }}</div>
+              <div class="task-block">
+                <div class="task-hd"><div class="task-hd-dot"></div>{{ heroTaskTitle }}</div>
+                <div v-for="task in todayTasks" :key="task.key" class="t-row">
+                  <div class="t-chk" :class="{ done: task.done }">
+                    <svg v-if="task.done" width="9" height="9" fill="none" viewBox="0 0 9 9">
+                      <path d="M1.5 4.5l2.5 2.5 3.5-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <span class="t-lbl">{{ task.label }}</span>
+                  <div class="t-bar-bg"><div class="t-bar-fill" :style="{ width: task.progressPercent }"></div></div>
+                  <span class="t-cnt">{{ task.current }}/{{ task.total }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="hc-bottom">
+              <div v-for="stat in heroStats" :key="stat.label" class="s3">
+                <div class="s3-icon" :style="{ background: stat.bg }">{{ stat.icon }}</div>
                 <div>
-                  <p class="hero-streak__value" :class="card.valueClass">{{ card.value }}</p>
-                  <p class="hero-streak__label">{{ card.label }}</p>
-                  <p class="hero-streak__caption">{{ card.caption }}</p>
+                  <div class="s3-val">{{ stat.value }}<span class="s3-unit">{{ stat.unit }}</span></div>
+                  <div class="s3-label">{{ stat.label }}</div>
+                  <div class="s3-sub">{{ stat.sub }}</div>
                 </div>
               </div>
-            </article>
+            </div>
+          </div>
+
+          <div class="card ai-card">
+            <div class="ai-header">
+              <div class="ai-header-left">
+                <span class="ai-star">✦</span>
+                <div><div class="ai-title">AI 私教</div><div class="ai-subtitle">为你量身建议</div></div>
+              </div>
+              <span class="ai-link" role="button" tabindex="0" @click="goTo('/agent')" @keydown.enter.prevent="goTo('/agent')" @keydown.space.prevent="goTo('/agent')">与 AI 私教对话 →</span>
+            </div>
+            <div class="ai-banner">
+              <span class="ai-banner-icon">💡</span>
+              <span>建议优先练习 RTS 和 DI，提升整体得分效率</span>
+            </div>
+            <div class="ai-messages">
+              <div v-for="msg in aiMessages" :key="msg.id" class="ai-msg">
+                <div class="ai-msg-av">AI</div>
+                <div class="ai-msg-bubble">
+                  <div class="ai-msg-text">{{ msg.text }}</div>
+                  <div class="ai-msg-time">{{ msg.time }}</div>
+                </div>
+              </div>
+            </div>
+            <div class="ai-actions">
+              <div v-for="act in aiActions" :key="act.label" class="ai-act-btn" role="button" tabindex="0" @click="goTo(act.to)" @keydown.enter.prevent="goTo(act.to)" @keydown.space.prevent="goTo(act.to)">{{ act.label }}</div>
+            </div>
           </div>
         </div>
 
-        <div class="hero-stats-grid">
-          <article v-for="stat in heroStats" :key="stat.key" class="hero-stat">
-            <div>
-              <p class="hero-stat__value">
-                <span>{{ stat.value }}</span>
-                <span v-if="stat.suffix" class="hero-stat__suffix">{{ stat.suffix }}</span>
-              </p>
-              <p class="hero-stat__label">{{ stat.label }}</p>
-            </div>
-            <p class="hero-stat__hint" :class="stat.helperClass">{{ stat.helper }}</p>
-          </article>
-        </div>
+        <!-- ── ROW 2：快捷入口 + AI建议 + 本周目标 ── -->
+        <div class="row">
 
-        <div class="hero-mobile-grid">
-          <article
-            v-for="card in mobileHeroCards"
-            :key="card.key"
-            class="hero-mobile-card"
-            :class="card.className"
-          >
-            <p class="hero-mobile-card__value" :class="card.valueClass">
-              <span>{{ card.value }}</span>
-              <span v-if="card.suffix" class="hero-mobile-card__suffix">{{ card.suffix }}</span>
-            </p>
-            <p class="hero-mobile-card__label">
-              <span v-if="card.icon" class="hero-mobile-card__emoji">{{ card.icon }}</span>
-              <span>{{ card.label }}</span>
-            </p>
-            <p class="hero-mobile-card__hint" :class="card.helperClass">{{ card.helper }}</p>
-          </article>
-        </div>
-
-      </div>
-    </section>
-
-    <main class="home-content">
-      <div class="content-inner">
-        <section class="surface-card heatmap-card">
-          <div class="heatmap-card__inner">
-            <div class="section-header">
-              <div>
-                <p class="section-header__title">🗓️ 本周练习热力图</p>
-                <p class="section-header__subtle">本周真实练习次数 · 自动按你的练习记录更新</p>
+          <div class="card sc-card">
+            <div class="sec-title"><span class="sec-star">◈</span> 模块快捷入口</div>
+            <div class="sc-grid">
+              <div v-for="mod in modules" :key="mod.code"
+                class="sc-item" :class="`sc-${mod.code.toLowerCase()}`"
+                role="button" tabindex="0"
+                @click="goTo(mod.to)"
+                @keydown.enter.prevent="goTo(mod.to)"
+                @keydown.space.prevent="goTo(mod.to)">
+                <div class="sc-icon-wrap" :style="{ background: mod.iconBg }">{{ mod.icon }}</div>
+                <div class="sc-code">{{ mod.code }}</div>
+                <div class="sc-desc">{{ mod.desc }}</div>
+                <div class="sc-tag" :style="{ background: mod.tagBg, color: mod.tagColor, border: `1px solid ${mod.tagBorder}` }">
+                  {{ mod.tag }}
+                </div>
               </div>
-              <p class="section-header__summary">
-                {{ homeAnalytics.loading ? "同步中..." : `本周共 ${formatInteger(heatmapTotal)} 题` }}
-              </p>
             </div>
+          </div>
 
-            <div class="heatmap-body">
-              <div class="heatmap-week">
+          <div class="card advice-card">
+            <div class="advice-header">
+              <div class="sec-title" style="margin-bottom:0"><span class="sec-star">✦</span> 今日 AI 建议</div>
+              <span class="badge-outline">{{ dailyAiSuggestionStatusLabel }}</span>
+            </div>
+            <div class="adv-banner">
+              <span class="adv-banner-icon">💡</span>
+              <span class="adv-banner-text">{{ dailyAiBannerText }}</span>
+            </div>
+            <div class="adv-headline">{{ dailyAiSuggestion.headline }}</div>
+            <div class="adv-body">{{ dailyAiSuggestion.reason }}<br>{{ dailyAiSuggestion.advice }}</div>
+            <div class="adv-tags">
+              <span v-for="task in dailyAiSuggestionTasks" :key="`${task.task_type}-${task.count}`" class="adv-tag">
+                {{ task.task_type }} {{ task.count }} 道
+              </span>
+            </div>
+            <div class="adv-meta">{{ dailyAiSuggestionTimeLabel }}</div>
+            <div class="adv-questions">
+              <div v-for="q in adviceQuestions" :key="q.label" class="adv-q" role="button" tabindex="0" @click="goTo(q.to)" @keydown.enter.prevent="goTo(q.to)" @keydown.space.prevent="goTo(q.to)">
+                <span class="adv-q-text">{{ q.label }}</span>
+                <span class="adv-q-arr">›</span>
+              </div>
+            </div>
+            <div class="adv-btns">
+              <button type="button" class="btn-primary" @click="goTo(dailyAiMainTaskPath)">{{ dailyAiSuggestion.cta_text }}</button>
+              <button type="button" class="btn-ghost" @click="goTo('/agent')">问 AI 私教</button>
+            </div>
+          </div>
+
+          <div class="card goal-card">
+            <div class="goal-header">
+              <div class="sec-title" style="margin-bottom:0"><span class="sec-star">◎</span> 本周目标进度</div>
+              <span class="badge-green">{{ weeklyGoalStatusLabel }}</span>
+            </div>
+            <div class="goal-top">
+              <div class="goal-left">
+                <div class="goal-pct">{{ weekProgress }}%</div>
+                <div class="goal-done">已完成 {{ weekDone }} / {{ weekTotal }} 题</div>
+              </div>
+              <div class="goal-ring-wrap">
+                <svg width="66" height="66" viewBox="0 0 66 66">
+                  <circle cx="33" cy="33" r="26" fill="none" stroke="#D8D0C0" stroke-width="6"/>
+                  <circle cx="33" cy="33" r="26" fill="none" stroke="#7C5C3E" stroke-width="6"
+                    stroke-linecap="round" :stroke-dasharray="ringDash"
+                    stroke-dashoffset="41" transform="rotate(-90 33 33)"/>
+                </svg>
+                <div class="ring-center">{{ weekProgress }}%</div>
+              </div>
+            </div>
+            <div class="goal-bar-section">
+              <div class="goal-bar-labels"><span>本周进度</span><span>{{ weekDone }}/{{ weekTotal }} 题</span></div>
+              <div class="goal-bar-bg"><div class="goal-bar-fill" :style="{ width: weekProgress + '%' }"></div></div>
+            </div>
+            <div class="goal-breakdown">
+              <div v-for="g in goalBreakdown" :key="g.code" class="gb-row">
+                <span class="gb-code">{{ g.code }}</span>
+                <div class="gb-bar-bg">
+                  <div class="gb-bar-fill" :style="{ width: g.percent + '%', background: g.color }"></div>
+                </div>
+                <span class="gb-val">{{ g.done }}/{{ g.total }}</span>
+              </div>
+            </div>
+            <div class="goal-btns">
+              <button type="button" class="goal-btn goal-btn-p goal-btn-wide" @click="openGoalModal">设置本周目标</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ROW 3：热力图 + 趋势 + 弱项 + 最近练习 ── -->
+        <div class="row">
+
+          <div class="card hm-card">
+            <div class="sec-title"><span class="sec-star">◈</span> 本周学习热力图</div>
+            <div class="hm-days">
+              <div
+                v-for="day in heatDays"
+                :key="`${day.label}-${day.dateLabel}`"
+                class="hm-dlbl"
+                :class="{ today: day.isToday }"
+                :title="day.dateLabel"
+              >
+                {{ day.label }}
+              </div>
+            </div>
+            <div class="hm-grid">
+              <div v-for="row in heatRows" :key="row.label" class="hm-row">
+                <span class="hm-code">{{ row.label }}</span>
                 <div
-                  v-for="day in homeAnalytics.recentDays"
-                  :key="day.key"
-                  class="heatmap-day"
-                  :class="{ 'heatmap-day--today': day.isToday }"
-                >
-                  <div
-                    class="heatmap-cell"
-                    :class="{ 'heatmap-cell--today': day.isToday }"
-                    :style="{ backgroundColor: day.color }"
-                    :title="`${day.dateLabel} · ${day.count} 题${day.isToday ? ' · 今日' : ''}`"
-                  />
-                  <span class="heatmap-day__label">
-                    {{ day.label }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="heatmap-legend">
-                <span class="heatmap-legend__text">少</span>
-                <span
-                  v-for="(color, index) in HEAT_COLORS.slice(1)"
-                  :key="`${color}-${index}`"
-                  class="heatmap-legend__dot"
-                  :style="{ backgroundColor: color }"
-                />
-                <span class="heatmap-legend__text">多</span>
+                  v-for="(cell, i) in row.cells"
+                  :key="`${row.label}-${i}`"
+                  class="hm-cell"
+                  :class="[heatClass(cell.level), { 'hm-today': cell.isToday }]"
+                  :title="formatHeatCellTitle(row, cell)"
+                ></div>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section class="content-section">
-          <div class="section-header section-header--plain">
-            <div>
-              <p class="section-header__title">口语练习</p>
-              <p class="section-header__subtle">保留现有入口逻辑，只重排首页结构和视觉层级</p>
+            <div class="hm-footer">
+              <span>少</span>
+              <div class="hm-legend">
+                <div v-for="level in heatLegendLevels" :key="level" class="hml" :class="heatClass(level)"></div>
+              </div>
+              <span>多</span>
+              <span class="hm-total">{{ weeklyStudyFoot }}</span>
             </div>
           </div>
 
-          <div class="module-grid">
-            <article v-if="raTask" class="module-card" :style="getModuleStyle('ra')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2.1">
-                      <path d="M12 1v11" />
-                      <path d="M8 6v5a4 4 0 0 0 8 0V6" />
-                      <path d="M5 11a7 7 0 0 0 14 0" />
-                      <path d="M12 18v5" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">{{ formatModuleTitle(raTask.title) }}</h3>
-                    <p class="module-card__subtitle">{{ raTask.subtitle }}</p>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('RA')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("RA") }}题</span>
-                </div>
+          <div class="card trend-card">
+            <div class="trend-header">
+              <div class="sec-title" style="margin-bottom:0"><span class="sec-star">◈</span> 得分趋势（近 7 天）</div>
+              <div class="trend-avg">
+                <div class="trend-avg-lbl">{{ trendScoreChip.label }}</div>
+                <div class="trend-avg-val">{{ trendScoreChip.value }}</div>
               </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="router.push('/ra')">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/ra/list')">选题练习</button>
-                </div>
-              </div>
-            </article>
-
-            <article v-if="wfdTask" class="module-card" :style="getModuleStyle('wfd')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
-                      <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
-                      <path d="M20 13v4a2 2 0 0 1-2 2h-2v-6h2a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">{{ formatModuleTitle(wfdTask.title) }}</h3>
-                    <p class="module-card__subtitle">{{ wfdTask.subtitle }}</p>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('WFD')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("WFD") }}题</span>
-                </div>
-              </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="router.push('/wfd')">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/wfd/list')">选题练习</button>
-                </div>
-                <div class="module-card__actions-grid module-card__actions-grid--single">
-                  <button type="button" class="module-btn module-btn--feature" @click="router.push('/wfd/listen')">磨耳朵模式</button>
-                </div>
-              </div>
-            </article>
-
-            <article v-if="rtsTask" class="module-card" :style="getModuleStyle('rts')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M5 5h14v9H9l-4 4z" />
-                      <path d="M12 9h4" />
-                      <path d="M8 12h8" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">{{ formatModuleTitle(rtsTask.title) }}</h3>
-                    <p class="module-card__subtitle">{{ rtsTask.subtitle }}</p>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('RTS')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("RTS") }}题</span>
-                </div>
-              </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="startRTSRandomPractice">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="openRTSSelectPractice">选题练习</button>
-                </div>
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--ghost" @click="openRTSTemplateLibrary">模板库</button>
-                  <button type="button" class="module-btn module-btn--ghost" @click="openRTSFavorites">
-                    <span class="module-btn__inline">
-                      <span>{{ loadingRTSFavorites ? "收藏加载中..." : "RTS 收藏" }}</span>
-                      <span class="module-badge">{{ rtsFavoriteCount }}</span>
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </article>
-
-            <article v-if="diEnabled" class="module-card" :style="getModuleStyle('di')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="5" y="4" width="14" height="16" rx="2" />
-                      <path d="M9 8h6" />
-                      <path d="M9 12h6" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">DI - 图片描述</h3>
-                    <p class="module-card__subtitle">口语起步器</p>
-                    <div class="module-card__chips">
-                      <span v-for="chip in diFeatureChips" :key="chip" class="module-chip">{{ chip }}</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('DI')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("DI") }}题</span>
-                </div>
-              </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="startDIRandomPractice">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/di/select')">选题练习</button>
-                </div>
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--ghost" @click="router.push('/di/templates')">模板库</button>
-                  <button type="button" class="module-btn module-btn--ghost" @click="showDIFavorites = !showDIFavorites">
-                    <span class="module-btn__inline">
-                      <span>{{ showDIFavorites ? "收起收藏" : "DI 收藏" }}</span>
-                      <span class="module-badge">{{ diFavoriteQuestions.length }}</span>
-                    </span>
-                  </button>
-                </div>
-
-                <div v-if="showDIFavorites" class="module-favorites">
-                  <div class="module-favorites__head">
-                    <p>DI 全部收藏</p>
-                    <span>{{ diFavoriteQuestions.length }} 题</span>
-                  </div>
-
-                  <div v-if="loadingDIFavorites" class="module-favorites__empty">收藏加载中...</div>
-                  <div v-else-if="diFavoriteQuestions.length" class="module-favorites__list">
-                    <button
-                      v-for="item in diFavoriteQuestions"
-                      :key="item.id"
-                      type="button"
-                      class="module-favorites__item"
-                      @click="openDIFavoriteQuestion(item.id)"
-                    >
-                      <span class="module-favorites__item-title">{{ item.sourceNumberLabel || item.id }} - {{ item.displayTitle || item.id }}</span>
-                      <span class="module-favorites__item-tag">{{ item.imageType || "-" }}</span>
-                    </button>
-                  </div>
-                  <p v-else class="module-favorites__empty">暂无 DI 收藏题目。</p>
-                </div>
-              </div>
-            </article>
-
-            <article v-if="rsTask" class="module-card" :style="getModuleStyle('rs')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M5 6h14v9H9l-4 4z" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">{{ formatModuleTitle(rsTask.title) }}</h3>
-                    <p class="module-card__subtitle">{{ rsTask.subtitle }}</p>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('RS')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("RS") }}题</span>
-                </div>
-              </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="openOtherTaskRandom(rsTask)">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="openOtherTaskSelect(rsTask)">选题练习</button>
-                </div>
-                <div class="module-card__actions-grid module-card__actions-grid--single">
-                  <button type="button" class="module-btn module-btn--feature" @click="openOtherTaskTertiary(rsTask)">
-                    {{ otherTaskTertiaryLabel(rsTask) }}
-                  </button>
-                </div>
-              </div>
-            </article>
-
-            <article v-if="rlTask" class="module-card" :style="getModuleStyle('rl')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M6 5h8a4 4 0 0 1 4 4v10H10a4 4 0 0 0-4-4z" />
-                      <path d="M6 5v10a4 4 0 0 1 4 4" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">{{ formatModuleTitle(rlTask.title) }}</h3>
-                    <p class="module-card__subtitle">{{ rlTask.subtitle }}</p>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('RL')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("RL") }}题</span>
-                </div>
-              </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="openOtherTaskRandom(rlTask)">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="openOtherTaskSelect(rlTask)">选题练习</button>
-                </div>
-                <div class="module-card__actions-grid module-card__actions-grid--single">
-                  <button type="button" class="module-btn module-btn--feature" @click="openOtherTaskTertiary(rlTask)">
-                    {{ otherTaskTertiaryLabel(rlTask) }}
-                  </button>
-                </div>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section class="content-section">
-          <div class="section-header section-header--plain">
-            <div>
-              <p class="section-header__title">写作</p>
-              <p class="section-header__subtle">写作入口保留原逻辑，视觉样式对齐首页新结构</p>
             </div>
+            <svg class="chart-svg" viewBox="0 0 260 136" role="img" aria-label="近 7 天得分趋势">
+              <line
+                v-for="tick in trendYTicks"
+                :key="`trend-grid-${tick.value}`"
+                :x1="TREND_CHART.left"
+                :x2="TREND_CHART.right"
+                :y1="tick.y"
+                :y2="tick.y"
+                class="trend-grid"
+              />
+              <text
+                v-for="tick in trendYTicks"
+                :key="`trend-tick-${tick.value}`"
+                :x="6"
+                :y="tick.y + 3"
+                class="trend-axis"
+              >
+                {{ tick.value }}
+              </text>
+              <polyline
+                v-for="segment in trendDrawableSegments"
+                :key="segment.key"
+                :points="segment.polyline"
+                class="trend-line"
+              />
+              <text v-if="!trendHasData" x="135" y="62" text-anchor="middle" class="trend-empty">{{ trendEmptyText }}</text>
+              <text
+                v-for="label in trendAxisLabels"
+                :key="`trend-date-${label.key}`"
+                :x="label.x"
+                y="126"
+                text-anchor="middle"
+                class="trend-date"
+              >
+                {{ label.label }}
+              </text>
+              <circle
+                v-for="point in trendPlotPoints"
+                :key="point.key"
+                :cx="point.x"
+                :cy="point.y"
+                r="4"
+                class="trend-point"
+              >
+                <title>{{ formatTrendPointTitle(point) }}</title>
+              </circle>
+            </svg>
+            <div class="trend-note">{{ trendFootText }}</div>
           </div>
 
-          <div class="module-grid">
-            <article v-if="weTask" class="module-card" :style="getModuleStyle('we')">
-              <div class="module-card__head">
-                <div class="module-card__info">
-                  <div class="module-card__icon">
-                    <svg viewBox="0 0 24 24" class="module-card__icon-svg" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M4 20h16" />
-                      <path d="M7 16.5V6.5A2.5 2.5 0 0 1 9.5 4h7.9" />
-                      <path d="m14 6 4-2v7" />
-                    </svg>
-                  </div>
-                  <div class="module-card__copy">
-                    <h3 class="module-card__title">{{ formatModuleTitle(weTask.title) }}</h3>
-                    <p class="module-card__subtitle">{{ weTask.subtitle }}</p>
-                  </div>
-                </div>
-                <div class="module-card__metric">
-                  <span class="module-card__metric-track">
-                    <span :style="{ width: `${getTaskWeekPercent('WE')}%` }" />
-                  </span>
-                  <span class="module-card__metric-value">{{ getTaskWeekCount("WE") }}题</span>
+          <div class="card weak-card">
+            <div class="sec-title"><span class="sec-star">◈</span> 我的弱项 Top 3</div>
+            <div v-if="hasWeakItems" class="weak-list">
+              <div v-for="w in weakItems" :key="w.rank" class="weak-item">
+                <div class="weak-rank" :style="{ background: w.accent }">{{ w.rank }}</div>
+                <div>
+                  <div class="weak-name">{{ w.title }}</div>
+                  <div class="weak-score">{{ w.metricLabel }} · {{ w.delta }}</div>
                 </div>
               </div>
-
-              <div class="module-card__actions">
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--primary" @click="router.push('/we')">随机练习</button>
-                  <button type="button" class="module-btn module-btn--secondary" @click="router.push('/we/select')">选题练习</button>
-                </div>
-                <div class="module-card__actions-grid">
-                  <button type="button" class="module-btn module-btn--ghost" @click="router.push('/we/templates')">看模板</button>
-                  <button type="button" class="module-btn module-btn--ghost" @click="router.push('/we/opinions')">观点库</button>
-                </div>
-              </div>
-            </article>
+            </div>
+            <div v-else class="weak-empty">练习数据还不够，完成几道题后会自动识别弱项。</div>
           </div>
-        </section>
+
+          <div class="card recent-card">
+            <div class="sec-title"><span class="sec-star">◈</span> 最近练习</div>
+            <div v-if="hasRecentItems" class="recent-list">
+              <div v-for="r in recentItems" :key="r.key" class="rec-item" role="button" tabindex="0" @click="goTo(r.to)" @keydown.enter.prevent="goTo(r.to)" @keydown.space.prevent="goTo(r.to)">
+                <div class="rec-badge" :style="{ background: r.color }">{{ r.code }}</div>
+                <div>
+                  <div class="rec-name">{{ r.name }}</div>
+                  <div class="rec-meta">{{ r.score }} · {{ r.date }}</div>
+                </div>
+                <span class="rec-arr">›</span>
+              </div>
+            </div>
+            <div v-else class="recent-empty">暂无练习记录，完成一次练习后这里会自动更新。</div>
+          </div>
+        </div>
+
       </div>
-    </main>
+    </div>
+
+    <div v-if="goalModalOpen" class="goal-modal-backdrop" @click.self="closeGoalModal">
+      <section class="goal-modal" role="dialog" aria-modal="true" aria-labelledby="goal-modal-title">
+        <div class="goal-modal-head">
+          <div>
+            <p class="goal-modal-kicker">Weekly Target</p>
+            <h2 id="goal-modal-title">设置本周目标</h2>
+          </div>
+          <button type="button" class="goal-modal-close" aria-label="关闭" @click="closeGoalModal">×</button>
+        </div>
+        <div class="goal-modal-body">
+          <label v-for="item in goalDraftRows" :key="item.code" class="goal-modal-row">
+            <span>
+              <b>{{ item.code }}</b>
+              <em>{{ item.name }}</em>
+            </span>
+            <input
+              type="number"
+              min="0"
+              max="99"
+              step="1"
+              :value="item.value"
+              @input="updateGoalDraft(item.code, $event.target.value)"
+            />
+          </label>
+        </div>
+        <div class="goal-modal-summary">
+          <span>目标总数 <b>{{ goalDraftTotal }}</b> 题</span>
+          <span>本周已完成 <b>{{ weekDone }}</b> 题</span>
+        </div>
+        <div class="goal-modal-actions">
+          <button type="button" class="goal-modal-ghost" @click="resetGoalDraft">清空</button>
+          <button type="button" class="goal-modal-primary" @click="saveGoalDraft">保存目标</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
+<script setup>
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth";
+import { requestDailyAiSuggestion } from "@/lib/agent";
+import { isDIEnabled } from "@/lib/di-feature";
+import { formatInteger, formatScore, loadHomeAnalyticsSnapshotForAuth } from "@/lib/home-analytics";
+import {
+  buildDesktopDashboardState,
+  createEmptyDesktopDashboardState,
+  fetchDashboardPracticeRowsForAuth,
+  fetchDashboardScoreTrendRowsForAuth
+} from "@/lib/home-desktop-dashboard";
+
+const router = useRouter();
+const route = useRoute();
+const authStore = useAuthStore();
+const dashboard = ref(createEmptyDesktopDashboardState());
+const dashboardLoadError = ref("");
+const TREND_MIN_SCORE = 10;
+const TREND_MAX_SCORE = 90;
+const TREND_Y_TICKS = [90, 70, 50, 30, 10];
+const TREND_CHART = {
+  left: 28,
+  right: 252,
+  top: 12,
+  bottom: 108
+};
+
+const DAILY_SUGGESTION_TASK_TYPES = ["RA", "WFD", "WE", "DI", "RTS"];
+const dailyTaskPathMap = {
+  RA: "/ra",
+  WFD: "/wfd",
+  WE: "/we",
+  DI: "/di",
+  RTS: "/rts/practice"
+};
+const taskPathMap = {
+  RA: "/ra",
+  WFD: "/wfd",
+  WE: "/we",
+  DI: "/di",
+  RTS: "/rts/practice",
+  RS: "/rs",
+  RL: "/rl"
+};
+
+const dailyAiSuggestionState = ref(createDailySuggestionState());
+let dailySuggestionLoadPromise = null;
+const goalModalOpen = ref(false);
+const goalDraft = ref({});
+
+const username = computed(() => authStore.displayName || "同学");
+const userInitial = computed(() => {
+  const first = `${username.value || ""}`.trim().charAt(0);
+  return first ? first.toUpperCase() : "K";
+});
+const homeAnalytics = computed(() => dashboard.value.homeAnalytics || {});
+const moduleMetrics = computed(() => dashboard.value.moduleMetrics || {});
+const raAvg = computed(() => {
+  if (dashboard.value.loading) return "--";
+  const score = moduleMetrics.value.RA?.averageScore;
+  return score === null || score === undefined ? "--" : formatScore(score);
+});
+const streakDays = computed(() => {
+  if (dashboard.value.loading) return "--";
+  return formatInteger(homeAnalytics.value.currentStreak);
+});
+const membershipPill = computed(() => {
+  if (!authStore.loaded) {
+    return { kind: "loading", icon: "⌛", label: "同步中" };
+  }
+  if (authStore.isPremium) {
+    return { kind: "vip", icon: "👑", label: "VIP 无限练习" };
+  }
+  if (authStore.isInTrial) {
+    return { kind: "trial", icon: "✨", label: `试用 ${formatInteger(authStore.trialDaysLeft)} 天` };
+  }
+  return { kind: "locked", icon: "🔒", label: "未开通" };
+});
+
+const navIconMap = {
+  home: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>',
+  list: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M7 4v3.5l2 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  spark: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1.5C4.24 1.5 2 3.74 2 6.5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" stroke="currentColor" stroke-width="1.2"/><path d="M5 6.5h4M7 4.5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  square: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 5h5M4.5 8h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  report: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M1.5 11l3-4 3 2.5 3-5 2 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  box: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M1.5 3h11M1.5 7h7M1.5 11h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  circle: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>'
+};
+
+const navItems = [
+  { key: "home", label: "首页", icon: "home", to: "/home" },
+  { key: "practice", label: "练习中心", icon: "list", to: "/home#quick" },
+  { key: "agent", label: "AI 私教", icon: "spark", to: "/agent" },
+  { key: "plan", label: "学习计划", icon: "square", to: "/home#goal" },
+  { key: "report", label: "学习报告", icon: "report", to: "/home#report" },
+  { key: "library", label: "题库", icon: "box", to: "/home#quick" },
+  { key: "profile", label: "个人中心", icon: "circle", to: "/profile" }
+];
+
+const displayNavItems = computed(() =>
+  navItems.map((item) => ({
+    ...item,
+    icon: navIconMap[item.icon] || navIconMap.circle
+  }))
+);
+
+function goTo(path) {
+  if (!path || path === route.path) return;
+  router.push(path);
+}
+
+function isNavActive(item) {
+  if (item.key === "home") return route.path === "/home" || route.path === "/";
+  return route.path === item.to || route.fullPath === item.to;
+}
+
+const heroTask = computed(() => dashboard.value.heroTask || {});
+const heroTaskTitle = computed(() => heroTask.value.title || "今日重点");
+const heroSubtitle = computed(() => {
+  if (dashboard.value.loading) return "正在同步你的真实练习记录，今日任务会自动刷新。";
+  if (dashboardLoadError.value) return "暂时无法同步练习记录，已保留默认任务。";
+  return heroTask.value.subtitle || "按真实记录安排今日任务 · 持续练习让分数稳步上升";
+});
+const todayTasks = computed(() => {
+  const checklist = Array.isArray(heroTask.value.checklist) ? heroTask.value.checklist : [];
+  return checklist.map((item, index) => {
+    const total = Math.max(0, Number(item.total ?? item.target_count ?? 0) || 0);
+    const current = Math.max(0, Math.min(total, Number(item.current ?? item.completed_count_today ?? 0) || 0));
+    const ratio = total > 0 ? Math.min(current / total, 1) : 0;
+    return {
+      key: `${item.task_type || item.label || "task"}-${index}`,
+      label: item.label || "完成今日练习",
+      done: total > 0 && current >= total,
+      total,
+      current,
+      progressPercent: `${Math.round(ratio * 100)}%`
+    };
+  });
+});
+
+const heroStats = computed(() => [
+  {
+    icon: "✅",
+    bg: "#DFF0E4",
+    value: dashboard.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore),
+    unit: homeAnalytics.value.averageScore === null || homeAnalytics.value.averageScore === undefined ? "" : "/90",
+    label: "平均均分",
+    sub: homeAnalytics.value.scoreComparisonText || "暂无上周对比"
+  },
+  {
+    icon: "📝",
+    bg: "#E8E4F4",
+    value: dashboard.value.loading ? "--" : formatInteger(homeAnalytics.value.totalCount),
+    unit: " 题",
+    label: "练习总量",
+    sub: `今日完成 ${formatInteger(homeAnalytics.value.todayCount)} 题`
+  },
+  {
+    icon: "🔥",
+    bg: "#F2E4D0",
+    value: dashboard.value.loading ? "--" : formatInteger(homeAnalytics.value.currentStreak),
+    unit: " 天",
+    label: "连续学习",
+    sub: `最长 ${formatInteger(homeAnalytics.value.longestStreak)} 天`
+  }
+]);
+
+const dailySuggestionCacheKey = computed(() => {
+  const userId = `${authStore.user?.id || ""}`.trim();
+  return userId ? `pte_daily_ai_suggestion:${userId}:${getTodayDateKey()}` : "";
+});
+const dailyPracticeSummary = computed(() => buildDailyPracticeSummaryFromDashboard());
+const dailyAiSuggestion = computed(() => dailyAiSuggestionState.value.suggestion || createNewUserDailySuggestion());
+const dailyAiSuggestionTasks = computed(() =>
+  sanitizeDailySuggestionTasks(dailyAiSuggestion.value.tasks, dailyAiSuggestion.value.main_task_type)
+);
+const dailyAiSuggestionStatusLabel = computed(() => {
+  if (dailyAiSuggestionState.value.loading) return "生成中";
+  if (dailyAiSuggestionState.value.source === "agent") return "AI 已生成";
+  if (dailyAiSuggestionState.value.source === "new_user") return "新手建议";
+  return "临时建议";
+});
+const dailyAiSuggestionTimeLabel = computed(() => {
+  if (dailyAiSuggestionState.value.loading) return "正在生成今日 AI 建议...";
+  if (dailyAiSuggestionState.value.source === "new_user") return "新手建议";
+  if (dailyAiSuggestionState.value.source === "fallback") {
+    return `临时建议 · ${formatSuggestionGeneratedAt(dailyAiSuggestionState.value.generated_at)}`;
+  }
+  return formatSuggestionGeneratedAt(dailyAiSuggestionState.value.generated_at);
+});
+const dailyAiBannerText = computed(() => {
+  const tasks = dailyAiSuggestionTasks.value.map((task) => task.task_type).filter(Boolean).slice(0, 2);
+  return tasks.length
+    ? `建议优先练习 ${tasks.join(" 和 ")}，提升整体得分效率`
+    : "建议先完成一轮基础练习，积累真实数据";
+});
+const dailyAiMainTaskPath = computed(() => {
+  const taskType = normalizeDailyTaskType(dailyAiSuggestion.value.main_task_type) || "RA";
+  return dailyTaskPathMap[taskType] || "/ra";
+});
+
+function createDailySuggestionState(payload = {}) {
+  return {
+    date: payload.date || getTodayDateKey(),
+    user_id: payload.user_id || "",
+    practice_signature: payload.practice_signature || "",
+    suggestion: sanitizeDailySuggestion(payload.suggestion || createNewUserDailySuggestion()),
+    generated_at: payload.generated_at || "",
+    source: payload.source || "new_user",
+    summary: payload.summary || null,
+    loading: Boolean(payload.loading),
+    reason_code: payload.reason_code || ""
+  };
+}
+
+function createNewUserDailySuggestion() {
+  return {
+    title: "今日 AI 建议",
+    main_task_type: "RA",
+    headline: "先完成一轮基础测温",
+    reason: "你还没有足够练习记录，我需要先了解你的表现。",
+    advice: "建议先做 RA 2 道、DI 2 道、WFD 5 道。完成后我会根据真实数据给你下一步建议。",
+    tasks: [
+      { task_type: "RA", count: 2 },
+      { task_type: "DI", count: 2 },
+      { task_type: "WFD", count: 5 }
+    ],
+    cta_text: "开始练习"
+  };
+}
+
+function createFallbackDailySuggestion(summary = {}) {
+  const mainTaskType = normalizeDailyTaskType(summary.weakest_task_type || summary.latest_task_type) || "RA";
+  const taskMethods = {
+    RA: "重点保持不断句，卡顿超过 3 秒就重读一遍。",
+    WFD: "先听主干，再补冠词、复数和时态细节。",
+    WE: "先列结构，再写正文，避免边想边写。",
+    DI: "先说主图信息，再补 2 个细节，最后总结一句。",
+    RTS: "先抓场景和任务，再复述关键动作。"
+  };
+
+  return {
+    title: "今日 AI 建议",
+    main_task_type: mainTaskType,
+    headline: `今天先稳住 ${mainTaskType} 表现`,
+    reason: summary.weakest_task_type ? `最近 ${mainTaskType} 更值得优先补强。` : "AI 建议暂时不可用，先用保守计划兜底。",
+    advice: taskMethods[mainTaskType] || taskMethods.RA,
+    tasks: [
+      { task_type: mainTaskType, count: mainTaskType === "WFD" ? 5 : 3 },
+      { task_type: mainTaskType === "RA" ? "DI" : "RA", count: 2 }
+    ],
+    cta_text: `开始 ${mainTaskType} 训练`
+  };
+}
+
+function sanitizeDailySuggestion(suggestion) {
+  const source = suggestion && typeof suggestion === "object" ? suggestion : {};
+  const mainTaskType = normalizeDailyTaskType(source.main_task_type) || "RA";
+  return {
+    title: "今日 AI 建议",
+    main_task_type: mainTaskType,
+    headline: limitText(source.headline, "先完成一轮基础测温", 30),
+    reason: limitText(source.reason, "根据你的练习记录，今天先做一组稳定训练。", 62),
+    advice: limitText(source.advice, "每题只盯一个训练动作，完成后再看反馈。", 92),
+    tasks: sanitizeDailySuggestionTasks(source.tasks, mainTaskType),
+    cta_text: limitText(source.cta_text, `开始 ${mainTaskType} 训练`, 18)
+  };
+}
+
+function sanitizeDailySuggestionTasks(tasks, mainTaskType = "RA") {
+  const normalized = (Array.isArray(tasks) ? tasks : [])
+    .map((item) => ({
+      task_type: normalizeDailyTaskType(item?.task_type),
+      count: Math.max(0, Math.min(10, Math.floor(Number(item?.count || 0))))
+    }))
+    .filter((item) => item.task_type && item.count > 0)
+    .slice(0, 3);
+
+  if (normalized.length) return normalized;
+  return [{ task_type: normalizeDailyTaskType(mainTaskType) || "RA", count: 2 }];
+}
+
+function normalizeDailyTaskType(value) {
+  const normalized = `${value || ""}`.trim().toUpperCase();
+  return DAILY_SUGGESTION_TASK_TYPES.includes(normalized) ? normalized : "";
+}
+
+function buildDailyPracticeSummaryFromDashboard() {
+  const analytics = dashboard.value.homeAnalytics || {};
+  const recent = Array.isArray(dashboard.value.recentPractices) ? dashboard.value.recentPractices[0] : null;
+  const weak = Array.isArray(dashboard.value.weakPoints) ? dashboard.value.weakPoints[0] : null;
+  const weeklyStudy = dashboard.value.weeklyStudy || {};
+  const todayKey = resolveDashboardTodayKey(weeklyStudy) || getTodayDateKey();
+  const todayTaskCounts = Object.fromEntries(
+    DAILY_SUGGESTION_TASK_TYPES.map((taskType) => {
+      const count = Number(weeklyStudy.counters?.[taskType]?.[todayKey] || 0);
+      return [taskType, Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0];
+    })
+  );
+  const todayAttempts = Number(analytics.todayCount || 0)
+    || Object.values(todayTaskCounts).reduce((total, count) => total + Number(count || 0), 0);
+
+  const summary = {
+    total_attempts: Math.max(0, Math.floor(Number(analytics.totalCount || 0))),
+    today_attempts: Math.max(0, Math.floor(Number(todayAttempts || 0))),
+    latest_practice_id: `${recent?.id || ""}`.trim(),
+    latest_practice_at: `${recent?.timeLabel || recent?.created_at || ""}`.trim(),
+    latest_task_type: normalizeDailyTaskType(recent?.taskType || recent?.type),
+    recent_7_days_attempts: Math.max(0, Math.floor(Number(weeklyStudy.totalCount || 0))),
+    recent_7_days_average_score: normalizeNullableNumber(dashboard.value.trendMeta?.currentAverage ?? analytics.averageScore),
+    weakest_task_type: normalizeDailyTaskType(weak?.taskType),
+    weakest_task_average_score: normalizeNullableNumber(weak?.averageScore),
+    today_task_counts: todayTaskCounts
+  };
+
+  return {
+    ...summary,
+    practice_signature: createDailyPracticeSignature(summary)
+  };
+}
+
+function createDailyPracticeSignature(summary) {
+  return [
+    `total=${formatSignatureInteger(summary.total_attempts)}`,
+    `today=${formatSignatureInteger(summary.today_attempts)}`,
+    `latest=${summary.latest_practice_id || ""}`,
+    `latestAt=${summary.latest_practice_at || ""}`,
+    `r7=${formatSignatureInteger(summary.recent_7_days_attempts)}`,
+    `avg7=${formatSignatureNumber(summary.recent_7_days_average_score)}`,
+    `weak=${summary.weakest_task_type || ""}:${formatSignatureNumber(summary.weakest_task_average_score)}`
+  ].join("|");
+}
+
+function shouldRegenerateSuggestion(cache, summary, force = false) {
+  if (force) return true;
+  if (!cache?.suggestion) return true;
+  if (cache.date !== getTodayDateKey()) return true;
+  if (Number(summary.total_attempts || 0) <= 0) return false;
+  if (cache.source === "new_user") return true;
+  if (cache.source === "fallback") return isFallbackSuggestionRetryDue(cache);
+  if (!cache.practice_signature) return true;
+  if (cache.practice_signature === summary.practice_signature) return false;
+
+  const cachedSummary = cache.summary || {};
+  const todayIncrease = Number(summary.today_attempts || 0) - Number(cachedSummary.today_attempts || 0);
+  const latestChanged = Boolean(summary.latest_practice_id)
+    && summary.latest_practice_id !== cachedSummary.latest_practice_id;
+  const mainTaskType = normalizeDailyTaskType(cache.suggestion?.main_task_type);
+
+  if (latestChanged && todayIncrease >= 2) return true;
+  if (latestChanged && mainTaskType && summary.latest_task_type === mainTaskType) return true;
+
+  const averageGap = Math.abs(Number(summary.recent_7_days_average_score || 0) - Number(cachedSummary.recent_7_days_average_score || 0));
+  if (Number.isFinite(averageGap) && averageGap >= 5) return true;
+
+  if (
+    summary.weakest_task_type
+    && cachedSummary.weakest_task_type
+    && summary.weakest_task_type !== cachedSummary.weakest_task_type
+  ) {
+    return true;
+  }
+
+  const currentCounts = summary.today_task_counts || {};
+  const cachedCounts = cachedSummary.today_task_counts || {};
+  return DAILY_SUGGESTION_TASK_TYPES.some((taskType) => Number(currentCounts[taskType] || 0) - Number(cachedCounts[taskType] || 0) >= 3);
+}
+
+function isFallbackSuggestionRetryDue(cache) {
+  const generatedAt = new Date(cache?.generated_at || "");
+  if (!Number.isFinite(generatedAt.getTime())) return true;
+  return Date.now() - generatedAt.getTime() >= 10 * 60 * 1000;
+}
+
+function readDailySuggestionCache() {
+  const key = dailySuggestionCacheKey.value;
+  if (!key || typeof window === "undefined") return null;
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "null");
+    if (!parsed || typeof parsed !== "object") return null;
+    return createDailySuggestionState(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function persistDailySuggestionCache(payload) {
+  const key = dailySuggestionCacheKey.value;
+  if (!key || typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify({
+      date: payload.date || getTodayDateKey(),
+      user_id: payload.user_id || authStore.user?.id || "",
+      practice_signature: payload.practice_signature || "",
+      suggestion: sanitizeDailySuggestion(payload.suggestion),
+      generated_at: payload.generated_at || new Date().toISOString(),
+      source: payload.source || "fallback",
+      summary: payload.summary || null,
+      reason_code: payload.reason_code || ""
+    }));
+  } catch (error) {
+    console.warn("Daily AI suggestion cache save failed:", error);
+  }
+}
+
+async function refreshDailyAiSuggestion({ force = false } = {}) {
+  if (dailySuggestionLoadPromise) return dailySuggestionLoadPromise;
+
+  const currentLoad = (async () => {
+    const summary = dailyPracticeSummary.value;
+    const userId = `${authStore.user?.id || ""}`.trim();
+    const cache = readDailySuggestionCache();
+
+    if (!userId || Number(summary.total_attempts || 0) <= 0) {
+      const nextState = createDailySuggestionState({
+        date: getTodayDateKey(),
+        user_id: userId,
+        practice_signature: summary.practice_signature,
+        suggestion: createNewUserDailySuggestion(),
+        generated_at: new Date().toISOString(),
+        source: "new_user",
+        summary,
+        reason_code: "new_user"
+      });
+      dailyAiSuggestionState.value = nextState;
+      persistDailySuggestionCache(nextState);
+      return nextState;
+    }
+
+    if (cache && !shouldRegenerateSuggestion(cache, summary, force)) {
+      dailyAiSuggestionState.value = {
+        ...cache,
+        loading: false
+      };
+      return cache;
+    }
+
+    dailyAiSuggestionState.value = {
+      ...(cache || dailyAiSuggestionState.value),
+      loading: true
+    };
+
+    try {
+      const result = await requestDailyAiSuggestion({
+        force,
+        practiceSignature: summary.practice_signature
+      });
+
+      if (!result.ok || !result.suggestion) {
+        throw new Error(result.reason_code || "daily_suggestion_failed");
+      }
+
+      const nextState = createDailySuggestionState({
+        date: getTodayDateKey(),
+        user_id: userId,
+        practice_signature: result.practice_signature || summary.practice_signature,
+        suggestion: result.suggestion,
+        generated_at: result.generated_at || new Date().toISOString(),
+        source: result.source || "agent",
+        summary: result.summary || summary,
+        reason_code: result.reason_code || "ok"
+      });
+      dailyAiSuggestionState.value = nextState;
+      persistDailySuggestionCache(nextState);
+      return nextState;
+    } catch (error) {
+      console.warn("Daily AI suggestion load failed:", error);
+      const nextState = createDailySuggestionState({
+        date: getTodayDateKey(),
+        user_id: userId,
+        practice_signature: summary.practice_signature,
+        suggestion: createFallbackDailySuggestion(summary),
+        generated_at: new Date().toISOString(),
+        source: "fallback",
+        summary,
+        reason_code: "fallback_error"
+      });
+      dailyAiSuggestionState.value = nextState;
+      persistDailySuggestionCache(nextState);
+      return nextState;
+    }
+  })();
+
+  dailySuggestionLoadPromise = currentLoad;
+  try {
+    return await currentLoad;
+  } finally {
+    if (dailySuggestionLoadPromise === currentLoad) {
+      dailySuggestionLoadPromise = null;
+    }
+  }
+}
+
+function resolveDashboardTodayKey(weeklyStudy) {
+  const today = Array.isArray(weeklyStudy?.weekDays)
+    ? weeklyStudy.weekDays.find((day) => day?.isToday)
+    : null;
+  return `${today?.key || ""}`.trim();
+}
+
+function getTodayDateKey(date = new Date()) {
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (!Number.isFinite(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsed.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatSuggestionGeneratedAt(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "今日更新";
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  if (getTodayDateKey(date) === getTodayDateKey()) {
+    return `今日 ${hours}:${minutes} 更新`;
+  }
+  return `${date.getMonth() + 1}-${`${date.getDate()}`.padStart(2, "0")} ${hours}:${minutes} 更新`;
+}
+
+function normalizeNullableNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Number(numeric.toFixed(1)) : null;
+}
+
+function formatSignatureInteger(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${Math.max(0, Math.floor(numeric))}` : "0";
+}
+
+function formatSignatureNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toFixed(1) : "na";
+}
+
+function limitText(value, fallback, maxLength) {
+  const text = `${value || fallback || ""}`.trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+async function loadDashboard() {
+  dashboard.value = createEmptyDesktopDashboardState(homeAnalytics.value);
+  dashboardLoadError.value = "";
+
+  try {
+    if (!authStore.loaded) {
+      await authStore.loadStatus();
+    }
+
+    const analyticsSnapshot = await loadHomeAnalyticsSnapshotForAuth(authStore);
+    let practiceRows = [];
+    let trendRows = {
+      currentRows: [],
+      previousRows: []
+    };
+
+    try {
+      practiceRows = await fetchDashboardPracticeRowsForAuth(authStore);
+    } catch (error) {
+      console.warn("Home dashboard practice rows load failed:", error);
+      dashboardLoadError.value = "practice_rows_failed";
+    }
+
+    try {
+      trendRows = await fetchDashboardScoreTrendRowsForAuth(authStore);
+    } catch (error) {
+      console.warn("Home dashboard trend rows load failed:", error);
+      dashboardLoadError.value = dashboardLoadError.value || "trend_rows_failed";
+    }
+
+    dashboard.value = buildDesktopDashboardState(analyticsSnapshot, practiceRows, {
+      diEnabled: isDIEnabled(),
+      trendRows
+    });
+    loadWeeklyGoals();
+    void refreshDailyAiSuggestion();
+  } catch (error) {
+    console.warn("Home dashboard load failed:", error);
+    dashboardLoadError.value = "dashboard_failed";
+    dashboard.value = {
+      ...createEmptyDesktopDashboardState(),
+      loading: false
+    };
+    loadWeeklyGoals();
+    void refreshDailyAiSuggestion();
+  }
+}
+
+onMounted(() => {
+  loadDashboard();
+});
+
+const aiMessages = ref([
+  { id: 1, text: "今天我们重点突破 RTS 和复述句子对应能力，这样能更快提升整体分数。", time: "10:32" },
+  { id: 2, text: "从最近练习来看，RTS 的稳定性偏弱，建议安排针对性训练，2 天内可见提升。", time: "10:33" }
+]);
+const aiActions = ref([
+  { label: "📋 生成今日计划", to: "/agent" },
+  { label: "📊 分析我的弱项", to: "/agent" },
+  { label: "📈 查看 7 天趋势", to: "/agent" }
+]);
+
+const moduleCardConfigs = [
+  { code: "RA", icon: "🎙", iconBg: "#F2E4D0", desc: "朗读句子\n语流表达", tagBg: "#F2E4D0", tagColor: "#C07840", tagBorder: "#D4B090", to: "/ra" },
+  { code: "WFD", icon: "✍", iconBg: "#DFF0E4", desc: "写作填空\n语法拼写", tagBg: "#DFF0E4", tagColor: "#3A7E50", tagBorder: "#A8D4B4", to: "/wfd" },
+  { code: "RTS", icon: "🔁", iconBg: "#F2E4D0", desc: "复述句子\n逻辑连贯", tagBg: "#F0E0D8", tagColor: "#B05040", tagBorder: "#D4B0A0", to: "/rts/practice" },
+  { code: "DI", icon: "📊", iconBg: "#E8E4F4", desc: "描述图表\n数据分析", tagBg: "#E8E4F4", tagColor: "#6050A0", tagBorder: "#C0B8E0", to: "/di" },
+  { code: "WE", icon: "📝", iconBg: "#F0EAF4", desc: "写作议论\n结构论证", tagBg: "#F0EAF4", tagColor: "#7050A0", tagBorder: "#C8B8DC", to: "/we" }
+];
+
+const modules = computed(() =>
+  moduleCardConfigs.map((module) => {
+    const metrics = moduleMetrics.value[module.code] || {};
+    const hasScore = metrics.averageScore !== null && metrics.averageScore !== undefined;
+    return {
+      ...module,
+      tag: dashboard.value.loading
+        ? "同步中"
+        : hasScore
+          ? `均分 ${formatScore(metrics.averageScore)}`
+          : "暂无数据"
+    };
+  })
+);
+
+const adviceQuestions = ref([
+  { label: "🔍 我今天最该练哪个题型？", to: "/agent" },
+  { label: "📈 RTS 怎么提升复述流畅度？", to: "/agent" }
+]);
+
+const WEEKLY_GOAL_TARGETS = {
+  WFD: 5,
+  RA: 2,
+  RTS: 2,
+  DI: 2,
+  WE: 1
+};
+const WEEKLY_GOAL_COLORS = {
+  WFD: "#5A9E6A",
+  RA: "#C07840",
+  RTS: "#D4775A",
+  DI: "#7A6ABF",
+  WE: "#A07850"
+};
+const WEEKLY_GOAL_LABELS = {
+  WFD: "写作填空",
+  RA: "朗读句子",
+  RTS: "复述句子",
+  DI: "描述图表",
+  WE: "写作议论"
+};
+const currentWeekStartKey = computed(() => getWeekStartKey());
+const weeklyGoalStorageKey = computed(() => {
+  const userId = `${authStore.user?.id || ""}`.trim();
+  return userId ? `pte_weekly_goals:${userId}:${currentWeekStartKey.value}` : "";
+});
+const weeklyGoalTargets = ref(createDefaultWeeklyGoals());
+const weeklyTaskCounts = computed(() => dashboard.value.weeklyStudy?.taskCounts || {});
+const goalBreakdown = computed(() =>
+  Object.entries(weeklyGoalTargets.value).map(([code, target]) => {
+    const done = Math.max(0, Math.floor(Number(weeklyTaskCounts.value[code] || 0)));
+    const total = Math.max(0, Math.floor(Number(target || 0)));
+    return {
+      code,
+      done,
+      total,
+      color: WEEKLY_GOAL_COLORS[code] || "#A07850",
+      percent: total > 0 ? Math.min(100, Math.round((Math.min(done, total) / total) * 100)) : 0
+    };
+  })
+);
+const weekDone = computed(() =>
+  goalBreakdown.value.reduce((sum, item) => sum + Math.min(item.done, item.total), 0)
+);
+const weekTotal = computed(() =>
+  goalBreakdown.value.reduce((sum, item) => sum + item.total, 0)
+);
+const weekProgress = computed(() =>
+  weekTotal.value > 0 ? Math.min(100, Math.round((weekDone.value / weekTotal.value) * 100)) : 0
+);
+const weeklyGoalStatusLabel = computed(() => {
+  if (dashboard.value.loading) return "同步中";
+  if (weekTotal.value <= 0) return "未设置";
+  return weekDone.value >= weekTotal.value ? "已达成" : "进行中";
+});
+const goalDraftRows = computed(() =>
+  Object.keys(WEEKLY_GOAL_TARGETS).map((code) => ({
+    code,
+    name: WEEKLY_GOAL_LABELS[code] || code,
+    value: Number(goalDraft.value[code] || 0)
+  }))
+);
+const goalDraftTotal = computed(() =>
+  Object.values(goalDraft.value).reduce((sum, value) => sum + Math.max(0, Math.floor(Number(value || 0))), 0)
+);
+const ringDash = computed(() => {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  return `${(weekProgress.value / 100) * c} ${c}`;
+});
+
+function createDefaultWeeklyGoals() {
+  return { ...WEEKLY_GOAL_TARGETS };
+}
+
+function normalizeWeeklyGoals(goals) {
+  const source = goals && typeof goals === "object" ? goals : {};
+  return Object.fromEntries(
+    Object.keys(WEEKLY_GOAL_TARGETS).map((code) => [
+      code,
+      Math.max(0, Math.min(99, Math.floor(Number(source[code] ?? WEEKLY_GOAL_TARGETS[code] ?? 0))))
+    ])
+  );
+}
+
+function getWeekStartKey(date = new Date()) {
+  const parsed = date instanceof Date ? new Date(date) : new Date(date);
+  if (!Number.isFinite(parsed.getTime())) return "";
+  parsed.setHours(0, 0, 0, 0);
+  const day = parsed.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  parsed.setDate(parsed.getDate() + offset);
+  return getTodayDateKey(parsed);
+}
+
+function loadWeeklyGoals() {
+  const key = weeklyGoalStorageKey.value;
+  if (!key || typeof window === "undefined") {
+    weeklyGoalTargets.value = createDefaultWeeklyGoals();
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "null");
+    weeklyGoalTargets.value = normalizeWeeklyGoals(parsed?.goals || createDefaultWeeklyGoals());
+  } catch (error) {
+    console.warn("Weekly goals load failed:", error);
+    weeklyGoalTargets.value = createDefaultWeeklyGoals();
+  }
+}
+
+function persistWeeklyGoals(goals) {
+  const normalized = normalizeWeeklyGoals(goals);
+  weeklyGoalTargets.value = normalized;
+
+  const key = weeklyGoalStorageKey.value;
+  if (!key || typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify({
+      week_start: currentWeekStartKey.value,
+      goals: normalized,
+      updated_at: new Date().toISOString()
+    }));
+  } catch (error) {
+    console.warn("Weekly goals save failed:", error);
+  }
+}
+
+function openGoalModal() {
+  loadWeeklyGoals();
+  goalDraft.value = { ...weeklyGoalTargets.value };
+  goalModalOpen.value = true;
+}
+
+function closeGoalModal() {
+  goalModalOpen.value = false;
+}
+
+function updateGoalDraft(code, value) {
+  if (!Object.prototype.hasOwnProperty.call(WEEKLY_GOAL_TARGETS, code)) return;
+  goalDraft.value = {
+    ...goalDraft.value,
+    [code]: Math.max(0, Math.min(99, Math.floor(Number(value || 0))))
+  };
+}
+
+function resetGoalDraft() {
+  goalDraft.value = Object.fromEntries(Object.keys(WEEKLY_GOAL_TARGETS).map((code) => [code, 0]));
+}
+
+function saveGoalDraft() {
+  persistWeeklyGoals(goalDraft.value);
+  closeGoalModal();
+}
+
+const heatLegendLevels = [0, 1, 2, 3, 4];
+const fallbackHeatDays = ["一", "二", "三", "四", "五", "六", "日"].map((label) => ({
+  label,
+  dateLabel: "",
+  isToday: label === "五"
+}));
+const fallbackHeatRows = Object.keys(WEEKLY_GOAL_TARGETS).map((code) => ({
+  label: code,
+  cells: Array.from({ length: 7 }, (_, index) => ({
+    level: 0,
+    count: 0,
+    dateLabel: "",
+    isToday: fallbackHeatDays[index]?.isToday || false
+  }))
+}));
+const heatDays = computed(() => {
+  const weekDays = dashboard.value.weeklyStudy?.weekDays;
+  if (Array.isArray(weekDays) && weekDays.length) {
+    return weekDays.slice(0, 7).map((day) => ({
+      label: day.isToday ? "今日" : day.label,
+      dateLabel: day.dateLabel || "",
+      isToday: Boolean(day.isToday)
+    }));
+  }
+  return fallbackHeatDays;
+});
+const heatRows = computed(() => {
+  const matrix = dashboard.value.heatmapMatrix;
+  if (Array.isArray(matrix) && matrix.length) {
+    return matrix.map((row) => ({
+      label: row.taskType || row.label,
+      cells: (row.cells || []).slice(0, 7).map((cell, index) => {
+        const day = heatDays.value[index] || {};
+        return {
+          level: normalizeHeatLevel(cell?.level),
+          count: Math.max(0, Math.floor(Number(cell?.count || 0))),
+          dateLabel: cell?.dateLabel || day.dateLabel || "",
+          isToday: Boolean(cell?.isToday || day.isToday)
+        };
+      })
+    }));
+  }
+  return fallbackHeatRows;
+});
+const weeklyStudyFoot = computed(() => {
+  const weeklyStudy = dashboard.value.weeklyStudy || {};
+  const minutes = Number(weeklyStudy.estimatedWeekMinutes || 0);
+  const hours = Number.isFinite(minutes) ? minutes / 60 : 0;
+  const prefix = weeklyStudy.usesEstimatedDuration ? "本周学习约" : "本周学习";
+  return `${prefix} ${formatScore(hours)} 小时`;
+});
+
+function normalizeHeatLevel(value) {
+  const level = Math.floor(Number(value || 0));
+  if (!Number.isFinite(level)) return 0;
+  return Math.max(0, Math.min(4, level));
+}
+
+function heatClass(value) {
+  return `hc${normalizeHeatLevel(value)}`;
+}
+
+function formatHeatCellTitle(row, cell) {
+  const task = row?.label || "练习";
+  const date = cell?.dateLabel ? `${cell.dateLabel} ` : "";
+  const count = Math.max(0, Math.floor(Number(cell?.count || 0)));
+  return `${date}${task}: ${count} 题`;
+}
+
+const trendSourcePoints = computed(() => {
+  const points = dashboard.value.scoreTrend;
+  return Array.isArray(points) ? points.slice(0, 7) : [];
+});
+const trendAxisLabels = computed(() => {
+  if (!trendSourcePoints.value.length) return [];
+  const total = trendSourcePoints.value.length;
+  return trendSourcePoints.value.map((point, index) => ({
+    key: point.key || `${point.label || "day"}-${index}`,
+    label: formatTrendAxisLabel(point.label),
+    x: getTrendX(index, total)
+  }));
+});
+const trendYTicks = computed(() =>
+  TREND_Y_TICKS.map((value) => ({
+    value,
+    y: scoreToTrendY(value)
+  }))
+);
+const trendLineSegments = computed(() => {
+  const sourcePoints = trendSourcePoints.value;
+  const segments = [];
+  let current = [];
+
+  sourcePoints.forEach((point, index) => {
+    const plottedPoint = createTrendPlotPoint(point, index, sourcePoints.length);
+    if (!plottedPoint) {
+      if (current.length) segments.push(current);
+      current = [];
+      return;
+    }
+    current.push(plottedPoint);
+  });
+
+  if (current.length) segments.push(current);
+
+  return segments.map((points, index) => ({
+    key: `trend-segment-${index}`,
+    points,
+    polyline: points.map((point) => `${point.x},${point.y}`).join(" ")
+  }));
+});
+const trendDrawableSegments = computed(() => trendLineSegments.value.filter((segment) => segment.points.length > 1));
+const trendPlotPoints = computed(() => trendLineSegments.value.flatMap((segment) => segment.points));
+const trendHasData = computed(() => trendPlotPoints.value.length > 0);
+const trendEmptyText = computed(() => {
+  if (!trendHasData.value) return "近 7 天暂无评分记录";
+  if (trendPlotPoints.value.length === 1) return "近 7 天仅 1 天有评分记录";
+  return "";
+});
+const trendFootText = computed(() => {
+  const meta = dashboard.value.trendMeta || {};
+  if (!trendHasData.value) return "近 7 天暂无评分记录";
+  if (trendPlotPoints.value.length === 1) return "近 7 天仅 1 天有评分记录";
+  return meta.comparisonText || "暂无上周对比";
+});
+const trendScoreChip = computed(() => {
+  const latestPoint = [...trendPlotPoints.value].reverse()[0];
+  if (!latestPoint) {
+    return { label: "近 7 天", value: "--" };
+  }
+  return {
+    label: `${latestPoint.label} 均分`,
+    value: latestPoint.displayValue
+  };
+});
+
+function formatTrendAxisLabel(label) {
+  const text = `${label || ""}`.trim();
+  const match = text.match(/^(\d{1,2})[-/.](\d{1,2})$/);
+  if (!match) return text.replace(/-/g, "/");
+  return `${Number.parseInt(match[1], 10)}/${Number.parseInt(match[2], 10)}`;
+}
+
+function scoreToTrendY(value) {
+  const numeric = Number(value);
+  const safe = Number.isFinite(numeric) ? numeric : TREND_MIN_SCORE;
+  const clamped = Math.max(TREND_MIN_SCORE, Math.min(TREND_MAX_SCORE, safe));
+  const ratio = (clamped - TREND_MIN_SCORE) / (TREND_MAX_SCORE - TREND_MIN_SCORE);
+  return Number((TREND_CHART.bottom - ratio * (TREND_CHART.bottom - TREND_CHART.top)).toFixed(1));
+}
+
+function createTrendPlotPoint(point, index, total) {
+  if (point?.value === null || point?.value === undefined || point?.value === "") return null;
+  const value = Number(point.value);
+  if (!Number.isFinite(value)) return null;
+
+  return {
+    key: point.key || `${point.label || "day"}-${index}`,
+    label: formatTrendAxisLabel(point.label),
+    value,
+    displayValue: formatScore(value),
+    practiceCount: Math.max(0, Math.floor(Number(point.practiceCount || 0))),
+    scoredCount: Math.max(0, Math.floor(Number(point.scoredCount || 0))),
+    x: getTrendX(index, total),
+    y: scoreToTrendY(value)
+  };
+}
+
+function getTrendX(index, total) {
+  const step = (TREND_CHART.right - TREND_CHART.left) / Math.max(1, total - 1 || 6);
+  return Number((TREND_CHART.left + step * index).toFixed(1));
+}
+
+function formatTrendPointTitle(point) {
+  return `${point.label} 均分 ${point.displayValue}，评分 ${formatInteger(point.scoredCount)} 条，练习 ${formatInteger(point.practiceCount)} 次`;
+}
+
+const weakItems = computed(() => {
+  const source = Array.isArray(dashboard.value.weakPoints) ? dashboard.value.weakPoints : [];
+  return source.slice(0, 3).map((item, index) => ({
+    rank: index + 1,
+    accent: item.accent || "#C07840",
+    title: item.title ? `${item.label || ""} ${item.title}`.trim() : item.label || item.taskType || "练习",
+    metricLabel: item.metricLabel || (typeof item.averageScore === "number" ? `均分 ${formatScore(item.averageScore)}` : "--"),
+    delta: item.deltaText || "暂无上周对比"
+  }));
+});
+const hasWeakItems = computed(() => weakItems.value.length > 0);
+
+const recentItems = computed(() => {
+  const source = Array.isArray(dashboard.value.recentPractices) ? dashboard.value.recentPractices : [];
+  return source.slice(0, 3).map((item, index) => {
+    const taskType = item.taskType || item.type || "";
+    return {
+      key: item.key || `${item.id || "log"}-${item.timeLabel || index}`,
+      code: taskType || "PTE",
+      name: item.title || `${item.label || taskType || "PTE"} 练习`,
+      score: item.metricLabel || item.scoreLabel || item.score || "暂无分数",
+      date: item.timeLabel || item.time || "--",
+      color: item.accent || "#C07840",
+      to: taskPathMap[taskType] || "/home"
+    };
+  });
+});
+const hasRecentItems = computed(() => recentItems.value.length > 0);
+</script>
+
 <style scoped>
-.home-page {
-  min-height: 100vh;
-  background: #f4f6fb;
-}
-
-.topbar-inner,
-.hero-inner,
-.content-inner {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding-left: 24px;
-  padding-right: 24px;
-}
-
-.home-topbar {
-  background: #ffffff;
-  border-bottom: 1px solid #e6edf7;
-}
-
-.topbar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding-top: 18px;
-  padding-bottom: 18px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex-wrap: nowrap;
-  flex: none;
-}
-
-.brand__mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: #1b315d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  flex: none;
-}
-
-.brand__icon {
-  width: 22px;
-  height: 22px;
-}
-
-.brand__title {
-  margin: 0;
-  font-size: clamp(1.3rem, 4vw, 1.8rem);
-  font-weight: 800;
-  color: #13274b;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  white-space: nowrap;
-  word-break: keep-all;
-  flex: none;
-}
-
-.account-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 10px 8px 8px;
-  border: 1px solid #dde7f4;
-  border-radius: 22px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  min-width: 0;
-  width: fit-content;
-  max-width: min(100%, 360px);
-  margin-left: auto;
-  flex: 0 1 auto;
-}
-
-.account-card--clickable {
-  cursor: pointer;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
-}
-
-.account-card--clickable:hover {
-  border-color: #cfdcf0;
-  box-shadow: 0 12px 24px rgba(19, 39, 75, 0.08);
-}
-
-.account-card--clickable:focus-visible {
-  outline: 3px solid rgba(45, 99, 255, 0.2);
-  outline-offset: 2px;
-}
-
-.account-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 46px;
-  padding: 0 18px;
-  border-radius: 15px;
-  font-size: 0.9rem;
-  font-weight: 800;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  flex: none;
-}
-
-.account-pill--vip {
-  background: #edf8ef;
-  color: #1c8a4d;
-  border-color: #d5ead7;
-}
-
-.account-pill--trial {
-  background: #fff2eb;
-  color: #df6f34;
-  border-color: #f6c8b4;
-}
-
-.account-pill--neutral {
-  background: #f3f5f9;
-  color: #6f7c95;
-  border-color: #dce4ef;
-}
-
-.account-card__badge-wrap {
-  position: relative;
-  width: 58px;
-  height: 58px;
-  flex: none;
-}
-
-.account-card__badge {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #5b79b3 0%, #344f80 34%, #1b315d 72%, #13274b 100%);
-  border: 3px solid #dce6f8;
-  color: #ffffff;
-  font-size: 1.55rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 6px 12px rgba(19, 39, 75, 0.1);
-  overflow: hidden;
-}
-
-.account-card__badge-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.account-card__crown {
-  position: absolute;
-  top: -8px;
-  left: 11px;
-  width: 20px;
-  height: 20px;
-  color: #f4b53f;
-  filter: drop-shadow(0 2px 2px rgba(167, 109, 0, 0.18));
-}
-
-.account-card__spark {
-  position: absolute;
-  top: 6px;
-  right: -1px;
-  width: 12px;
-  height: 12px;
-  color: #7e96c9;
-}
-
-.account-card__crown-icon,
-.account-card__spark-icon {
-  width: 100%;
-  height: 100%;
-}
-
-.account-card__panel {
-  min-width: 0;
-  min-height: 56px;
-  padding: 0 12px;
-  border-radius: 16px;
-  background: #f5f8fe;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-}
-
-.account-card__panel-copy {
-  min-width: 0;
-}
-
-.account-card__title {
-  margin: 0;
-  color: #15326a;
-  font-size: 0.98rem;
-  font-weight: 800;
-  line-height: 1.15;
-  white-space: nowrap;
-}
-
-.account-card__subtitle {
-  margin: 4px 0 0;
-  color: #8d98af;
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.account-card__arrow {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  color: #18376d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.account-card__arrow-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.account-login {
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid #d8e1ef;
-  background: #ffffff;
-  color: #16325d;
-  font-size: 0.92rem;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-  flex: none;
-  cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease;
-}
-
-.account-login:hover {
-  background: #f7f9fd;
-  border-color: #bccbe1;
-}
-
-.home-hero {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(135deg, #142d55 0%, #1a3b6b 55%, #10264a 100%);
-}
-
-.home-hero::before {
-  content: "";
-  position: absolute;
-  top: -40px;
-  right: -20px;
-  width: 320px;
-  height: 320px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 0 0 54px rgba(255, 255, 255, 0.03);
-}
-
-.hero-inner {
-  position: relative;
-  z-index: 1;
-  padding-top: 46px;
-  padding-bottom: 40px;
-}
-
-.hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 560px);
-  gap: 28px;
-  align-items: center;
-}
-
-.hero-copy__eyebrow {
-  margin: 0 0 12px;
-  font-size: 1.08rem;
-  color: rgba(221, 234, 255, 0.82);
-}
-
-.hero-copy h1 {
-  margin: 0;
-  color: #ffffff;
-  font-size: clamp(2.5rem, 5vw, 3.5rem);
-  font-weight: 800;
-  line-height: 1.04;
-  letter-spacing: -0.04em;
-}
-
-.hero-copy__support {
-  margin: 18px 0 0;
-  font-size: 1.02rem;
-  color: rgba(220, 233, 255, 0.76);
-}
-
-.hero-highlight-grid {
-  justify-self: end;
-  width: 100%;
-  max-width: 560px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.hero-streak {
-  width: 100%;
-  border-radius: 28px;
-  border: 1px solid rgba(239, 171, 136, 0.28);
-  background: rgba(255, 255, 255, 0.08);
-  padding: 22px 24px;
-  backdrop-filter: blur(8px);
-}
-
-.hero-streak--secondary {
-  border-color: rgba(161, 194, 255, 0.3);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.hero-streak__row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.hero-streak__icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 18px;
-  background: rgba(234, 132, 86, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.7rem;
-  flex: none;
-}
-
-.hero-streak__icon--secondary {
-  background: rgba(104, 159, 255, 0.16);
-}
-
-.hero-streak__value {
-  margin: 0;
-  font-size: 2.25rem;
-  font-weight: 800;
-  color: #ffb889;
-  line-height: 1;
-}
-
-.hero-streak__value--secondary {
-  color: #dbe7ff;
-}
-
-.hero-streak__label {
-  margin: 4px 0 0;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 0.96rem;
-  font-weight: 700;
-}
-
-.hero-streak__caption {
-  margin: 6px 0 0;
-  font-size: 0.84rem;
-  color: rgba(219, 231, 250, 0.72);
-}
-
-.hero-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 30px;
-}
-
-.hero-mobile-grid {
-  display: none;
-}
-
-.hero-stat {
-  min-height: 124px;
-  border-radius: 24px;
-  border: 1px solid rgba(204, 221, 245, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.hero-stat__value {
-  margin: 0;
-  color: #ffffff;
-  font-size: 2.2rem;
-  font-weight: 800;
-  line-height: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.hero-stat__suffix {
-  font-size: 0.9rem;
-  color: rgba(214, 227, 249, 0.86);
-  margin-bottom: 4px;
-}
-
-.hero-stat__label {
-  margin: 10px 0 0;
-  font-size: 0.95rem;
-  color: rgba(216, 228, 247, 0.78);
-}
-
-.hero-stat__hint {
-  margin: 0;
-  font-size: 0.92rem;
-  color: rgba(201, 215, 238, 0.74);
-}
-
-.hero-stat__hint--positive {
-  color: #6be69b;
-}
-
-.hero-mobile-card {
-  border-radius: 24px;
-  border: 1px solid rgba(204, 221, 245, 0.14);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.08) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
-  padding: 18px 20px;
-  min-height: 132px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.hero-mobile-card--secondary {
-  border-color: rgba(161, 194, 255, 0.3);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.06) 100%);
-}
-
-.hero-mobile-card__value {
-  margin: 0;
-  color: #ffffff;
-  font-size: 2.05rem;
-  font-weight: 800;
-  line-height: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.hero-mobile-card__value--muted {
-  color: rgba(147, 166, 194, 0.96);
-}
-
-.hero-mobile-card__value--secondary {
-  color: #dbe7ff;
-}
-
-.hero-mobile-card__value--accent {
-  color: #ffb889;
-}
-
-.hero-mobile-card__suffix {
-  font-size: 0.92rem;
-  color: rgba(201, 215, 238, 0.72);
-  margin-bottom: 4px;
-}
-
-.hero-mobile-card__label {
-  margin: 0;
-  font-size: 0.95rem;
-  color: rgba(216, 228, 247, 0.78);
-  font-weight: 700;
-  line-height: 1.3;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hero-mobile-card__emoji {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.hero-mobile-card__hint {
-  margin: 0;
-  font-size: 0.86rem;
-  color: rgba(201, 215, 238, 0.74);
-  line-height: 1.35;
-}
-
-.hero-mobile-card__hint--positive {
-  color: #6be69b;
-}
-
-.home-content {
-  padding-bottom: 56px;
-}
-
-.content-inner {
-  padding-top: 32px;
-}
-
-.surface-card {
-  background: #ffffff;
-  border: 1px solid #dbe4f0;
-  border-radius: 30px;
-  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.06);
-}
-
-.heatmap-card {
-  padding: 28px;
-}
-
-.heatmap-card__inner {
-  width: min(100%, 980px);
-  margin: 0 auto;
-}
-
-.content-section {
-  margin-top: 26px;
-}
-
-.section-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.section-header--plain {
-  margin-bottom: 16px;
-}
-
-.section-header__title {
-  margin: 0;
-  font-size: 1.28rem;
-  font-weight: 800;
-  color: #11284d;
-}
-
-.section-header__subtle {
-  margin: 7px 0 0;
-  font-size: 0.92rem;
-  color: #7a879f;
-}
-
-.section-header__summary {
-  margin: 2px 0 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #203b68;
-}
-
-.heatmap-body {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-}
-
-.heatmap-week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(42px, 52px));
-  gap: 12px;
-}
-
-.heatmap-day {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.heatmap-day--today {
-  z-index: 1;
-}
-
-.heatmap-cell {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  border: 1.5px solid transparent;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
-  overflow: visible;
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
-}
-
-.heatmap-cell--today {
-  border-color: rgba(128, 145, 171, 0.24);
-  box-shadow:
-    0 0 0 4px rgba(128, 145, 171, 0.08),
-    0 8px 18px rgba(128, 145, 171, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.56);
-}
-
-.heatmap-cell--today::before {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.heatmap-cell--today::before {
-  inset: -4px;
-  border-radius: 16px;
-  border: 1px solid rgba(128, 145, 171, 0.18);
-}
-
-.heatmap-day__label,
-.heatmap-legend__text {
-  font-size: 0.85rem;
-  color: #8090aa;
-}
-
-.heatmap-day__label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 22px;
-  line-height: 1.1;
-  transition: color 180ms ease;
-}
-
-.heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.heatmap-legend__dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 5px;
-}
-
-.module-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
-}
-
-.module-card {
-  background: #ffffff;
-  border: 1px solid #d8e2ef;
-  border-radius: 28px;
-  padding: 24px;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.05);
-}
-
-.module-card__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.module-card__info {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  min-width: 0;
-  flex: 1;
-}
-
-.module-card__icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
-  background: var(--module-icon-bg);
-  color: var(--module-icon-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.module-card__icon-svg {
-  width: 26px;
-  height: 26px;
-}
-
-.module-card__copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.module-card__title {
-  margin: 0;
-  color: #10284c;
-  font-size: 1.55rem;
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.03em;
-  word-break: keep-all;
-}
-
-.module-card__subtitle {
-  margin: 8px 0 0;
-  color: #e8793c;
-  font-size: 0.96rem;
-  font-weight: 700;
-  word-break: keep-all;
-}
-
-.module-card__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.module-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid #dae3ef;
-  background: #f8fbff;
-  color: #7283a0;
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.module-card__metric {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-top: 8px;
-  min-width: 104px;
-  justify-content: flex-end;
-  flex: none;
-}
-
-.module-card__metric-track {
-  width: 64px;
-  height: 4px;
-  border-radius: 999px;
-  background: #dfe6f1;
-  overflow: hidden;
-}
-
-.module-card__metric-track > span {
-  display: block;
-  height: 100%;
-  background: var(--module-accent);
-  border-radius: inherit;
-}
-
-.module-card__metric-value {
-  font-size: 0.94rem;
-  font-weight: 700;
-  color: #6f7f97;
-}
-
-.module-card__actions {
-  margin-top: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.module-card__actions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.module-card__actions-grid--single {
-  grid-template-columns: 1fr;
-}
-
-.module-btn {
-  min-height: 52px;
-  padding: 0 16px;
-  border-radius: 16px;
-  border: 1px solid #d7e1ee;
-  background: #ffffff;
-  color: #17335f;
-  font-size: 1rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
-}
-
-.module-btn:hover {
-  transform: translateY(-1px);
-}
-
-.module-btn--primary {
-  background: #162f59;
-  border-color: #162f59;
-  color: #ffffff;
-}
-
-.module-btn--primary:hover {
-  background: #11294d;
-  border-color: #11294d;
-}
-
-.module-btn--secondary:hover,
-.module-btn--ghost:hover,
-.module-btn--feature:hover {
-  background: #f7f9fd;
-  border-color: #bccce1;
-}
-
-.module-btn--feature {
-  background: #f8fafc;
-}
-
-.module-btn__inline {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.module-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: #eb8659;
-  color: #ffffff;
-  font-size: 0.78rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.module-favorites {
-  margin-top: 4px;
-  border: 1px solid #e6edf7;
-  background: #f8fbff;
-  border-radius: 22px;
-  padding: 14px;
-}
-
-.module-favorites__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.module-favorites__head p {
-  margin: 0;
-  font-size: 0.88rem;
-  font-weight: 800;
-  color: #11284d;
-}
-
-.module-favorites__head span,
-.module-favorites__empty {
-  font-size: 0.82rem;
-  color: #7b8ba4;
-}
-
-.module-favorites__list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 216px;
-  overflow-y: auto;
-}
-
-.module-favorites__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid #e1e9f4;
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 10px 12px;
-  cursor: pointer;
-}
-
-.module-favorites__item:hover {
-  background: #f5f8fd;
-}
-
-.module-favorites__item-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #152d56;
-  font-size: 0.83rem;
-  font-weight: 700;
-}
-
-.module-favorites__item-tag {
-  flex: none;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #edf3ff;
-  color: #284fb1;
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-@media (max-width: 768px) {
-  .hero-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-highlight-grid {
-    justify-self: start;
-    max-width: none;
-  }
-
-  .hero-stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 820px) {
-  .module-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .section-header {
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 640px) {
-  .topbar-inner {
-    gap: 10px;
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .hero-inner,
-  .content-inner {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .brand {
-    gap: 10px;
-  }
-
-  .brand__mark {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-  }
-
-  .brand__icon {
-    width: 20px;
-    height: 20px;
-  }
-
-  .brand__title {
-    font-size: clamp(1.08rem, 5vw, 1.35rem);
-  }
-
-  .account-card {
-    gap: 8px;
-    padding: 7px;
-    max-width: min(100%, 308px);
-  }
-
-  .account-pill {
-    min-height: 40px;
-    padding: 0 14px;
-    font-size: 0.8rem;
-  }
-
-  .account-card__badge-wrap {
-    width: 52px;
-    height: 52px;
-  }
-
-  .account-card__badge {
-    font-size: 1.42rem;
-  }
-
-  .account-card__crown {
-    top: -6px;
-    left: 9px;
-    width: 18px;
-    height: 18px;
-  }
-
-  .account-card__spark {
-    width: 11px;
-    height: 11px;
-  }
-
-  .account-card__panel {
-    min-height: 50px;
-    padding: 0 10px;
-    gap: 10px;
-  }
-
-  .account-card__title {
-    font-size: 0.9rem;
-  }
-
-  .account-card__subtitle {
-    font-size: 0.72rem;
-  }
-
-  .account-card__arrow {
-    width: 31px;
-    height: 31px;
-  }
-
-  .account-login {
-    min-height: 34px;
-    padding: 0 10px;
-    font-size: 0.86rem;
-  }
-
-  .hero-inner {
-    padding-top: 20px;
-    padding-bottom: 24px;
-  }
-
-  .hero-copy__eyebrow {
-    margin-bottom: 12px;
-    font-size: 0.9rem;
-  }
-
-  .hero-copy h1 {
-    font-size: clamp(2.35rem, 8vw, 3.15rem);
-    line-height: 1.08;
-  }
-
-  .hero-copy__support {
-    margin-top: 12px;
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  .hero-grid {
-    display: block;
-  }
-
-  .hero-copy {
-    margin-bottom: 18px;
-  }
-
-  .hero-highlight-grid {
-    display: none;
-  }
-
-  .hero-stats-grid {
-    display: none;
-  }
-
-  .hero-mobile-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 18px;
-  }
-
-  .hero-mobile-card {
-    min-height: 128px;
-    border-radius: 20px;
-    padding: 16px 14px 14px;
-    gap: 8px;
-  }
-
-  .hero-mobile-card__value {
-    font-size: 1.82rem;
-  }
-
-  .hero-mobile-card__label {
-    font-size: 0.82rem;
-    line-height: 1.28;
-  }
-
-  .hero-mobile-card__hint {
-    font-size: 0.76rem;
-    line-height: 1.32;
-  }
-
-  .heatmap-card,
-  .module-card {
-    padding: 20px;
-  }
-
-  .heatmap-week {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-  .heatmap-cell--today::before {
-    inset: -2px;
-  }
-
-  .module-card__head {
-    flex-direction: column;
-  }
-
-  .module-card__metric {
-    min-width: 0;
-    width: 100%;
-    justify-content: flex-start;
-    padding-top: 0;
-  }
-}
-
-@media (max-width: 520px) {
-  .hero-copy__eyebrow {
-    font-size: 0.84rem;
-  }
-
-  .hero-copy h1 {
-    font-size: clamp(1.95rem, 12vw, 2.75rem);
-    line-height: 1.02;
-  }
-
-  .hero-copy__support {
-    font-size: 0.82rem;
-  }
-
-  .hero-mobile-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .hero-mobile-card {
-    min-height: 138px;
-    padding: 16px 14px;
-  }
-
-  .hero-mobile-card__value {
-    font-size: 1.9rem;
-    gap: 2px;
-  }
-
-  .hero-mobile-card__suffix {
-    font-size: 0.82rem;
-    margin-bottom: 3px;
-  }
-
-  .hero-mobile-card__label {
-    font-size: 0.88rem;
-  }
-
-  .hero-mobile-card__hint {
-    font-size: 0.8rem;
-  }
-}
-
-@media (max-width: 420px) {
-  .topbar-inner {
-    gap: 8px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .brand {
-    gap: 8px;
-  }
-
-  .brand__mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 11px;
-  }
-
-  .brand__icon {
-    width: 18px;
-    height: 18px;
-  }
-
-  .brand__title {
-    font-size: 1rem;
-  }
-
-  .account-card {
-    gap: 8px;
-    padding: 6px;
-    max-width: min(100%, 276px);
-  }
-
-  .account-pill {
-    min-height: 36px;
-    padding: 0 12px;
-    font-size: 0.74rem;
-  }
-
-  .account-card__badge-wrap {
-    width: 46px;
-    height: 46px;
-  }
-
-  .account-card__badge {
-    font-size: 1.24rem;
-  }
-
-  .account-card__crown {
-    top: -6px;
-    left: 8px;
-    width: 17px;
-    height: 17px;
-  }
-
-  .account-card__spark {
-    top: 5px;
-    width: 10px;
-    height: 10px;
-  }
-
-  .account-card__title {
-    font-size: 0.82rem;
-  }
-
-  .account-card__subtitle {
-    font-size: 0.66rem;
-  }
-
-  .account-card__panel {
-    min-height: 44px;
-    padding: 0 8px;
-    gap: 6px;
-  }
-
-  .account-card__arrow {
-    width: 24px;
-    height: 24px;
-  }
-
-  .account-card__arrow-icon {
-    width: 13px;
-    height: 13px;
-  }
-
-  .account-login {
-    min-height: 30px;
-    padding: 0 8px;
-    font-size: 0.8rem;
-  }
-}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+.shell{
+  --c0:#1E1208;--c1:#3A2510;--c2:#7C5C3E;--c3:#A07850;--c4:#C4A878;
+  --bg0:#F5EFE4;--bg1:#EDE8DC;--bg2:#E4DDD0;--bg3:#D8D0C0;
+  --card:#FAF6EF;--card2:#F2EBE0;--bdr:#D4C8B4;--bdr2:#C4B49C;
+  --grn:#5A9E6A;--grn2:#DFF0E4;--grn3:#A8D4B4;
+  --org:#C07840;--org2:#F2E4D0;--org3:#D4B090;--mute:#A89070;
+  display:flex;width:100vw;height:100vh;background:var(--bg1);
+  font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
+  color:var(--c0);overflow:hidden;
+}
+.home-agent-sidebar{display:flex;flex:0 0 200px;width:200px;flex-direction:column;background:#e5dfd4;border-right:.5px solid #d4cdbf;}
+.home-agent-logo{display:flex;align-items:center;gap:9px;padding:18px 18px 16px;border-bottom:.5px solid #d4cdbf;text-decoration:none;}
+.home-agent-logo-icon{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:8px;background:#7c5c3e;flex-shrink:0;}
+.home-agent-logo-name{color:#2c1f0e;font-size:17px;font-weight:500;letter-spacing:.03em;}
+.home-agent-nav{display:flex;flex:1;flex-direction:column;gap:8px;padding:22px 12px 24px;}
+.home-agent-nav-item{display:flex;align-items:center;gap:11px;min-height:42px;padding:0 12px;border:.5px solid transparent;border-radius:10px;background:transparent;color:#9a8f80;cursor:pointer;font-family:inherit;font-size:13.8px;line-height:1.3;text-align:left;text-decoration:none;transition:background .13s,border-color .13s,color .13s;}
+.home-agent-nav-item:hover{background:#ede8df;color:#6b5a44;}
+.home-agent-nav-item--active{border-color:#cabdaa;background:#d9cfbd;color:#7c5c3e;font-weight:600;box-shadow:inset 0 1px 0 rgba(245,239,228,.5);}
+.home-agent-nav-icon{display:flex;align-items:center;justify-content:center;width:15px;height:15px;flex:0 0 15px;}
+.home-agent-nav-icon svg{width:15px;height:15px;}
+.home-agent-nav-item--active .home-agent-nav-icon{opacity:1;}
+.home-agent-sidebar-footer{padding:16px 12px 18px;border-top:.5px solid #d4cdbf;}
+.home-agent-promo{padding:12px;border:.5px solid #c4baa8;border-radius:10px;background:#d8cebc;}
+.home-agent-promo-title{margin-bottom:2px;color:#7c5c3e;font-size:11.5px;font-weight:500;}
+.home-agent-promo-sub{margin-bottom:9px;color:#9a8f80;font-size:10.5px;}
+.home-agent-promo-button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:#7c5c3e;color:#f5efe4;font-size:11px;line-height:1;padding:6px 13px;cursor:pointer;font-family:inherit;}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{height:50px;flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
+.tb-greet{font-size:13.5px;font-weight:700;color:var(--c0);}
+.tb-sub{font-size:10px;color:var(--mute);}
+.tb-right{display:flex;align-items:center;gap:8px;}
+.vip-pill{display:flex;align-items:center;gap:5px;border-radius:99px;padding:4px 11px;font-size:11px;font-weight:700;border:1px solid var(--bdr2);white-space:nowrap;}
+.vip-pill--vip{background:#FFF4CF;border-color:#D7A84B;color:#7C5520;box-shadow:inset 0 1px 0 rgba(255,255,255,.58);}
+.vip-pill--trial{background:var(--org2);border-color:var(--org3);color:var(--org);}
+.vip-pill--locked,.vip-pill--loading{background:var(--card2);border-color:var(--bdr2);color:var(--mute);}
+.user-av{width:26px;height:26px;border-radius:50%;background:var(--c2);color:var(--bg0);font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.user-name{font-size:12px;color:var(--c1);}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 18px 20px;display:flex;flex-direction:column;gap:12px;}
+.scroll::-webkit-scrollbar{width:4px;}
+.scroll::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:99px;}
+.row{display:flex;gap:12px;align-items:stretch;}
+.card{background:var(--card);border:1px solid var(--bdr);border-radius:15px;display:flex;flex-direction:column;}
+.sec-title{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--c0);margin-bottom:12px;}
+.sec-star{color:var(--c2);}
+
+/* ROW1 HERO */
+.hero-card{flex:1.45;overflow:hidden;}
+.hc-top{background:linear-gradient(135deg,var(--c2) 0%,var(--c3) 55%,#C4A070 100%);padding:18px 20px 16px;position:relative;overflow:hidden;}
+.hc-deco{position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.1);pointer-events:none;}
+.hc-eyebrow{font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(250,246,239,.5);margin-bottom:5px;}
+.hc-title{font-size:18px;font-weight:700;color:#FAF6EF;line-height:1.35;margin-bottom:3px;}
+.hc-title em{color:#F0D0A0;font-style:normal;}
+.hc-sub{font-size:11px;color:rgba(250,246,239,.6);margin-bottom:12px;}
+.task-block{background:rgba(255,255,255,.13);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:10px 13px;}
+.task-hd{display:flex;align-items:center;gap:6px;font-size:11px;color:#FAF6EF;font-weight:600;margin-bottom:8px;}
+.task-hd-dot{width:5px;height:5px;border-radius:50%;background:#F0D0A0;flex-shrink:0;}
+.t-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.t-row:last-child{margin-bottom:0;}
+.t-chk{width:14px;height:14px;border-radius:3.5px;border:1.5px solid rgba(255,255,255,.4);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s;}
+.t-chk.done{background:#5A9E6A;border-color:#5A9E6A;}
+.t-lbl{font-size:11px;color:rgba(250,246,239,.85);flex:1;}
+.t-bar-bg{width:64px;height:3px;background:rgba(255,255,255,.18);border-radius:99px;overflow:hidden;flex-shrink:0;}
+.t-bar-fill{height:100%;background:rgba(255,255,255,.65);border-radius:99px;transition:width .4s ease;}
+.t-cnt{font-size:9.5px;color:rgba(250,246,239,.5);width:22px;text-align:right;flex-shrink:0;}
+.hc-bottom{display:flex;border-top:1px solid var(--bdr);}
+.s3{flex:1;padding:12px 14px;border-right:1px solid var(--bdr);display:flex;align-items:center;gap:10px;}
+.s3:last-child{border-right:none;}
+.s3-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.s3-val{font-size:18px;font-weight:700;color:var(--c0);line-height:1;}
+.s3-unit{font-size:10px;font-weight:400;color:var(--mute);}
+.s3-label{font-size:10px;color:var(--mute);margin-top:2px;}
+.s3-sub{font-size:9px;color:var(--bdr2);}
+
+/* ROW1 AI */
+.ai-card{flex:1;overflow:hidden;}
+.ai-header{padding:13px 15px 11px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;}
+.ai-header-left{display:flex;align-items:center;gap:5px;}
+.ai-star{color:var(--c2);font-size:12px;}
+.ai-title{font-size:12.5px;font-weight:700;color:var(--c0);}
+.ai-subtitle{font-size:9.5px;color:var(--mute);}
+.ai-link{font-size:11px;color:var(--c2);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
+.ai-banner{margin:11px 13px 9px;background:var(--org2);border:1px solid var(--org3);border-radius:8px;padding:8px 11px;font-size:11.5px;color:var(--org);display:flex;gap:7px;line-height:1.5;}
+.ai-banner-icon{font-size:13px;flex-shrink:0;margin-top:1px;}
+.ai-messages{padding:0 13px;flex:1;overflow:hidden;display:flex;flex-direction:column;gap:7px;}
+.ai-msg{display:flex;gap:7px;align-items:flex-start;}
+.ai-msg-av{width:22px;height:22px;border-radius:50%;background:var(--c2);color:var(--bg0);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+.ai-msg-bubble{background:var(--card2);border:1px solid var(--bdr);border-radius:0 8px 8px 8px;padding:7px 10px;flex:1;}
+.ai-msg-text{font-size:11px;color:var(--c1);line-height:1.6;margin-bottom:2px;}
+.ai-msg-time{font-size:9px;color:var(--mute);}
+.ai-actions{padding:10px 13px 13px;border-top:1px solid var(--bdr);margin-top:auto;display:flex;gap:6px;}
+.ai-act-btn{flex:1;background:var(--card2);border:1px solid var(--bdr);border-radius:7px;padding:7px 4px;font-size:10px;color:var(--c1);cursor:pointer;text-align:center;line-height:1.4;}
+
+/* ROW2 SHORTCUTS */
+.sc-card{flex:1.5;padding:16px 18px;}
+.sc-grid{display:flex;gap:8px;}
+.sc-item{flex:1;background:var(--card2);border:1px solid var(--bdr);border-radius:12px;padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;cursor:pointer;text-align:center;position:relative;overflow:hidden;transition:transform .13s,box-shadow .13s;}
+.sc-item:hover{transform:translateY(-2px);box-shadow:0 5px 16px rgba(44,21,8,.08);}
+.sc-item::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:12px 12px 0 0;}
+.sc-ra::before{background:linear-gradient(90deg,#C07840,#D4A060);}
+.sc-wfd::before{background:linear-gradient(90deg,#5A9E6A,#80C080);}
+.sc-rts::before{background:linear-gradient(90deg,#D4775A,#E09070);}
+.sc-di::before{background:linear-gradient(90deg,#7A6ABF,#A090D0);}
+.sc-we::before{background:linear-gradient(90deg,#9060A0,#B080C0);}
+.sc-icon-wrap{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:8px;margin-top:4px;}
+.sc-code{font-size:14px;font-weight:700;color:var(--c0);margin-bottom:4px;}
+.sc-desc{font-size:10px;color:var(--mute);line-height:1.5;white-space:pre-line;}
+.sc-tag{margin-top:8px;font-size:9px;padding:2px 8px;border-radius:99px;font-weight:500;}
+
+/* ROW2 ADVICE */
+.advice-card{flex:1;padding:15px 16px;display:flex;flex-direction:column;}
+.advice-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;}
+.adv-banner{background:var(--org2);border:1px solid var(--org3);border-radius:8px;padding:8px 11px;margin-bottom:10px;display:flex;gap:7px;align-items:flex-start;}
+.adv-banner-icon{font-size:13px;flex-shrink:0;margin-top:1px;}
+.adv-banner-text{font-size:11.5px;color:var(--org);line-height:1.5;font-weight:500;}
+.adv-headline{font-size:15px;font-weight:700;color:var(--c0);margin-bottom:5px;line-height:1.3;}
+.adv-body{font-size:11.5px;color:var(--c1);line-height:1.7;margin-bottom:9px;}
+.adv-tags{display:flex;gap:5px;margin-bottom:7px;}
+.adv-tag{font-size:10px;background:var(--org2);border:1px solid var(--org3);color:var(--org);border-radius:4px;padding:2px 8px;font-weight:500;}
+.adv-meta{font-size:9.5px;color:var(--mute);margin-bottom:10px;}
+.adv-questions{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+.adv-q{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--card2);border:1px solid var(--bdr);border-radius:7px;cursor:pointer;gap:6px;transition:background .13s,border-color .13s;}
+.adv-q:hover{background:var(--org2);border-color:var(--org3);}
+.adv-q-text{font-size:11px;color:var(--c1);}
+.adv-q-arr{font-size:13px;color:var(--mute);}
+.adv-btns{display:flex;gap:7px;margin-top:auto;}
+.btn-primary{flex:1;background:var(--c2);color:var(--bg0);border:none;border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .13s;}
+.btn-primary:hover{background:#6A4D32;}
+.btn-ghost{flex:1;background:var(--card2);color:var(--c1);border:1px solid var(--bdr2);border-radius:8px;padding:8px 0;font-size:12px;cursor:pointer;font-family:inherit;}
+.badge-outline{font-size:9px;background:var(--bg1);border:1px solid var(--bdr2);border-radius:4px;padding:2px 7px;color:var(--mute);}
+.badge-green{font-size:9px;background:#DFF0E4;border:1px solid #A8D4B4;border-radius:4px;padding:2px 7px;color:#3A7E50;font-weight:600;}
+
+/* ROW2 GOAL */
+.goal-card{flex:.85;padding:15px 16px;display:flex;flex-direction:column;}
+.goal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.goal-top{display:flex;align-items:center;gap:12px;margin-bottom:11px;}
+.goal-left{flex:1;}
+.goal-pct{font-size:36px;font-weight:800;color:var(--c0);letter-spacing:-.02em;line-height:1;}
+.goal-done{font-size:10.5px;color:var(--mute);margin-top:3px;}
+.goal-ring-wrap{position:relative;width:66px;height:66px;flex-shrink:0;}
+.ring-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;color:var(--c2);}
+.goal-bar-section{margin-bottom:11px;}
+.goal-bar-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--mute);margin-bottom:4px;}
+.goal-bar-bg{height:5px;background:var(--bdr);border-radius:99px;overflow:hidden;}
+.goal-bar-fill{height:100%;background:linear-gradient(90deg,var(--c2),var(--c3));border-radius:99px;transition:width .4s ease;}
+.goal-breakdown{display:flex;flex-direction:column;gap:5px;margin-bottom:11px;}
+.gb-row{display:flex;align-items:center;gap:7px;}
+.gb-code{width:30px;font-size:10px;font-weight:700;color:var(--c1);flex-shrink:0;}
+.gb-bar-bg{flex:1;height:4px;background:var(--bdr);border-radius:99px;overflow:hidden;}
+.gb-bar-fill{height:100%;border-radius:99px;transition:width .4s ease;}
+.gb-val{font-size:10px;color:var(--mute);width:26px;text-align:right;flex-shrink:0;}
+.goal-btns{display:flex;gap:6px;margin-top:auto;}
+.goal-btn{flex:1;background:var(--card2);color:var(--c1);border:1px solid var(--bdr2);border-radius:8px;padding:7px 0;font-size:11.5px;cursor:pointer;font-family:inherit;}
+.goal-btn-p{background:var(--c2);color:var(--bg0);border:none;font-weight:600;}
+.goal-btn-wide{flex:1 1 100%;}
+
+.goal-modal-backdrop{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(30,18,8,.24);backdrop-filter:blur(10px);}
+.goal-modal{width:min(440px,calc(100vw - 32px));border:1px solid rgba(212,200,180,.72);border-radius:16px;background:rgba(250,246,239,.86);box-shadow:0 22px 60px rgba(30,18,8,.2);padding:18px;color:var(--c0);}
+.goal-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px;}
+.goal-modal-kicker{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute);margin-bottom:3px;}
+.goal-modal h2{font-size:18px;line-height:1.25;font-weight:800;}
+.goal-modal-close{width:30px;height:30px;border:1px solid var(--bdr2);border-radius:9px;background:rgba(250,246,239,.55);color:var(--c2);font-size:20px;line-height:1;cursor:pointer;}
+.goal-modal-body{display:flex;flex-direction:column;gap:9px;}
+.goal-modal-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 11px;border:1px solid rgba(212,200,180,.8);border-radius:10px;background:rgba(250,246,239,.62);}
+.goal-modal-row span{display:flex;flex-direction:column;gap:2px;}
+.goal-modal-row b{font-size:13px;color:var(--c0);}
+.goal-modal-row em{font-size:10.5px;font-style:normal;color:var(--mute);}
+.goal-modal-row input{width:90px;height:34px;border:1px solid var(--bdr2);border-radius:8px;background:rgba(255,255,255,.58);color:var(--c0);font:700 14px/1 inherit;text-align:center;outline:none;}
+.goal-modal-row input:focus{border-color:var(--c2);box-shadow:0 0 0 3px rgba(124,92,62,.12);}
+.goal-modal-summary{display:flex;justify-content:space-between;gap:12px;margin:13px 0 15px;font-size:11px;color:var(--mute);}
+.goal-modal-summary b{color:var(--c0);}
+.goal-modal-actions{display:flex;gap:9px;}
+.goal-modal-ghost,.goal-modal-primary{flex:1;border-radius:9px;padding:10px 0;font:700 12px/1 inherit;cursor:pointer;}
+.goal-modal-ghost{border:1px solid var(--bdr2);background:rgba(250,246,239,.55);color:var(--c1);}
+.goal-modal-primary{border:0;background:var(--c2);color:var(--bg0);}
+
+/* ROW3 */
+.hm-card{flex:1;padding:17px 18px 16px;display:flex;flex-direction:column;min-height:186px;}
+.hm-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;padding-left:34px;margin:7px 0 7px;}
+.hm-dlbl{text-align:center;font-size:10px;color:var(--mute);line-height:1;}
+.hm-dlbl.today{color:var(--c2);font-weight:700;}
+.hm-grid{display:flex;flex-direction:column;gap:6px;}
+.hm-row{display:grid;grid-template-columns:28px repeat(7,minmax(0,1fr));align-items:center;gap:6px;}
+.hm-code{font-size:10px;font-weight:700;color:var(--c1);}
+.hm-cell{height:18px;border-radius:5px;border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--c1);line-height:1;}
+.hc0{background:var(--card2);}
+.hc1{background:#E8DCCB;}
+.hc2{background:#D7BE96;}
+.hc3{background:#B58B5F;color:#fff;}
+.hc4{background:#7C5C3E;color:#fff;}
+.hm-today{border-color:var(--c2)!important;box-shadow:inset 0 0 0 1px rgba(124,92,62,.32);}
+.hm-footer{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:13px;font-size:10px;color:var(--mute);}
+.hm-legend{display:flex;gap:3px;}
+.hml{width:11px;height:11px;border-radius:3px;border:1px solid var(--bdr);}
+.hm-total{margin-left:auto;font-size:10px;color:var(--mute);font-weight:600;}
+
+.trend-card{flex:1;padding:17px 18px 16px;display:flex;flex-direction:column;min-height:206px;}
+.trend-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;}
+.trend-avg{text-align:right;}
+.trend-avg-lbl{font-size:9px;color:var(--mute);}
+.trend-avg-val{font-size:20px;font-weight:800;color:var(--c0);line-height:1;}
+.chart-svg{width:100%;height:154px;display:block;margin-top:0;}
+.trend-grid{stroke:var(--bdr);stroke-width:.8;}
+.trend-axis{font-size:8px;fill:var(--mute);}
+.trend-line{fill:none;stroke:var(--c2);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;}
+.trend-point{fill:var(--c2);stroke:var(--bg0);stroke-width:1.6;filter:drop-shadow(0 1px 2px rgba(77,52,28,.18));vector-effect:non-scaling-stroke;}
+.trend-empty{font-size:10px;fill:var(--mute);}
+.trend-date{font-size:8.6px;fill:var(--mute);}
+.trend-note{margin-top:8px;font-size:10px;color:var(--mute);background:var(--card2);border-radius:7px;padding:7px 10px;text-align:center;}
+
+.weak-card{flex:1;padding:14px 15px;}
+.weak-list,.recent-list{display:flex;flex-direction:column;gap:7px;}
+.weak-item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--card2);border:1px solid var(--bdr);border-radius:9px;margin-bottom:7px;}
+.weak-list .weak-item,.recent-list .rec-item{margin-bottom:0;}
+.weak-item:last-child{margin-bottom:0;}
+.weak-rank{width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;}
+.rank-1{background:#C07840;}.rank-2{background:#B09060;}.rank-3{background:#A09080;}
+.weak-name{font-size:12px;font-weight:600;color:var(--c0);margin-bottom:1px;}
+.weak-score{font-size:10px;color:var(--mute);}
+.weak-empty,.recent-empty{min-height:72px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;border:1px dashed var(--bdr2);border-radius:9px;background:var(--card2);font-size:11px;color:var(--mute);}
+
+.recent-card{flex:1;padding:14px 15px;}
+.rec-item{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--card2);border:1px solid var(--bdr);border-radius:9px;margin-bottom:7px;cursor:pointer;transition:background .13s;}
+.rec-item:last-child{margin-bottom:0;}
+.rec-item:hover{background:var(--bg1);}
+.rec-badge{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;flex-shrink:0;}
+.rec-name{font-size:12px;font-weight:600;color:var(--c0);margin-bottom:1px;}
+.rec-meta{font-size:10px;color:var(--mute);}
+.rec-arr{font-size:15px;color:var(--bdr2);margin-left:auto;}
+
+@media(max-width:1100px){.row{flex-wrap:wrap;}.hero-card,.ai-card{flex:1 1 100%;}}
+@media(max-width:900px){.home-agent-sidebar{display:none;}.hm-card,.trend-card,.weak-card,.recent-card{flex:1 1 48%;}}
+@media(max-width:640px){.scroll{padding:10px 12px;}.hm-card,.trend-card,.weak-card,.recent-card{flex:1 1 100%;}}
 </style>
-
-
-

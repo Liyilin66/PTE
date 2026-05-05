@@ -53,9 +53,32 @@ export async function buildDailySuggestionResponse({ supabase, user, requestId =
     });
     suggestion = sanitizeSuggestion(parseSuggestionJson(providerResult?.raw_text), summary);
   } catch (error) {
-    source = "fallback";
     reasonCode = normalizeText(error?.raw_error_type || error?.message || "provider_error") || "provider_error";
-    suggestion = createFallbackSuggestion(summary);
+    const response = {
+      ok: false,
+      suggestion: null,
+      message: "今日 AI 建议暂时不可用，请稍后刷新。",
+      generated_at: new Date().toISOString(),
+      source: "unavailable",
+      practice_signature: summary.practice_signature,
+      summary,
+      model: normalizeText(config.model),
+      provider: "openai_compatible",
+      usage: {},
+      reason_code: reasonCode,
+      request_id: requestId
+    };
+
+    logDailySuggestion({
+      requestId,
+      summary,
+      response,
+      totalMs: elapsedMs(startedAt),
+      providerRequestMs: providerResult?.provider_request_ms || 0,
+      reasonCode
+    });
+
+    return response;
   }
 
   const response = {

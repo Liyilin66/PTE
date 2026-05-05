@@ -7,6 +7,7 @@ import sendRegisterCodeHandler from "./api/auth/send-register-code.js";
 import agentChatHandler from "./api/agent/chat.js";
 import agentDailySuggestionHandler from "./api/agent/daily-suggestion.js";
 import agentPlanHandler from "./api/agent/plan.js";
+import agentSessionHandler from "./api/agent/session.js";
 import questionsHandler from "./api/questions.js";
 import scoreHandler from "./api/score.js";
 
@@ -26,6 +27,10 @@ app.options("/api/agent/plan", agentPlanHandler);
 app.get("/api/agent/plan", agentPlanHandler);
 app.post("/api/agent/plan", agentPlanHandler);
 app.delete("/api/agent/plan", agentPlanHandler);
+app.options("/api/agent/session", agentSessionHandler);
+app.get("/api/agent/session", agentSessionHandler);
+app.post("/api/agent/session", agentSessionHandler);
+app.delete("/api/agent/session", agentSessionHandler);
 app.options("/api/auth/send-register-code", sendRegisterCodeHandler);
 app.post("/api/auth/send-register-code", sendRegisterCodeHandler);
 app.options("/api/auth/register-with-code", registerWithCodeHandler);

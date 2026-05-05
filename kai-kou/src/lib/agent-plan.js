@@ -41,19 +41,27 @@ async function performPlanRequest({ method = "GET", body = null } = {}) {
     : null;
 
   try {
-    const response = await fetch(getApiUrl(AGENT_PLAN_PATH), {
+    let result = await performPlanFetch({
+      token,
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      body,
       signal: controller?.signal
     });
 
-    const payload = await readJsonPayload(response);
-    if (payload) {
-      return normalizePlanPayload(payload, response.status);
+    if (result.status === 401) {
+      const refreshedToken = await resolveAccessToken({ forceRefresh: true });
+      if (refreshedToken) {
+        result = await performPlanFetch({
+          token: refreshedToken,
+          method,
+          body,
+          signal: controller?.signal
+        });
+      }
+    }
+
+    if (result.payload) {
+      return normalizePlanPayload(result.payload, result.status);
     }
 
     return {
@@ -74,6 +82,23 @@ async function performPlanRequest({ method = "GET", body = null } = {}) {
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+async function performPlanFetch({ token, method, body, signal }) {
+  const response = await fetch(getApiUrl(AGENT_PLAN_PATH), {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+    signal
+  });
+
+  return {
+    status: response.status,
+    payload: await readJsonPayload(response)
+  };
 }
 
 function normalizePlanPayload(payload, status = 0) {

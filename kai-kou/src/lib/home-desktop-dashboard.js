@@ -202,6 +202,25 @@ export async function fetchDashboardScoreTrendRowsForAuth(authStore, today = new
   };
 }
 
+export function buildDashboardWeeklyPracticeRowsFromRows(rows, today = new Date()) {
+  const { start, end } = getWeekRange(today);
+  return filterDashboardRowsByDate(rows, start, end, DISPLAY_TASKS)
+    .sort(comparePracticeRowsAscending);
+}
+
+export function buildDashboardScoreTrendRowsFromRows(rows, today = new Date()) {
+  const currentStart = addDays(startOfDay(today), -6);
+  const currentEnd = addDays(startOfDay(today), 1);
+  const previousStart = addDays(currentStart, -7);
+
+  return {
+    currentRows: filterDashboardRowsByDate(rows, currentStart, currentEnd, DISPLAY_TASKS)
+      .sort(comparePracticeRowsAscending),
+    previousRows: filterDashboardRowsByDate(rows, previousStart, currentStart, DISPLAY_TASKS)
+      .sort(comparePracticeRowsAscending)
+  };
+}
+
 export function buildDesktopDashboardState(homeAnalytics, rows, options = {}) {
   const snapshot = isObject(homeAnalytics) ? homeAnalytics : createHomeAnalyticsFallback();
   const safeRows = Array.isArray(rows) ? rows : [];
@@ -1012,6 +1031,33 @@ function createHomeAnalyticsFallback() {
     taskWeekCounts: {},
     lastPracticeAt: ""
   };
+}
+
+function filterDashboardRowsByDate(rows, start, end, allowedTasks = DISPLAY_TASKS) {
+  const startMs = start instanceof Date ? start.getTime() : new Date(start).getTime();
+  const endMs = end instanceof Date ? end.getTime() : new Date(end).getTime();
+  const allowedTaskSet = new Set(Array.isArray(allowedTasks) ? allowedTasks : DISPLAY_TASKS);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return [];
+
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const taskType = normalizeTaskType(row?.task_type);
+    if (!allowedTaskSet.has(taskType)) return false;
+
+    const createdAtMs = resolveCreatedAtMs(row);
+    return Number.isFinite(createdAtMs) && createdAtMs >= startMs && createdAtMs < endMs;
+  });
+}
+
+function comparePracticeRowsAscending(left, right) {
+  const timeGap = resolveCreatedAtMs(left) - resolveCreatedAtMs(right);
+  if (timeGap !== 0) return timeGap;
+  return `${left?.id || ""}`.localeCompare(`${right?.id || ""}`);
+}
+
+function resolveCreatedAtMs(row) {
+  const createdAt = new Date(row?.created_at);
+  return createdAt.getTime();
 }
 
 async function resolveCurrentUserId(authStore) {

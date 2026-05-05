@@ -57,89 +57,7 @@ export async function loadHomeAnalyticsSnapshotForAuth(authStore) {
 
   try {
     const rows = await fetchHomeAnalyticsRows(userId);
-    const recentDays = buildRecentDaysSnapshot();
-    const recentDayKeys = new Set(recentDays.map((item) => item.key));
-    const recentDayCounter = recentDays.reduce((acc, item) => {
-      acc[item.key] = 0;
-      return acc;
-    }, {});
-    const practicedDaySet = new Set();
-    const taskWeekCounts = buildTaskCounterSeed();
-    const todayKey = toDateKey(new Date());
-
-    let todayCount = 0;
-    let weekDurationSec = 0;
-    let durationTrackedCount = 0;
-    let scoreTotal = 0;
-    let scoredCount = 0;
-
-    rows.forEach((row) => {
-      const dateKey = toDateKey(row?.created_at);
-      if (!dateKey) return;
-
-      practicedDaySet.add(dateKey);
-
-      if (dateKey === todayKey) {
-        todayCount += 1;
-      }
-
-      if (recentDayKeys.has(dateKey)) {
-        recentDayCounter[dateKey] += 1;
-        const taskType = normalizeTaskType(row?.task_type);
-        if (taskType) {
-          taskWeekCounts[taskType] = (taskWeekCounts[taskType] || 0) + 1;
-        }
-
-        const durationSec = resolveDurationSec(row?.score_json);
-        if (durationSec > 0) {
-          weekDurationSec += durationSec;
-          durationTrackedCount += 1;
-        }
-      }
-
-      const overall = resolveOverallScore(row?.task_type, row?.score_json);
-      if (overall !== null) {
-        scoreTotal += overall;
-        scoredCount += 1;
-      }
-    });
-
-    const maxHeatCount = Math.max(...Object.values(recentDayCounter), 0);
-    const normalizedDays = recentDays.map((item) => {
-      const countValue = recentDayCounter[item.key] || 0;
-      const level = resolveHeatLevel(countValue, maxHeatCount);
-      const isToday = isTodayDateKey(item.key, todayKey);
-      return {
-        ...item,
-        label: isToday ? "今日" : item.label,
-        count: countValue,
-        color: HEAT_COLORS[level],
-        isToday
-      };
-    });
-    const latestCreatedAt = rows.find((row) => toDateKey(row?.created_at))?.created_at || "";
-    const streakStats = calculateStreakStats(practicedDaySet);
-    const scoreComparison = calculateScoreComparison(rows);
-
-    return {
-      loading: false,
-      totalCount: rows.length,
-      todayCount,
-      weekMinutes: Math.round(weekDurationSec / 60),
-      averageScore: scoredCount ? Number((scoreTotal / scoredCount).toFixed(1)) : null,
-      currentPeriodAverageScore: scoreComparison.currentAverage,
-      previousPeriodAverageScore: scoreComparison.previousAverage,
-      scoreDelta: scoreComparison.difference,
-      scoreComparisonText: scoreComparison.text,
-      scoredCount,
-      durationTrackedCount,
-      currentStreak: streakStats.current,
-      longestStreak: streakStats.longest,
-      activeDaysCount: practicedDaySet.size,
-      recentDays: normalizedDays,
-      taskWeekCounts,
-      lastPracticeAt: `${latestCreatedAt || ""}`.trim()
-    };
+    return buildHomeAnalyticsSnapshotFromRows(rows);
   } catch (error) {
     console.warn("Home analytics load failed:", error);
     return {
@@ -147,6 +65,93 @@ export async function loadHomeAnalyticsSnapshotForAuth(authStore) {
       loading: false
     };
   }
+}
+
+export function buildHomeAnalyticsSnapshotFromRows(rows) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const recentDays = buildRecentDaysSnapshot();
+  const recentDayKeys = new Set(recentDays.map((item) => item.key));
+  const recentDayCounter = recentDays.reduce((acc, item) => {
+    acc[item.key] = 0;
+    return acc;
+  }, {});
+  const practicedDaySet = new Set();
+  const taskWeekCounts = buildTaskCounterSeed();
+  const todayKey = toDateKey(new Date());
+
+  let todayCount = 0;
+  let weekDurationSec = 0;
+  let durationTrackedCount = 0;
+  let scoreTotal = 0;
+  let scoredCount = 0;
+
+  safeRows.forEach((row) => {
+    const dateKey = toDateKey(row?.created_at);
+    if (!dateKey) return;
+
+    practicedDaySet.add(dateKey);
+
+    if (dateKey === todayKey) {
+      todayCount += 1;
+    }
+
+    if (recentDayKeys.has(dateKey)) {
+      recentDayCounter[dateKey] += 1;
+      const taskType = normalizeTaskType(row?.task_type);
+      if (taskType) {
+        taskWeekCounts[taskType] = (taskWeekCounts[taskType] || 0) + 1;
+      }
+
+      const durationSec = resolveDurationSec(row?.score_json);
+      if (durationSec > 0) {
+        weekDurationSec += durationSec;
+        durationTrackedCount += 1;
+      }
+    }
+
+    const overall = resolveOverallScore(row?.task_type, row?.score_json);
+    if (overall !== null) {
+      scoreTotal += overall;
+      scoredCount += 1;
+    }
+  });
+
+  const maxHeatCount = Math.max(...Object.values(recentDayCounter), 0);
+  const normalizedDays = recentDays.map((item) => {
+    const countValue = recentDayCounter[item.key] || 0;
+    const level = resolveHeatLevel(countValue, maxHeatCount);
+    const isToday = isTodayDateKey(item.key, todayKey);
+    return {
+      ...item,
+      label: item.label,
+      count: countValue,
+      color: HEAT_COLORS[level],
+      isToday
+    };
+  });
+  const latestCreatedAt = safeRows.find((row) => toDateKey(row?.created_at))?.created_at || "";
+  const streakStats = calculateStreakStats(practicedDaySet);
+  const scoreComparison = calculateScoreComparison(safeRows);
+
+  return {
+    loading: false,
+    totalCount: safeRows.length,
+    todayCount,
+    weekMinutes: Math.round(weekDurationSec / 60),
+    averageScore: scoredCount ? Number((scoreTotal / scoredCount).toFixed(1)) : null,
+    currentPeriodAverageScore: scoreComparison.currentAverage,
+    previousPeriodAverageScore: scoreComparison.previousAverage,
+    scoreDelta: scoreComparison.difference,
+    scoreComparisonText: scoreComparison.text,
+    scoredCount,
+    durationTrackedCount,
+    currentStreak: streakStats.current,
+    longestStreak: streakStats.longest,
+    activeDaysCount: practicedDaySet.size,
+    recentDays: normalizedDays,
+    taskWeekCounts,
+    lastPracticeAt: `${latestCreatedAt || ""}`.trim()
+  };
 }
 
 function buildTaskCounterSeed() {

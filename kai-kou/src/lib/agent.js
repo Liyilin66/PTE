@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth";
 
 const AGENT_CHAT_PATH = "/api/agent/chat";
 const AGENT_DAILY_SUGGESTION_PATH = "/api/agent/daily-suggestion";
+const AGENT_SESSION_PATH = "/api/agent/session";
 const AGENT_CLIENT_TIMEOUT_MS = 45000;
 const MAX_RECENT_MESSAGES = 10;
 const MAX_RECENT_MESSAGE_CONTENT_LENGTH = 1000;
@@ -19,7 +20,7 @@ const TASK_LABELS = {
   RTS: "RTS"
 };
 
-export async function sendAgentMessage(message, conversationId = "", recentMessages = []) {
+export async function sendAgentMessage(message, conversationId = "", recentMessages = [], options = {}) {
   const normalizedMessage = normalizeText(message);
   if (!normalizedMessage) {
     return {
@@ -41,6 +42,7 @@ export async function sendAgentMessage(message, conversationId = "", recentMessa
   const requestPayload = {
     message: normalizedMessage,
     conversation_id: normalizeText(conversationId) || undefined,
+    session_id: normalizeText(options?.sessionId || options?.session_id) || undefined,
     recent_messages: sanitizeRecentMessages(recentMessages)
   };
 
@@ -76,6 +78,83 @@ export async function sendAgentMessage(message, conversationId = "", recentMessa
     message: "网络连接不太稳定，请稍后再试。",
     reason_code: "network_error"
   };
+}
+
+export async function loadAgentMainSession() {
+  return performAgentSessionRequest({
+    method: "GET",
+    query: {
+      action: "session"
+    }
+  });
+}
+
+export async function loadAgentSessionMessages(sessionId) {
+  return performAgentSessionRequest({
+    method: "GET",
+    query: {
+      action: "messages",
+      session_id: normalizeText(sessionId)
+    }
+  });
+}
+
+export async function loadAgentSessionList() {
+  return performAgentSessionRequest({
+    method: "GET",
+    query: {
+      action: "list"
+    }
+  });
+}
+
+export async function createAgentNewSession() {
+  return performAgentSessionRequest({
+    method: "POST",
+    query: {
+      action: "new"
+    }
+  });
+}
+
+export async function switchAgentSession(sessionId) {
+  return performAgentSessionRequest({
+    method: "POST",
+    query: {
+      action: "switch"
+    },
+    payload: {
+      session_id: normalizeText(sessionId)
+    }
+  });
+}
+
+export async function clearAgentMainSession() {
+  return performAgentSessionRequest({
+    method: "POST",
+    query: {
+      action: "clear"
+    }
+  });
+}
+
+export async function deleteAgentChatHistory() {
+  return performAgentSessionRequest({
+    method: "POST",
+    query: {
+      action: "delete-history"
+    }
+  });
+}
+
+export async function deleteAgentSession(sessionId) {
+  return performAgentSessionRequest({
+    method: "DELETE",
+    query: {
+      action: "delete-session",
+      session_id: normalizeText(sessionId)
+    }
+  });
 }
 
 export async function requestDailyAiSuggestion({ force = false, practiceSignature = "" } = {}) {
@@ -144,10 +223,29 @@ function sanitizeRecentMessages(recentMessages) {
   return (Array.isArray(recentMessages) ? recentMessages : [])
     .map((item) => ({
       role: normalizeText(item?.role).toLowerCase(),
-      content: normalizeText(item?.content).slice(0, MAX_RECENT_MESSAGE_CONTENT_LENGTH)
+      content: normalizeText(item?.content).slice(0, MAX_RECENT_MESSAGE_CONTENT_LENGTH),
+      plan_suggestion: sanitizeClientPlanSuggestion(item?.plan_suggestion || item?.planSuggestion)
     }))
     .filter((item) => (item.role === "user" || item.role === "assistant") && item.content)
     .slice(-MAX_RECENT_MESSAGES);
+}
+
+function sanitizeClientPlanSuggestion(value) {
+  if (!isPlainObject(value) || !Array.isArray(value.items) || !value.items.length) return null;
+  return {
+    title: normalizeText(value.title).slice(0, 80),
+    source: normalizeText(value.source).slice(0, 40),
+    variant: normalizeText(value.variant).slice(0, 40),
+    total_minutes: Number.isFinite(Number(value.total_minutes)) ? Math.max(0, Math.round(Number(value.total_minutes))) : 0,
+    items: value.items.slice(0, 8).map((item) => ({
+      task_type: normalizeText(item?.task_type).toUpperCase().slice(0, 12),
+      label: normalizeText(item?.label).slice(0, 40),
+      count: Number.isFinite(Number(item?.count)) ? Math.max(0, Math.round(Number(item.count))) : 0,
+      minutes: Number.isFinite(Number(item?.minutes)) ? Math.max(0, Math.round(Number(item.minutes))) : 0,
+      focus: normalizeText(item?.focus).slice(0, 100),
+      route: normalizeText(item?.route).slice(0, 80)
+    }))
+  };
 }
 
 async function performAgentRequest({ token, payload, path = AGENT_CHAT_PATH } = {}) {
@@ -196,6 +294,95 @@ async function performAgentRequest({ token, payload, path = AGENT_CHAT_PATH } = 
   }
 }
 
+async function performAgentSessionRequest({ method = "GET", query = {}, payload = null } = {}) {
+  const token = await resolveAccessToken();
+  if (!token) {
+    return {
+      ok: false,
+      message: "请先登录后再使用 AI 私教。",
+      reason_code: "auth_failed"
+    };
+  }
+
+  let result = await performAuthorizedJsonRequest({
+    token,
+    method,
+    path: buildPathWithQuery(AGENT_SESSION_PATH, query),
+    payload
+  });
+
+  if (result.status === 401) {
+    const refreshedToken = await resolveAccessToken({ forceRefresh: true });
+    if (refreshedToken && refreshedToken !== token) {
+      result = await performAuthorizedJsonRequest({
+        token: refreshedToken,
+        method,
+        path: buildPathWithQuery(AGENT_SESSION_PATH, query),
+        payload
+      });
+    }
+  }
+
+  if (result.networkError) return result.networkError;
+  if (result.payload && result.status >= 400) return normalizeFailurePayload(result.payload, result.status);
+  if (!result.payload) {
+    return {
+      ok: false,
+      message: "网络连接不太稳定，请稍后再试。",
+      reason_code: "network_error"
+    };
+  }
+
+  return normalizeSessionPayload(result.payload);
+}
+
+async function performAuthorizedJsonRequest({ token, method = "GET", path, payload = null } = {}) {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => {
+        controller.abort();
+      }, AGENT_CLIENT_TIMEOUT_MS)
+    : null;
+
+  try {
+    const normalizedMethod = normalizeText(method).toUpperCase() || "GET";
+    const response = await fetch(getApiUrl(path || AGENT_SESSION_PATH), {
+      method: normalizedMethod,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: normalizedMethod === "GET" ? undefined : JSON.stringify(payload || {}),
+      signal: controller?.signal
+    });
+
+    return {
+      status: Number(response.status || 0),
+      payload: await readJsonPayload(response)
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return {
+        networkError: {
+          ok: false,
+          message: "AI 私教连接超时，请稍后再试。",
+          reason_code: "provider_timeout"
+        }
+      };
+    }
+
+    return {
+      networkError: {
+        ok: false,
+        message: "网络连接不太稳定，请稍后再试。",
+        reason_code: "network_error"
+      }
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export async function loadAgentOverview(authStore) {
   const [homeAnalytics, profilePortrait, recentTaskSnapshot] = await Promise.all([
     loadHomeAnalyticsSnapshotForAuth(authStore).catch(() => ({
@@ -220,6 +407,7 @@ function normalizeSuccessPayload(payload) {
   return {
     ok: true,
     reply: normalizeText(payload?.reply),
+    session_id: normalizeText(payload?.session_id),
     plan_suggestion: isPlainObject(payload?.plan_suggestion) ? payload.plan_suggestion : null,
     model: normalizeText(payload?.model),
     provider: normalizeText(payload?.provider),
@@ -230,6 +418,20 @@ function normalizeSuccessPayload(payload) {
   };
 }
 
+function normalizeSessionPayload(payload) {
+  return {
+    ok: payload?.ok !== false,
+    session: isPlainObject(payload?.session) ? payload.session : null,
+    messages: Array.isArray(payload?.messages) ? payload.messages : [],
+    sessions: Array.isArray(payload?.sessions) ? payload.sessions : [],
+    access: isPlainObject(payload?.access) ? payload.access : null,
+    latency_ms: Number.isFinite(Number(payload?.latency_ms)) ? Math.round(Number(payload.latency_ms)) : 0,
+    reason_code: normalizeText(payload?.reason_code) || "ok",
+    request_id: normalizeText(payload?.request_id),
+    message: normalizeText(payload?.message)
+  };
+}
+
 function normalizeFailurePayload(payload, status = 0) {
   const reasonCode = normalizeText(payload?.reason_code || payload?.error);
   if (Number(status) === 401 || reasonCode === "auth_failed") {
@@ -237,6 +439,24 @@ function normalizeFailurePayload(payload, status = 0) {
       ok: false,
       message: normalizeText(payload?.message) || "请先登录后再使用 AI 私教。",
       reason_code: "auth_failed",
+      request_id: normalizeText(payload?.request_id)
+    };
+  }
+
+  if (reasonCode === "vip_required") {
+    return {
+      ok: false,
+      message: normalizeText(payload?.message) || "AI 私教为 VIP 专属功能。",
+      reason_code: "vip_required",
+      request_id: normalizeText(payload?.request_id)
+    };
+  }
+
+  if (reasonCode === "agent_memory_not_ready") {
+    return {
+      ok: false,
+      message: normalizeText(payload?.message) || "Agent 记忆表还没有创建，请先在 Supabase SQL Editor 执行 db/agent-memory-v1.sql。",
+      reason_code: "agent_memory_not_ready",
       request_id: normalizeText(payload?.request_id)
     };
   }
@@ -449,6 +669,20 @@ async function readJsonPayload(response) {
   } catch {
     return {};
   }
+}
+
+function buildPathWithQuery(path, query = {}) {
+  const params = new URLSearchParams();
+  Object.entries(query || {}).forEach(([key, value]) => {
+    const normalizedKey = normalizeText(key);
+    const normalizedValue = normalizeText(value);
+    if (normalizedKey && normalizedValue) {
+      params.set(normalizedKey, normalizedValue);
+    }
+  });
+
+  const queryString = params.toString();
+  return queryString ? `${path}?${queryString}` : path;
 }
 
 function normalizeTaskType(value) {

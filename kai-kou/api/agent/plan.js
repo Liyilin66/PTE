@@ -3,6 +3,7 @@ import {
   getAgentDailyPlan,
   saveAgentDailyPlan
 } from "../../backend/agent/agent-plan-service.js";
+import { AgentMemoryError, requireAgentVip } from "../../backend/agent/agent-memory-service.js";
 import { BillingRequestError, handleOptions, readJsonBody, respondJson } from "../../backend/billing/http.js";
 import { requireAuthenticatedUser } from "../../backend/billing/supabase-admin.js";
 
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
     }
 
     const { user, supabase } = await requireAuthenticatedUser(req);
+    await requireAgentVip({ supabase, user });
     let payload = {};
     if (method === "POST") {
       payload = readJsonBody(req);
@@ -51,6 +53,17 @@ export default async function handler(req, res) {
         plan: null,
         message: "请先登录后再使用可执行计划。",
         reason_code: "auth_failed",
+        request_id: requestId,
+        latency_ms: elapsedMs(startedAt)
+      });
+    }
+
+    if (error instanceof AgentMemoryError) {
+      return respondJson(res, error.status, {
+        ok: false,
+        plan: null,
+        message: error.message,
+        reason_code: error.reason_code,
         request_id: requestId,
         latency_ms: elapsedMs(startedAt)
       });

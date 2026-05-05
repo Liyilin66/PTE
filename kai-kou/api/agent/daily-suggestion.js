@@ -1,4 +1,5 @@
 import { buildDailySuggestionResponse } from "../../backend/agent/daily-suggestion-service.js";
+import { AgentMemoryError, requireAgentVip } from "../../backend/agent/agent-memory-service.js";
 import { BillingRequestError, handleOptions, readJsonBody, respondJson } from "../../backend/billing/http.js";
 import { requireAuthenticatedUser } from "../../backend/billing/supabase-admin.js";
 
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
 
     const body = readJsonBody(req);
     const { user, supabase } = await requireAuthenticatedUser(req);
+    await requireAgentVip({ supabase, user });
     const payload = await buildDailySuggestionResponse({
       supabase,
       user,
@@ -43,34 +45,26 @@ export default async function handler(req, res) {
       });
     }
 
+    if (error instanceof AgentMemoryError) {
+      return respondJson(res, error.status, {
+        ok: false,
+        message: error.message,
+        reason_code: error.reason_code,
+        request_id: requestId,
+        latency_ms: elapsedMs(startedAt)
+      });
+    }
+
     console.warn("[daily-suggestion] request failed", JSON.stringify({
       request_id: requestId,
       reason_code: normalizeText(error?.code || error?.name || "unexpected_error"),
       total_ms: elapsedMs(startedAt)
     }));
 
-    return respondJson(res, 200, {
-      ok: true,
-      suggestion: {
-        title: "今日 AI 建议",
-        main_task_type: "RA",
-        headline: "先完成一轮基础测温",
-        reason: "AI 建议暂时不可用，先用保守训练计划兜底。",
-        advice: "先做 RA 2 道、DI 2 道、WFD 5 道，完成后刷新首页再看新的建议。",
-        tasks: [
-          { task_type: "RA", count: 2 },
-          { task_type: "DI", count: 2 },
-          { task_type: "WFD", count: 5 }
-        ],
-        cta_text: "开始练习"
-      },
-      generated_at: new Date().toISOString(),
-      source: "fallback",
-      practice_signature: "",
-      summary: null,
-      model: "",
-      provider: "local_fallback",
-      reason_code: "fallback_unexpected_error",
+    return respondJson(res, 503, {
+      ok: false,
+      message: "今日 AI 建议暂时不可用，请稍后刷新。",
+      reason_code: "daily_suggestion_unavailable",
       request_id: requestId,
       latency_ms: elapsedMs(startedAt)
     });

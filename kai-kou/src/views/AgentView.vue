@@ -1,41 +1,88 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import AIWorkspace from "@/components/agent/AIWorkspace.vue";
+import AITutorLoading from "@/components/agent/AITutorLoading.vue";
+import AgentIcon from "@/components/agent/AgentIcon.vue";
 import { parseAgentContent } from "@/lib/agent-rich-content";
-import { loadAgentOverview, requestDailyAiSuggestion, sendAgentMessage } from "@/lib/agent";
+import {
+  createAgentNewSession,
+  deleteAgentChatHistory,
+  deleteAgentSession,
+  loadAgentMainSession,
+  loadAgentOverview,
+  loadAgentSessionList,
+  loadAgentSessionMessages,
+  requestDailyAiSuggestion,
+  sendAgentMessage,
+  switchAgentSession
+} from "@/lib/agent";
 import { loadAgentPlan, saveAgentPlan } from "@/lib/agent-plan";
 import { useAuthStore } from "@/stores/auth";
 
-const DESIGN_WIDTH = 2560;
-const DESIGN_HEIGHT = 1399;
-const MAX_DESKTOP_SCALE = 0.67;
 const MAX_RECENT_MESSAGES = 10;
+const OPTIMISTIC_AGENT_SESSION_ID_PREFIX = "agent_local_";
 
 const router = useRouter();
 const authStore = useAuthStore();
 
 const draft = ref("");
 const pending = ref(false);
+const aiResponding = ref(false);
+const agentSessionSyncing = ref(false);
 const messagesBodyRef = ref(null);
 const conversationId = ref(`agent_${Date.now().toString(36)}`);
 const messages = ref([]);
+const agentSessionState = ref({
+  loading: true,
+  session: null,
+  error: "",
+  reasonCode: "",
+  isVip: false
+});
+const agentSessionHistory = ref([]);
+const agentHistoryLoading = ref(false);
+const agentHistoryError = ref("");
+const agentSessionSwitching = ref(false);
+const deletingAgentSessionId = ref("");
 const agentOverview = ref(null);
 const autoScrollEnabled = ref(false);
 const dailySuggestionState = ref({
   loading: false,
-  source: "mock",
-  suggestion: null
+  refreshing: false,
+  retrying: false,
+  source: "idle",
+  suggestion: null,
+  error: "",
+  reasonCode: "",
+  updatedAt: 0
 });
 const planState = ref({
   loading: false,
+  refreshing: false,
+  retrying: false,
   saving: false,
   error: "",
   reasonCode: "",
-  plan: null
+  plan: null,
+  updatedAt: 0
 });
 const planAttachStatus = ref({});
-const replicaScale = ref(MAX_DESKTOP_SCALE);
 const avatarLoadFailed = ref(false);
+const agentToast = ref("");
+let agentToastTimer = 0;
+let agentSessionSyncPromise = null;
+const agentRestoreInProgress = ref(true);
+const agentInsightsBackgroundInProgress = ref(false);
+const agentRestoreStepStatus = ref({
+  session: "going",
+  messages: "wait",
+  insights: "wait"
+});
+let agentInsightsBackgroundRequestSeq = 0;
+let dailySuggestionRequestSeq = 0;
+let executablePlanRequestSeq = 0;
+let lastAgentInsightRefreshAt = 0;
 
 const navItems = [
   { key: "home", label: "首页", icon: "home", target: "/home" },
@@ -47,113 +94,173 @@ const navItems = [
   { key: "profile", label: "个人中心", icon: "circle", target: "/profile" }
 ];
 
+const RESTORE_STEP_LABELS = {
+  done: "已完成",
+  going: "同步中",
+  wait: "待处理",
+  failed: "失败"
+};
+const AGENT_INSIGHT_CLIENT_TIMEOUT_MS = 45000;
+const AGENT_INSIGHT_REFRESH_DEBOUNCE_MS = 4000;
+const AGENT_DAILY_CACHE_TTL_MS = 2 * 60 * 1000;
+const AGENT_RESTORE_INSIGHT_STEP_MS = 2400;
+const AGENT_RESTORE_COMPLETE_STEP_MS = 160;
+const AGENT_DAILY_TIMEOUT_MESSAGE = "今日 AI 结论生成超时，请稍后重试。";
+const AGENT_PLAN_TIMEOUT_MESSAGE = "今日计划加载超时，请稍后重试。";
+const PLAN_NO_PLAN_MESSAGE = "向 AI 说：帮我生成今日计划。";
+const AGENT_INSIGHTS_CACHE_PREFIX = "agent-insights-v2";
+
 const quickActions = [
   {
     id: "weakness",
-    label: "分析我的弱项",
+    label: "分析弱项",
     prompt: "根据我最近的练习记录，帮我分析当前最弱的题型和原因。",
-    icon: "trend"
+    icon: "trend",
+    helper: "定位最该先补的题型"
   },
   {
     id: "today-plan",
     label: "生成今日计划",
     prompt: "根据我最近的练习记录，帮我生成今天的训练计划。",
-    icon: "calendar"
+    icon: "calendar",
+    helper: "拆成可执行训练步骤"
   },
   {
     id: "explain-score",
-    label: "解释这次低分",
+    label: "解释低分",
     prompt: "为什么这次 DI 分低？请结合我最近的记录，直接告诉我主要问题和改进方向。",
-    icon: "question"
+    icon: "question",
+    helper: "找出扣分原因"
   },
   {
     id: "training",
-    label: "安排 40 分钟训练",
+    label: "安排 40 分钟",
     prompt: "帮我安排今晚 40 分钟训练，按题型和时间拆成可执行步骤。",
-    icon: "clock"
+    icon: "clock",
+    helper: "给出训练节奏"
   },
   {
     id: "encourage",
-    label: "给我鼓励一下",
+    label: "给我鼓励",
     prompt: "我有点没信心了，请根据我的备考情况鼓励我一下，并给我一个马上能做的小任务。",
-    icon: "heart"
+    icon: "heart",
+    helper: "调整状态再继续"
   }
 ];
 
-const emptyFeatureActions = quickActions.slice(0, 4);
-
-const emptyInfoCards = [
+const capabilityCards = [
   {
-    id: "ask",
-    title: "你可以这样问",
-    icon: "message",
-    items: ["我口语流利度总是扣分，怎么办？", "写作 Task 2 如何提高逻辑性？", "Describe Image 的高分技巧？"]
+    id: "diagnose",
+    title: "诊断",
+    text: "把近期练习、分数和薄弱题型整理成优先级。",
+    icon: "trend"
   },
   {
-    id: "help",
-    title: "它可以帮你做什么",
-    icon: "star",
-    items: ["分析练习数据，定位薄弱项", "提供个性化学习建议与方法", "制定计划并跟踪学习进度"]
+    id: "plan",
+    title: "计划",
+    text: "把建议转成今天能执行的题型、次数和训练顺序。",
+    icon: "plan"
   },
   {
-    id: "recommend",
-    title: "根据最近练习推荐",
-    icon: "like",
-    items: ["为什么阅读选择题正确率低？", "听力填空总丢分，如何突破？", "口语发音如何快速改善？"]
+    id: "coach",
+    title: "陪练",
+    text: "在聊天中继续追问，直到下一步动作足够清楚。",
+    icon: "chat"
   }
+];
+
+const restoreChecklist = [
+  { id: "session", title: "连接主聊天", copy: "确认你的长期 AI 私教会话" },
+  { id: "messages", title: "恢复最近消息", copy: "拉取上次对话与训练上下文" },
+  { id: "insights", title: "同步今日洞察", copy: "准备结论、计划和推荐追问" }
+];
+
+const agentAccessFeatureItems = [
+  "恢复长期 AI 私教主聊天",
+  "结合真实练习记录分析弱项",
+  "生成并接入今日可执行计划",
+  "保留历史对话与训练上下文"
 ];
 
 const recommendedQuestions = [
   {
-    text: "我在 DI 上有哪些具体弱点？",
-    prompt: "我在 DI 上有哪些具体弱点？请结合我的练习记录给出优先级。"
+    text: "我今天最应该先练哪个题型？",
+    prompt: "我今天最应该先练哪个题型？请结合我的练习记录给出理由和训练顺序。"
   },
   {
-    text: "如何提升 RTS 复述流畅度？",
+    text: "DI 如何快速提高信息覆盖率？",
+    prompt: "DI 如何快速提高信息覆盖率？请给我一个今天可以执行的练习方法。"
+  },
+  {
+    text: "RTS 复述流畅度怎么练？",
     prompt: "如何提升 RTS 复述流畅度？请给我 3 个可以今天执行的训练动作。"
   },
   {
-    text: "WFD 写作如何拿高分？",
-    prompt: "WFD 写作如何拿高分？请按听写、拼写、复盘三个阶段说明。"
-  },
-  {
-    text: "口语发音如何改进？",
-    prompt: "口语发音如何改进？请指出最容易提分的练习方式。"
+    text: "WFD 总丢冠词和复数怎么办？",
+    prompt: "WFD 总丢冠词和复数怎么办？请按听写、检查、复盘三个阶段说明。"
   }
+];
+
+const vipLockFeatures = [
+  "恢复长期 AI 私教主聊天",
+  "结合真实练习记录分析弱项",
+  "生成并接入今日可执行计划",
+  "保留历史对话与训练上下文"
 ];
 
 const PLAN_GENERATION_PROMPT = "帮我生成今日可执行训练计划，并用表格展示。";
 
-const fallbackConclusion = {
-  label: "AI 聚焦",
-  title: "DI 是当前提分关键点",
-  summary: "主要问题是信息抓取不完整和时间分配不均，先把表达顺序和关键信息覆盖率稳住。",
-  cta: "去练 RA"
+const TASK_META = {
+  RA: {
+    label: "复述题训练",
+    route: "/ra",
+    color: "#2bbfa4",
+    minutes: 10,
+    focus: "保持开口稳定，减少长停顿"
+  },
+  WFD: {
+    label: "听写填空训练",
+    route: "/wfd",
+    color: "#4f7df3",
+    minutes: 10,
+    focus: "先听主干，再补冠词和复数"
+  },
+  WE: {
+    label: "学术短文写作",
+    route: "/we",
+    color: "#7b6df2",
+    minutes: 8,
+    focus: "先列结构，再写正文"
+  },
+  DI: {
+    label: "图表专项练习",
+    route: "/di",
+    color: "#18a8b6",
+    minutes: 15,
+    focus: "先说主图信息，再补关键细节"
+  },
+  RTS: {
+    label: "复述句子",
+    route: "/rts/practice",
+    color: "#d98a1b",
+    minutes: 10,
+    focus: "抓住场景和任务，再复述动作"
+  }
 };
 
 watch(
-  () => [messages.value.length, pending.value],
+  () => [messages.value.length, aiResponding.value],
   async () => {
     if (!autoScrollEnabled.value) return;
     await nextTick();
-    scrollToBottom(pending.value ? "auto" : "smooth");
+    scrollToBottom(aiResponding.value ? "auto" : "smooth");
   }
 );
-
-const scaledSlotStyle = computed(() => ({
-  width: `${Math.ceil(DESIGN_WIDTH * replicaScale.value)}px`,
-  height: `${Math.ceil(DESIGN_HEIGHT * replicaScale.value)}px`
-}));
-
-const canvasScaleStyle = computed(() => ({
-  transform: `scale(${replicaScale.value})`
-}));
 
 const userDisplayName = computed(() => {
   if (!authStore.isLoggedIn && authStore.loaded) return "未登录";
   return authStore.displayName || "yli71641";
 });
-
 const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
 const showUserAvatar = computed(() => Boolean(userAvatarUrl.value) && !avatarLoadFailed.value);
 const userInitial = computed(() => {
@@ -162,10 +269,301 @@ const userInitial = computed(() => {
 });
 
 const recentTaskSnapshot = computed(() => agentOverview.value?.recentTaskSnapshot || null);
+const currentAgentSessionId = computed(() => normalizeText(agentSessionState.value.session?.id));
+const isAgentSessionLoading = computed(() => Boolean(agentSessionState.value.loading));
+const isAgentRestoring = computed(() => agentRestoreInProgress.value || isAgentSessionLoading.value);
+const isAgentLocked = computed(() => isAgentAccessFailure(agentSessionState.value.reasonCode));
+const isAgentMemoryNotReady = computed(() => normalizeText(agentSessionState.value.reasonCode) === "agent_memory_not_ready");
+const canUseAgent = computed(() => (
+  authStore.isLoggedIn
+  && agentSessionState.value.isVip
+  && Boolean(currentAgentSessionId.value)
+  && !agentSessionState.value.error
+  && !isAgentSessionLoading.value
+));
+const canLoadAgentInsights = computed(() => (
+  authStore.isLoggedIn
+  && !isAgentLocked.value
+  && !isAgentMemoryNotReady.value
+));
+const composerDisabled = computed(() => pending.value || agentSessionSwitching.value || Boolean(deletingAgentSessionId.value) || !canUseAgent.value);
+const historyBusy = computed(() => agentSessionSwitching.value || Boolean(deletingAgentSessionId.value));
+const isConversationEmpty = computed(() => messages.value.length === 0);
+const displayAgentSessionHistory = computed(() => (
+  Array.isArray(agentSessionHistory.value) ? agentSessionHistory.value : []
+)
+  .filter((session) => normalizeText(session?.id))
+  .slice(0, 10)
+  .map((session) => ({
+    id: normalizeText(session.id),
+    title: normalizeText(session.title) || "未命名对话",
+    time: formatHistoryTime(session.last_message_at || session.updated_at || session.created_at),
+    active: normalizeText(session.id) === currentAgentSessionId.value,
+    messageCount: Number.isFinite(Number(session.message_count)) ? Math.max(0, Math.round(Number(session.message_count))) : 0,
+    preview: normalizeText(session.preview)
+  })));
+
+const agentWorkspaceState = computed(() => {
+  if (isAgentRestoring.value) return "restoring";
+  if (!authStore.isLoggedIn) return "unavailable";
+  if (isAgentLocked.value) return "locked";
+  if (agentSessionState.value.error) return "failed";
+  return isConversationEmpty.value ? "empty" : "chat";
+});
+const agentLoadingNavItems = computed(() => navItems.map((item) => ({
+  key: item.key,
+  label: item.label,
+  icon: item.icon,
+  to: item.target,
+  active: item.key === "agent",
+  // Keep this explicit so future entries without real routes stay disabled
+  // instead of pretending to navigate somewhere.
+  disabled: !item.target,
+  disabledReason: item.target ? "" : "该页面暂未开放"
+})));
+const agentRestoreSteps = computed(() => restoreChecklist.map((item) => {
+  const status = agentRestoreStepStatus.value[item.id] || "wait";
+  return {
+    name: item.title,
+    desc: item.copy,
+    status,
+    label: item.id === "insights" && status === "done" && agentInsightsBackgroundInProgress.value
+      ? "后台继续"
+      : RESTORE_STEP_LABELS[status] || RESTORE_STEP_LABELS.wait
+  };
+}));
+const agentFailedSteps = computed(() => restoreChecklist.map((item) => {
+  const status = agentRestoreStepStatus.value[item.id] || "wait";
+  return {
+    name: item.title,
+    desc: item.copy,
+    status,
+    label: RESTORE_STEP_LABELS[status] || RESTORE_STEP_LABELS.wait
+  };
+}));
+const agentRestoreProgressPercent = computed(() => {
+  const status = agentRestoreStepStatus.value;
+  if (status.insights === "done") return 100;
+  if (status.insights === "going") return 72;
+  if (status.messages === "done") return 58;
+  if (status.messages === "going") return 42;
+  if (status.session === "done") return 30;
+  return 18;
+});
+const agentFailedProgressPercent = computed(() => {
+  const status = agentRestoreStepStatus.value;
+  if (status.insights === "failed") return 72;
+  if (status.messages === "failed") return 58;
+  if (status.session === "failed") return 24;
+  return Math.max(24, Math.min(72, agentRestoreProgressPercent.value));
+});
+const agentFailedProgressNote = computed(() => (
+  agentSessionState.value.error || "恢复中断，请稍后重试。"
+));
+const isWarmShellState = computed(() => (
+  ["restoring", "failed", "locked", "unavailable"].includes(agentWorkspaceState.value)
+));
+const isAgentAccessState = computed(() => (
+  agentWorkspaceState.value === "locked" || agentWorkspaceState.value === "unavailable"
+));
+const agentWarmShellSteps = computed(() => {
+  if (agentWorkspaceState.value === "failed") return agentFailedSteps.value;
+  if (agentWorkspaceState.value === "restoring") return agentRestoreSteps.value;
+  return [];
+});
+const agentWarmShellFeatures = computed(() => (
+  isAgentAccessState.value ? agentAccessFeatureItems : []
+));
+const agentWarmShellProgressPercent = computed(() => {
+  if (agentWorkspaceState.value === "failed") return agentFailedProgressPercent.value;
+  if (isAgentAccessState.value) return 36;
+  return agentRestoreProgressPercent.value;
+});
+const agentWarmShellTitle = computed(() => {
+  if (isAgentAccessState.value) return "AI 私教为 VIP 专属功能";
+  if (agentWorkspaceState.value === "failed") return "暂时没能恢复 AI 私教聊天";
+  return "";
+});
+const agentWarmShellSubtitle = computed(() => {
+  if (isAgentAccessState.value) return "当前账号暂时不能使用 AI 私教。升级后可恢复聊天、生成今日计划与专属建议。";
+  if (agentWorkspaceState.value === "failed") return "AI 私教暂时不可用，请稍后再试。";
+  return "";
+});
+const agentWarmShellProgressNote = computed(() => {
+  if (isAgentAccessState.value) return "当前只保留权益说明和返回入口，不显示生成计划或推荐追问。";
+  if (agentWorkspaceState.value === "failed") return agentFailedProgressNote.value;
+  return "";
+});
+const agentWarmPrimaryActionLabel = computed(() => {
+  if (isAgentAccessState.value) return "查看 VIP 权益";
+  if (agentWorkspaceState.value === "failed") return "重新恢复";
+  return "";
+});
+const agentWarmPrimaryActionLoadingLabel = computed(() => (
+  agentWorkspaceState.value === "failed" ? "恢复中..." : ""
+));
+const agentWarmSecondaryActionLabel = computed(() => {
+  if (isAgentAccessState.value) return "返回练习中心";
+  if (agentWorkspaceState.value === "failed") return "返回首页";
+  return "";
+});
+const isBlockingWorkspaceState = computed(() => (
+  ["restoring", "unavailable", "locked", "failed"].includes(agentWorkspaceState.value)
+));
+const workspaceStatusLabel = computed(() => {
+  const labels = {
+    restoring: "正在恢复",
+    unavailable: "暂不可用",
+    locked: "VIP 专属",
+    failed: "恢复失败",
+    empty: "可开始新对话",
+    chat: "聊天进行中"
+  };
+  return labels[agentWorkspaceState.value] || "AI 私教";
+});
+const workspaceStateMeta = computed(() => {
+  const states = {
+    restoring: {
+      icon: "loader",
+      eyebrow: "Entering workspace",
+      title: "正在进入 AI 私教工作台",
+      description: "正在连接主聊天、恢复最近消息，并同步今天的训练洞察。恢复完成后会直接进入可输入、可追问、可接入计划的工作台。",
+      primaryLabel: "",
+      secondaryLabel: ""
+    },
+    unavailable: {
+      icon: "lock",
+      eyebrow: "Account required",
+      title: "登录后恢复 AI 私教聊天",
+      description: "AI 私教会把长期聊天、今日重点和训练计划绑定到你的账号。",
+      primaryLabel: "去登录",
+      secondaryLabel: "返回首页"
+    },
+    locked: {
+      icon: "shield",
+      eyebrow: "VIP workspace",
+      title: "AI 私教为 VIP 专属功能",
+      description: "当前账号暂时不能使用 AI 私教。这里不会展示生成计划、追问等不可执行入口，避免和不可用状态冲突。",
+      primaryLabel: "查看 VIP 权益",
+      secondaryLabel: "返回练习中心"
+    },
+    failed: {
+      icon: "alert",
+      eyebrow: isAgentMemoryNotReady.value ? "Setup required" : "Recovery failed",
+      title: isAgentMemoryNotReady.value ? "AI 私教记忆表还没有准备好" : "暂时没能恢复 AI 私教聊天",
+      description: agentSessionState.value.error || "主聊天或最近消息加载失败。你可以重新恢复，或先回首页继续练习。",
+      primaryLabel: isAgentMemoryNotReady.value ? "重新检查" : "重新恢复",
+      secondaryLabel: "返回首页"
+    }
+  };
+  return states[agentWorkspaceState.value] || states.restoring;
+});
+
+const showInsightPanel = computed(() => ["restoring", "empty", "chat"].includes(agentWorkspaceState.value));
+const workbenchTitle = computed(() => {
+  if (isBlockingWorkspaceState.value) return workspaceStateMeta.value.title;
+  return isConversationEmpty.value ? "开启新的 AI 私教对话" : "继续 AI 私教聊天";
+});
+const workbenchDescription = computed(() => {
+  if (isBlockingWorkspaceState.value) return workspaceStateMeta.value.description;
+  if (isConversationEmpty.value) return "输入框是主入口：直接提问，或选择快捷入口，让 AI 把练习记录转成今天的训练动作。";
+  return "历史聊天已恢复。你可以继续追问、接入 AI 计划，或围绕右侧简报继续拆解训练动作。";
+});
+const stateSupportText = computed(() => {
+  const state = agentWorkspaceState.value;
+  if (state === "restoring") return "恢复中不展示不可执行 CTA，只呈现当前进度。";
+  if (state === "unavailable") return "当前只提供登录和返回入口，不展示任何依赖私教能力的操作。";
+  if (state === "locked") return "当前只保留权益说明和返回入口，不显示生成计划或推荐追问。";
+  if (state === "failed" && isAgentMemoryNotReady.value) return "需要先完成 Supabase 记忆表配置。";
+  if (state === "failed") return "重试会重新请求主聊天、最近消息和训练洞察。";
+  return "";
+});
+
+const overviewStats = computed(() => {
+  const snapshot = recentTaskSnapshot.value || {};
+  return [
+    {
+      label: "最近样本",
+      value: Number(snapshot.recentAttempts || 0) ? `${snapshot.recentAttempts}` : "待积累",
+      helper: "用于判断训练趋势"
+    },
+    {
+      label: "7 天练习",
+      value: Number(snapshot.recent7DayAttempts || 0) ? `${snapshot.recent7DayAttempts}` : "0",
+      helper: "最近一周完成次数"
+    },
+    {
+      label: "平均表现",
+      value: formatOptionalMetric(snapshot.averageScore),
+      helper: "折算后的综合表现"
+    },
+    {
+      label: "优先题型",
+      value: normalizeReadableText(snapshot.weakTaskTypeLabel) || normalizeReadableText(snapshot.weakTaskType) || "待识别",
+      helper: snapshot.sampleInsufficient ? "样本不足时仅作参考" : "按近期最低表现排序"
+    }
+  ];
+});
+const practiceOverviewRows = computed(() => {
+  const snapshot = recentTaskSnapshot.value || {};
+  const recentAttempts = Number(snapshot.recentAttempts || 0);
+  const recent7DayAttempts = Number(snapshot.recent7DayAttempts || 0);
+  const averageScore = Number(snapshot.averageScore);
+  const weakTask = normalizeReadableText(snapshot.weakTaskTypeLabel) || normalizeReadableText(snapshot.weakTaskType) || "待识别";
+
+  return [
+    {
+      code: "样本",
+      label: "最近样本",
+      value: recentAttempts ? `${recentAttempts} 次` : "待积累",
+      pct: Math.min(100, recentAttempts * 8),
+      color: "#5b5cf6"
+    },
+    {
+      code: "7天",
+      label: "最近一周",
+      value: `${recent7DayAttempts || 0} 次`,
+      pct: Math.min(100, recent7DayAttempts * 14),
+      color: "#16a6b1"
+    },
+    {
+      code: "均分",
+      label: "平均表现",
+      value: Number.isFinite(averageScore) ? `${averageScore}` : "待识别",
+      pct: Number.isFinite(averageScore) ? Math.max(0, Math.min(100, Math.round((averageScore / 90) * 100))) : 0,
+      color: "#d78a1f"
+    },
+    {
+      code: "重点",
+      label: "优先题型",
+      value: weakTask,
+      pct: weakTask === "待识别" ? 0 : 58,
+      color: "#7c3aed"
+    }
+  ];
+});
+
+const hasDailyConclusionData = computed(() => {
+  const suggestion = dailySuggestionState.value.suggestion;
+  if (!suggestion) return false;
+  return Boolean(
+    normalizeReadableText(suggestion.headline)
+    || normalizeReadableText(suggestion.reason)
+    || normalizeReadableText(suggestion.advice)
+  );
+});
 const dailyConclusion = computed(() => {
+  if (dailySuggestionState.value.loading && !hasDailyConclusionData.value) {
+    return {
+      label: "正在分析",
+      title: "正在读取练习记录",
+      summary: "正在整理 practice_logs 和今日训练信号，稍后会生成更具体的结论。",
+      cta: ""
+    };
+  }
+
   const suggestion = dailySuggestionState.value.suggestion;
   const taskType = normalizeReadableText(suggestion?.main_task_type).toUpperCase();
-  const actionTaskType = taskType || "RA";
   const headline = normalizeReadableText(suggestion?.headline);
   const reason = normalizeReadableText(suggestion?.reason);
   const advice = normalizeReadableText(suggestion?.advice);
@@ -173,40 +571,255 @@ const dailyConclusion = computed(() => {
 
   if (suggestion && (headline || summaryParts.length)) {
     return {
-      label: taskType ? `今日重点 · ${actionTaskType}` : fallbackConclusion.label,
-      title: headline || fallbackConclusion.title,
-      summary: summaryParts.join(" "),
-      cta: `去练 ${actionTaskType}`
+      label: taskType ? `今日重点 · ${taskType}` : "今日重点",
+      title: headline || "已读取今日练习信号",
+      summary: summaryParts.join(" ") || "今日建议已经生成，可以继续追问我怎么执行。",
+      cta: "展开分析"
     };
   }
 
-  return fallbackConclusion;
+  return {
+    label: "AI 聚焦",
+    title: "今日结论暂不可用",
+    summary: dailySuggestionState.value.error || "恢复完成并读取到真实练习记录后，这里会显示今日结论。",
+    cta: ""
+  };
 });
 
 const activePlan = computed(() => planState.value.plan || null);
+const isPlanNoPlan = computed(() => normalizeText(planState.value.reasonCode) === "no_plan" && !activePlan.value);
 const executablePlanItems = computed(() => (
   Array.isArray(activePlan.value?.items) ? activePlan.value.items : []
 ));
-const totalPlanMinutes = computed(() => Math.max(0, Math.round(Number(activePlan.value?.total_minutes || 0))));
-const remainingPlanMinutes = computed(() => Math.max(0, Math.round(Number(activePlan.value?.remaining_minutes || 0))));
-const planProgressPercentage = computed(() => Math.max(0, Math.min(100, Math.round(Number(activePlan.value?.progress_percentage || 0)))));
-const hasExecutablePlan = computed(() => Boolean(activePlan.value && executablePlanItems.value.length));
+const suggestionPlanItems = computed(() => {
+  const tasks = dailySuggestionState.value.suggestion?.tasks;
+  return (Array.isArray(tasks) ? tasks : [])
+    .map((item) => {
+      const taskType = normalizeText(item?.task_type).toUpperCase();
+      const meta = TASK_META[taskType];
+      if (!meta) return null;
+      const targetCount = Math.max(1, Math.round(Number(item?.count || 1)));
+      return {
+        task_type: taskType,
+        label: meta.label,
+        count: targetCount,
+        target_count: targetCount,
+        completed_count: 0,
+        effective_completed_count: 0,
+        minutes: meta.minutes,
+        remaining_minutes: meta.minutes,
+        focus: meta.focus,
+        route: meta.route,
+        color: meta.color,
+        is_complete: false,
+        is_draft: true,
+        source: "daily-suggestion"
+      };
+    })
+    .filter(Boolean);
+});
+const draftPlanSuggestion = computed(() => {
+  if (!suggestionPlanItems.value.length) return null;
+  const suggestion = dailySuggestionState.value.suggestion;
+  return {
+    title: normalizeReadableText(suggestion?.headline) || "今日 AI 建议计划",
+    source: "daily_suggestion",
+    variant: normalizeText(dailySuggestionState.value.source),
+    items: suggestionPlanItems.value.map((item) => ({
+      task_type: item.task_type,
+      label: item.label,
+      count: item.count,
+      minutes: item.minutes,
+      focus: item.focus,
+      route: item.route,
+      color: item.color
+    }))
+  };
+});
+const displayPlanItems = computed(() => {
+  if (executablePlanItems.value.length) return executablePlanItems.value;
+  if (isPlanNoPlan.value) return [];
+  return suggestionPlanItems.value;
+});
+const hasExecutablePlan = computed(() => Boolean(displayPlanItems.value.length));
+const hasSavedExecutablePlan = computed(() => Boolean(activePlan.value && executablePlanItems.value.length));
 const isPlanComplete = computed(() => Boolean(activePlan.value?.is_complete));
+const totalPlanMinutes = computed(() => Math.max(0, Math.round(Number(activePlan.value?.total_minutes || 0))));
+const displayPlanTotalMinutes = computed(() => (
+  activePlan.value
+    ? totalPlanMinutes.value
+    : displayPlanItems.value.reduce((sum, item) => sum + Math.max(0, Math.round(Number(item.minutes || 0))), 0)
+));
+const remainingPlanMinutes = computed(() => (
+  activePlan.value
+    ? Math.max(0, Math.round(Number(activePlan.value?.remaining_minutes || 0)))
+    : 0
+));
+const planProgressPercentage = computed(() => (
+  activePlan.value
+    ? Math.max(0, Math.min(100, Math.round(Number(activePlan.value?.progress_percentage || 0))))
+    : 0
+));
+const planProgressDisplay = computed(() => (hasSavedExecutablePlan.value ? `${planProgressPercentage.value}%` : "待接入"));
+const planProgressAriaLabel = computed(() => (
+  hasSavedExecutablePlan.value
+    ? `计划完成度 ${planProgressPercentage.value}%`
+    : "AI 建议计划待接入"
+));
 const startTrainingLabel = computed(() => {
-  if (!hasExecutablePlan.value) return "去生成计划";
+  if (planState.value.saving) return "接入中...";
+  if (!hasSavedExecutablePlan.value) return "接入计划并开始";
   return isPlanComplete.value ? "今日计划已完成" : "开始训练";
 });
 const planStatusMessage = computed(() => {
   if (planState.value.loading) return "正在加载今日计划...";
+  if (planState.value.refreshing) return "正在更新今日计划...";
   if (planState.value.error) return planState.value.error;
-  if (!hasExecutablePlan.value) return "还没有可执行计划。向 AI 说：帮我生成今日计划。";
+  if (isPlanNoPlan.value) return PLAN_NO_PLAN_MESSAGE;
+  if (!hasExecutablePlan.value) return "向 AI 说：帮我生成今日计划。";
+  if (!hasSavedExecutablePlan.value) return "来自今日 AI 建议，接入后会用练习记录更新进度。";
   return "";
 });
-const isConversationEmpty = computed(() => messages.value.length === 0);
+
+const conclusionPanelState = computed(() => {
+  if (agentWorkspaceState.value === "restoring") return "loading";
+  if (dailySuggestionState.value.loading && !hasDailyConclusionData.value) return "loading";
+  return hasDailyConclusionData.value ? "ready" : "unavailable";
+});
+const planPanelState = computed(() => {
+  if (agentWorkspaceState.value === "restoring") return "loading";
+  if (hasSavedExecutablePlan.value) return "ready";
+  if (isPlanNoPlan.value) return "no_plan";
+  if (planState.value.loading && !hasExecutablePlan.value) return "loading";
+  return hasExecutablePlan.value ? "ready" : "unavailable";
+});
+const canUseRecommendedQuestions = computed(() => canUseAgent.value && !isAgentSessionLoading.value);
+const questionPanelState = computed(() => (canUseRecommendedQuestions.value ? "ready" : "unavailable"));
+const insightStatusText = computed(() => {
+  if (agentWorkspaceState.value === "restoring") return "正在同步工作台";
+  if (!canUseAgent.value) return "待恢复";
+  if (hasSavedExecutablePlan.value) return `计划进度 ${planProgressPercentage.value}%`;
+  return isConversationEmpty.value ? "可开始新对话" : "已进入聊天";
+});
+const conclusionUnavailableMessage = computed(() => {
+  if (dailySuggestionState.value.retrying) return "正在重新生成今日 AI 结论...";
+  if (dailySuggestionState.value.error) return dailySuggestionState.value.error;
+  if (!canUseAgent.value) return "恢复完成后，我会根据你的真实练习记录更新这里。";
+  return "暂时没有可展示的今日结论。你可以直接在中间输入框让 AI 分析。";
+});
+const planUnavailableTitle = computed(() => {
+  if (isPlanNoPlan.value) return "还没有可执行计划";
+  return planState.value.error ? "计划加载失败" : "暂无可执行计划";
+});
+const planUnavailableMessage = computed(() => {
+  if (planState.value.retrying) return "正在重新读取今日计划...";
+  if (planState.value.error) return planState.value.error;
+  if (isPlanNoPlan.value) return PLAN_NO_PLAN_MESSAGE;
+  if (!canUseAgent.value) return "恢复聊天完成后再生成或接入今日训练计划。";
+  return "向 AI 说：帮我生成今日计划。";
+});
+const questionUnavailableMessage = computed(() => (
+  canUseAgent.value
+    ? "暂时没有推荐追问，你可以直接输入自己的问题。"
+    : "恢复聊天完成后会显示可追问的问题。"
+));
+
+function resetAgentRestoreProgress() {
+  agentRestoreStepStatus.value = {
+    session: "going",
+    messages: "wait",
+    insights: "wait"
+  };
+}
+
+function setAgentRestoreStep(id, status) {
+  agentRestoreStepStatus.value = {
+    ...agentRestoreStepStatus.value,
+    [id]: status
+  };
+}
+
+function hydrateCachedAgentInsights() {
+  if (typeof window === "undefined") return;
+  const cacheKey = getAgentInsightsCacheKey();
+  if (!cacheKey) return;
+
+  try {
+    const cached = JSON.parse(window.sessionStorage.getItem(cacheKey) || "null");
+    if (!isPlainObject(cached) || cached.dateKey !== getAgentInsightsCacheDateKey()) return;
+
+    if (isPlainObject(cached.daily) && isPlainObject(cached.daily.suggestion)) {
+      dailySuggestionState.value = {
+        loading: false,
+        refreshing: false,
+        retrying: false,
+        source: normalizeText(cached.daily.source) || "cache",
+        suggestion: cached.daily.suggestion,
+        error: "",
+        reasonCode: normalizeText(cached.daily.reasonCode) || "ok",
+        updatedAt: Number(cached.daily.updatedAt || 0)
+      };
+    }
+
+    if (isPlainObject(cached.plan) && (isPlainObject(cached.plan.plan) || normalizeText(cached.plan.reasonCode) === "no_plan")) {
+      planState.value = {
+        loading: false,
+        refreshing: false,
+        retrying: false,
+        saving: false,
+        error: "",
+        reasonCode: normalizeText(cached.plan.reasonCode) || (cached.plan.plan ? "ok" : ""),
+        plan: isPlainObject(cached.plan.plan) ? cached.plan.plan : null,
+        updatedAt: Number(cached.plan.updatedAt || 0)
+      };
+    }
+  } catch {
+    window.sessionStorage.removeItem(cacheKey);
+  }
+}
+
+function persistCachedAgentInsights() {
+  if (typeof window === "undefined") return;
+  const cacheKey = getAgentInsightsCacheKey();
+  if (!cacheKey) return;
+
+  const cache = {
+    dateKey: getAgentInsightsCacheDateKey(),
+    daily: hasDailyConclusionData.value
+      ? {
+          source: dailySuggestionState.value.source,
+          suggestion: dailySuggestionState.value.suggestion,
+          reasonCode: dailySuggestionState.value.reasonCode || "ok",
+          updatedAt: dailySuggestionState.value.updatedAt || Date.now()
+        }
+      : null,
+    plan: activePlan.value || isPlanNoPlan.value
+      ? {
+          plan: activePlan.value,
+          reasonCode: isPlanNoPlan.value ? "no_plan" : (planState.value.reasonCode || "ok"),
+          updatedAt: planState.value.updatedAt || Date.now()
+        }
+      : null
+  };
+
+  try {
+    window.sessionStorage.setItem(cacheKey, JSON.stringify(cache));
+  } catch {
+    // Ignore storage quota/private-mode failures; the live state still works.
+  }
+}
+
+function getAgentInsightsCacheKey() {
+  const userId = normalizeText(authStore.user?.id);
+  return userId ? `${AGENT_INSIGHTS_CACHE_PREFIX}:${userId}` : "";
+}
+
+function getAgentInsightsCacheDateKey(date = new Date()) {
+  const chinaLocalMs = date.getTime() + 8 * 60 * 60 * 1000;
+  return new Date(chinaLocalMs).toISOString().slice(0, 10);
+}
 
 onMounted(async () => {
-  updateReplicaScale();
-  window.addEventListener("resize", updateReplicaScale);
   window.addEventListener("focus", handleWindowFocus);
   document.addEventListener("visibilitychange", handleVisibilityChange);
 
@@ -214,25 +827,154 @@ onMounted(async () => {
   if (authStore.isLoggedIn && !authStore.loaded) {
     await authStore.loadStatus();
   }
+  hydrateCachedAgentInsights();
 
-  await loadOverview();
-
-  await nextTick();
-  void loadDailySuggestion();
-  void refreshExecutablePlan();
+  await restoreAgentWorkspace();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("resize", updateReplicaScale);
   window.removeEventListener("focus", handleWindowFocus);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  if (agentToastTimer) window.clearTimeout(agentToastTimer);
 });
 
-function updateReplicaScale() {
-  if (typeof window === "undefined") return;
-  const widthScale = window.innerWidth / DESIGN_WIDTH;
-  const heightScale = window.innerHeight / DESIGN_HEIGHT;
-  replicaScale.value = Number(Math.max(0.1, Math.min(widthScale, heightScale, MAX_DESKTOP_SCALE)).toFixed(4));
+async function restoreAgentWorkspace() {
+  agentRestoreInProgress.value = true;
+  resetAgentRestoreProgress();
+
+  await loadAgentMemorySession();
+  if (!canUseAgent.value) {
+    agentRestoreInProgress.value = false;
+    return;
+  }
+
+  setAgentRestoreStep("insights", "going");
+  startAgentInsightsBackgroundRefresh({ reflectRestoreStep: false });
+  await waitForRestoreDisplayPace(AGENT_RESTORE_INSIGHT_STEP_MS);
+  if (!canUseAgent.value) {
+    agentRestoreInProgress.value = false;
+    return;
+  }
+  setAgentRestoreStep("insights", "done");
+  await nextTick();
+  await waitForRestoreDisplayPace(AGENT_RESTORE_COMPLETE_STEP_MS);
+  agentRestoreInProgress.value = false;
+  await nextTick();
+  if (messages.value.length) {
+    scrollToBottom("auto");
+  }
+}
+
+async function loadAgentMemorySession() {
+  messages.value = [];
+  planAttachStatus.value = {};
+
+  if (!authStore.isLoggedIn) {
+    agentSessionHistory.value = [];
+    agentHistoryError.value = "";
+    agentHistoryLoading.value = false;
+    agentSessionState.value = {
+      loading: false,
+      session: null,
+      error: "请先登录后再使用 AI 私教。",
+      reasonCode: "auth_failed",
+      isVip: false
+    };
+    agentRestoreInProgress.value = false;
+    return;
+  }
+
+  setAgentRestoreStep("session", "going");
+  setAgentRestoreStep("messages", "wait");
+  setAgentRestoreStep("insights", "wait");
+  agentSessionState.value = {
+    loading: true,
+    session: null,
+    error: "",
+    reasonCode: "",
+    isVip: false
+  };
+
+  let sessionResult;
+  try {
+    sessionResult = await loadAgentMainSession();
+  } catch {
+    sessionResult = {
+      ok: false,
+      message: "AI 私教会话暂时不可用，请稍后再试。",
+      reason_code: "session_error"
+    };
+  }
+  if (!sessionResult?.ok || !sessionResult?.session?.id) {
+    setAgentRestoreStep("session", "failed");
+    setAgentRestoreStep("messages", "wait");
+    setAgentRestoreStep("insights", "wait");
+    agentSessionState.value = {
+      loading: false,
+      session: null,
+      error: normalizeText(sessionResult?.message) || "AI 私教会话暂时不可用，请稍后再试。",
+      reasonCode: normalizeText(sessionResult?.reason_code) || "session_error",
+      isVip: false
+    };
+    agentRestoreInProgress.value = false;
+    return;
+  }
+
+  const session = sessionResult.session;
+  conversationId.value = session.id;
+  agentSessionHistory.value = normalizeSessionHistory(sessionResult.sessions);
+  setAgentRestoreStep("session", "done");
+  setAgentRestoreStep("messages", "going");
+  agentSessionState.value = {
+    loading: true,
+    session,
+    error: "",
+    reasonCode: "ok",
+    isVip: true
+  };
+
+  let messagesResult;
+  try {
+    messagesResult = await loadAgentSessionMessages(session.id);
+  } catch {
+    messagesResult = {
+      ok: false,
+      message: "AI 私教聊天记录暂时不可用，请稍后再试。",
+      reason_code: "messages_error"
+    };
+  }
+  if (!messagesResult?.ok) {
+    setAgentRestoreStep("messages", "failed");
+    setAgentRestoreStep("insights", "wait");
+    agentSessionState.value = {
+      loading: false,
+      session,
+      error: normalizeText(messagesResult?.message) || "AI 私教聊天记录暂时不可用，请稍后再试。",
+      reasonCode: normalizeText(messagesResult?.reason_code) || "messages_error",
+      isVip: true
+    };
+    agentRestoreInProgress.value = false;
+    return;
+  }
+
+  messages.value = normalizeStoredMessages(messagesResult.messages);
+  if (Array.isArray(messagesResult.sessions) && messagesResult.sessions.length) {
+    agentSessionHistory.value = normalizeSessionHistory(messagesResult.sessions);
+  }
+  await loadAgentHistoryList({ silent: true });
+  setAgentRestoreStep("messages", "done");
+  agentSessionState.value = {
+    loading: false,
+    session,
+    error: "",
+    reasonCode: "ok",
+    isVip: true
+  };
+
+  if (messages.value.length) {
+    await nextTick();
+    scrollToBottom("auto");
+  }
 }
 
 async function loadOverview() {
@@ -243,65 +985,396 @@ async function loadOverview() {
   }
 }
 
-async function loadDailySuggestion() {
+async function loadAgentHistoryList({ silent = false } = {}) {
+  if (!canUseAgent.value && !silent) return;
+  if (!silent) {
+    agentHistoryLoading.value = true;
+    agentHistoryError.value = "";
+  }
+
+  try {
+    const result = await loadAgentSessionList();
+    if (!result?.ok) {
+      if (applyAgentAccessFailure(result)) return;
+      if (!silent) {
+        agentHistoryError.value = normalizeText(result?.message) || "历史对话加载失败，请稍后再试。";
+      }
+      return;
+    }
+
+    agentSessionHistory.value = normalizeSessionHistory(result.sessions);
+    agentHistoryError.value = "";
+  } catch {
+    if (!silent) {
+      agentHistoryError.value = "历史对话加载失败，请稍后再试。";
+    }
+  } finally {
+    if (!silent) agentHistoryLoading.value = false;
+  }
+}
+
+function startAgentInsightsBackgroundRefresh({ reflectRestoreStep = true } = {}) {
+  if (!canLoadAgentInsights.value) return;
+  const requestSeq = ++agentInsightsBackgroundRequestSeq;
+  agentInsightsBackgroundInProgress.value = true;
+  if (reflectRestoreStep) {
+    setAgentRestoreStep("insights", "going");
+  }
+  void refreshAgentInsights({ background: true })
+    .then(() => {
+      if (reflectRestoreStep) {
+        setAgentRestoreStep("insights", "done");
+      }
+    })
+    .catch(() => {
+      if (reflectRestoreStep) {
+        setAgentRestoreStep("insights", "wait");
+      }
+    })
+    .finally(() => {
+      if (requestSeq === agentInsightsBackgroundRequestSeq) {
+        agentInsightsBackgroundInProgress.value = false;
+      }
+    });
+}
+
+async function loadDailySuggestion({ manual = false, background = false } = {}) {
+  if (isDailySuggestionRequestInFlight() && !manual) return;
+  if (!manual && !background && isDailySuggestionCacheFresh()) return;
+
+  const requestSeq = ++dailySuggestionRequestSeq;
+  const hasExistingSuggestion = hasDailyConclusionData.value;
+  const previousState = dailySuggestionState.value;
+
   dailySuggestionState.value = {
-    loading: true,
-    source: "mock",
-    suggestion: null
+    ...previousState,
+    loading: !hasExistingSuggestion && !manual,
+    refreshing: hasExistingSuggestion || background,
+    retrying: manual,
+    source: hasExistingSuggestion ? previousState.source : "loading",
+    error: manual ? "" : previousState.error,
+    reasonCode: manual ? "" : previousState.reasonCode
   };
 
   try {
-    const result = await requestDailyAiSuggestion({
-      force: false,
-      practiceSignature: buildPracticeSignature()
-    });
+    const result = await withClientTimeout(
+      requestDailyAiSuggestion({
+        force: false,
+        practiceSignature: buildPracticeSignature()
+      }),
+      AGENT_INSIGHT_CLIENT_TIMEOUT_MS,
+      {
+        ok: false,
+        timed_out: true,
+        message: AGENT_DAILY_TIMEOUT_MESSAGE,
+        reason_code: "provider_timeout"
+      }
+    );
+
+    if (requestSeq !== dailySuggestionRequestSeq) return;
+
     if (result?.ok && result?.suggestion) {
       dailySuggestionState.value = {
         loading: false,
+        refreshing: false,
+        retrying: false,
         source: normalizeText(result.source) || "backend",
-        suggestion: result.suggestion
+        suggestion: result.suggestion,
+        error: "",
+        reasonCode: normalizeText(result.reason_code) || "ok",
+        updatedAt: Date.now()
+      };
+      persistCachedAgentInsights();
+      return;
+    }
+    if (!result?.ok && applyAgentAccessFailure(result)) {
+      dailySuggestionState.value = {
+        loading: false,
+        refreshing: false,
+        retrying: false,
+        source: normalizeText(result?.reason_code),
+        suggestion: hasExistingSuggestion ? previousState.suggestion : null,
+        error: "",
+        reasonCode: normalizeText(result?.reason_code),
+        updatedAt: previousState.updatedAt || 0
       };
       return;
     }
-  } catch {
-    // Keep the screenshot-accurate static content when the AI summary endpoint is not available.
-  }
 
-  dailySuggestionState.value = {
-    loading: false,
-    source: "mock",
-    suggestion: null
-  };
+    const errorMessage = resolveAgentReasonMessage(
+      normalizeText(result?.reason_code),
+      normalizeText(result?.message) || "今日 AI 结论生成失败，请稍后重试。"
+    );
+    if (hasExistingSuggestion) {
+      dailySuggestionState.value = {
+        ...previousState,
+        loading: false,
+        refreshing: false,
+        retrying: false,
+        error: "",
+        reasonCode: normalizeText(result?.reason_code) || previousState.reasonCode
+      };
+      showAgentToast(errorMessage);
+      return;
+    }
+
+    dailySuggestionState.value = {
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      source: result?.timed_out ? "timeout" : normalizeText(result?.reason_code) || "unavailable",
+      suggestion: null,
+      error: errorMessage,
+      reasonCode: normalizeText(result?.reason_code),
+      updatedAt: 0
+    };
+  } catch {
+    if (requestSeq !== dailySuggestionRequestSeq) return;
+    if (hasExistingSuggestion) {
+      dailySuggestionState.value = {
+        ...previousState,
+        loading: false,
+        refreshing: false,
+        retrying: false,
+        error: ""
+      };
+      showAgentToast("今日 AI 结论更新失败，请稍后重试。");
+      return;
+    }
+    dailySuggestionState.value = {
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      source: "network_error",
+      suggestion: null,
+      error: resolveAgentReasonMessage("network_error", "网络连接不太稳定，请稍后重试。"),
+      reasonCode: "network_error",
+      updatedAt: 0
+    };
+  }
 }
 
-async function refreshExecutablePlan() {
+async function refreshExecutablePlan({ manual = false, background = false } = {}) {
+  if (isExecutablePlanRequestInFlight() && !manual) return;
+
+  const requestSeq = ++executablePlanRequestSeq;
+  const hasStablePlanState = Boolean(activePlan.value || isPlanNoPlan.value);
+  const previousState = planState.value;
+
   planState.value = {
-    ...planState.value,
-    loading: true,
-    error: "",
-    reasonCode: ""
+    ...previousState,
+    loading: !hasStablePlanState && !manual,
+    refreshing: hasStablePlanState || background,
+    retrying: manual,
+    error: manual ? "" : previousState.error,
+    reasonCode: manual && previousState.reasonCode !== "no_plan" ? "" : previousState.reasonCode
   };
 
-  const result = await loadAgentPlan();
+  const result = await withClientTimeout(
+    loadAgentPlan(),
+    AGENT_INSIGHT_CLIENT_TIMEOUT_MS,
+    {
+      ok: false,
+      timed_out: true,
+      plan: null,
+      message: AGENT_PLAN_TIMEOUT_MESSAGE,
+      reason_code: "client_timeout"
+    }
+  );
+
+  if (requestSeq !== executablePlanRequestSeq) return;
+
+  if (!result?.ok && applyAgentAccessFailure(result)) {
+    planState.value = {
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      saving: false,
+      error: "",
+      reasonCode: normalizeText(result?.reason_code),
+      plan: null,
+      updatedAt: previousState.updatedAt || 0
+    };
+    return;
+  }
+
+  if (result?.ok) {
+    const reasonCode = normalizeText(result?.reason_code) || (result?.plan ? "ok" : "no_plan");
+    planState.value = {
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      saving: false,
+      error: "",
+      reasonCode,
+      plan: isPlainObject(result?.plan) ? result.plan : null,
+      updatedAt: Date.now()
+    };
+    persistCachedAgentInsights();
+    return;
+  }
+
+  const reasonCode = result?.timed_out ? "provider_timeout" : normalizeText(result?.reason_code);
+  const errorMessage = resolveAgentReasonMessage(
+    reasonCode,
+    normalizeText(result?.message) || "可执行计划加载失败，请稍后重试。"
+  );
+
+  if (hasStablePlanState) {
+    planState.value = {
+      ...previousState,
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      saving: false,
+      error: "",
+      reasonCode: previousState.reasonCode || reasonCode,
+      updatedAt: previousState.updatedAt || 0
+    };
+    showAgentToast(errorMessage);
+    return;
+  }
+
   planState.value = {
     loading: false,
+    refreshing: false,
+    retrying: false,
     saving: false,
-    error: result?.ok
-      ? ""
-      : normalizeText(result?.message) || "可执行计划暂时不可用，请稍后再试。",
-    reasonCode: normalizeText(result?.reason_code),
-    plan: result?.ok && result?.plan ? result.plan : null
+    error: errorMessage,
+    reasonCode,
+    plan: null,
+    updatedAt: 0
   };
 }
 
 function handleWindowFocus() {
-  void refreshExecutablePlan();
+  if (!canLoadAgentInsights.value) return;
+  void refreshAgentInsightsFromVisibility();
 }
 
 function handleVisibilityChange() {
-  if (document.visibilityState === "visible") {
-    void refreshExecutablePlan();
+  if (document.visibilityState === "visible" && canLoadAgentInsights.value) {
+    void refreshAgentInsightsFromVisibility();
   }
+}
+
+function refreshAgentInsightsFromVisibility() {
+  const now = Date.now();
+  if (now - lastAgentInsightRefreshAt < AGENT_INSIGHT_REFRESH_DEBOUNCE_MS) return;
+  if (isAgentInsightRequestInFlight()) return;
+  lastAgentInsightRefreshAt = now;
+  void refreshAgentInsights({ background: true });
+}
+
+async function refreshAgentInsights({ background = false } = {}) {
+  await loadOverview();
+  await Promise.all([
+    loadDailySuggestion({ background }),
+    refreshExecutablePlan({ background })
+  ]);
+}
+
+function isDailySuggestionRequestInFlight() {
+  return Boolean(
+    dailySuggestionState.value.loading
+    || dailySuggestionState.value.refreshing
+    || dailySuggestionState.value.retrying
+  );
+}
+
+function isExecutablePlanRequestInFlight() {
+  return Boolean(
+    planState.value.loading
+    || planState.value.refreshing
+    || planState.value.retrying
+  );
+}
+
+function isAgentInsightRequestInFlight() {
+  return Boolean(isDailySuggestionRequestInFlight() || isExecutablePlanRequestInFlight());
+}
+
+function isDailySuggestionCacheFresh() {
+  if (!hasDailyConclusionData.value) return false;
+  const updatedAt = Number(dailySuggestionState.value.updatedAt || 0);
+  return updatedAt > 0 && Date.now() - updatedAt < AGENT_DAILY_CACHE_TTL_MS;
+}
+
+function resolveAgentReasonMessage(reasonCode, fallback = "") {
+  const normalized = normalizeText(reasonCode);
+  const messages = {
+    auth_failed: "登录状态失效，请重新登录",
+    vip_required: "AI 私教为 VIP 专属功能",
+    forbidden: "AI 私教为 VIP 专属功能",
+    no_plan: "还没有可执行计划",
+    plan_storage_not_ready: "可执行计划表还没有准备好，请检查 Supabase SQL",
+    agent_memory_not_ready: "Agent 记忆表还没有准备好，请检查 Supabase SQL",
+    provider_timeout: "AI 生成超时，请稍后重试",
+    timeout: "AI 生成超时，请稍后重试",
+    client_timeout: "AI 生成超时，请稍后重试",
+    provider_error: "AI 服务暂时不可用，请稍后重试",
+    daily_suggestion_unavailable: "AI 服务暂时不可用，请稍后重试",
+    database_error: "数据读取失败，请稍后重试",
+    plan_storage_error: "数据读取失败，请稍后重试",
+    network_error: "网络连接不太稳定，请稍后重试",
+    unexpected_error: "发生未知错误，请稍后重试"
+  };
+  return messages[normalized] || normalizeText(fallback) || "发生未知错误，请稍后重试";
+}
+
+async function handleRetryAgentWorkspace() {
+  if (pending.value) return;
+  pending.value = true;
+  try {
+    await restoreAgentWorkspace();
+  } finally {
+    pending.value = false;
+  }
+}
+
+function withClientTimeout(promise, timeoutMs, timeoutValue) {
+  let timeoutId = 0;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutId = globalThis.setTimeout(() => {
+      resolve(timeoutValue);
+    }, timeoutMs);
+  });
+
+  return Promise.race([
+    promise,
+    timeoutPromise
+  ]).finally(() => {
+    if (timeoutId) globalThis.clearTimeout(timeoutId);
+  });
+}
+
+function waitForRestoreDisplayPace(durationMs) {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, durationMs);
+  });
+}
+
+function isAgentAccessFailure(reasonCode) {
+  const normalized = normalizeText(reasonCode);
+  return normalized === "vip_required" || normalized === "forbidden";
+}
+
+function applyAgentAccessFailure(result) {
+  const reasonCode = normalizeText(result?.reason_code);
+  if (!isAgentAccessFailure(reasonCode)) return false;
+
+  agentSessionState.value = {
+    loading: false,
+    session: null,
+    error: normalizeText(result?.message) || "AI 私教为 VIP 专属功能。",
+    reasonCode,
+    isVip: false
+  };
+  conversationId.value = `agent_${Date.now().toString(36)}`;
+  messages.value = [];
+  planAttachStatus.value = {};
+  agentRestoreInProgress.value = false;
+  return true;
 }
 
 function buildPracticeSignature() {
@@ -317,19 +1390,35 @@ function buildPracticeSignature() {
 
 async function handleSubmit(rawMessage = draft.value) {
   const message = normalizeText(rawMessage);
-  if (!message || pending.value) return;
-
-  autoScrollEnabled.value = true;
-  messages.value.push(createMessage("user", message));
-  const recentMessages = buildRecentMessagesPayload(messages.value);
-  if (normalizeText(draft.value) === message) {
-    draft.value = "";
-  }
+  if (!message || pending.value || !canUseAgent.value) return;
 
   pending.value = true;
 
   try {
-    const result = await sendAgentMessage(message, conversationId.value, recentMessages);
+    if (agentSessionSyncPromise) {
+      const synced = await waitForAgentSessionSync();
+      if (!synced || !canUseAgent.value || isOptimisticAgentSession(agentSessionState.value.session)) {
+        showAgentToast("新对话还在同步，请稍后再试。");
+        return;
+      }
+    }
+
+    if (isOptimisticAgentSession(agentSessionState.value.session)) {
+      showAgentToast("新对话还在同步，请稍后再试。");
+      return;
+    }
+
+    autoScrollEnabled.value = true;
+    messages.value.push(createMessage("user", message));
+    const recentMessages = buildRecentMessagesPayload(messages.value);
+    if (normalizeText(draft.value) === message) {
+      draft.value = "";
+    }
+
+    aiResponding.value = true;
+    const result = await sendAgentMessage(message, conversationId.value, recentMessages, {
+      sessionId: currentAgentSessionId.value
+    });
     if (result.ok) {
       messages.value.push(
         createMessage(
@@ -340,21 +1429,27 @@ async function handleSubmit(rawMessage = draft.value) {
           }
         )
       );
+      void loadAgentHistoryList({ silent: true });
       return;
     }
 
+    if (applyAgentAccessFailure(result)) return;
+
     messages.value.push(
-      createMessage("assistant", createFallbackReply(message), {
-        metaLabel: "AI 私教 · fallback"
+      createMessage("assistant", normalizeText(result?.message) || "AI 私教暂时不可用，请稍后再试。", {
+        metaLabel: "AI 私教",
+        tone: "error"
       })
     );
   } catch {
     messages.value.push(
-      createMessage("assistant", createFallbackReply(message), {
-        metaLabel: "AI 私教 · fallback"
+      createMessage("assistant", "网络连接不太稳定，请稍后再试。", {
+        metaLabel: "AI 私教",
+        tone: "error"
       })
     );
   } finally {
+    aiResponding.value = false;
     pending.value = false;
   }
 }
@@ -365,9 +1460,335 @@ function handleQuickAction(action) {
   void handleSubmit(prompt);
 }
 
-function createFallbackReply(message) {
-  const topic = normalizeText(message) || "这个问题";
-  return `（前端 fallback）我已经收到你的问题：「${topic}」。当前 AI 私教接口暂时不可用，所以先给你一个安全占位建议：先选一个最想提升的题型，完成 10 分钟练习，再回来让我根据结果继续拆解。`;
+function handleRetryDailySuggestion() {
+  void loadDailySuggestion({ manual: true });
+}
+
+function handleRetryExecutablePlan() {
+  void refreshExecutablePlan({ manual: true });
+}
+
+function handleGeneratePlanFromPlanCard() {
+  void handleSubmit(PLAN_GENERATION_PROMPT);
+}
+
+function handleCapabilitySelect(item) {
+  const id = normalizeText(item?.id);
+  const mappedAction = {
+    diagnose: "weakness",
+    plan: "today-plan"
+  }[id];
+  if (mappedAction) {
+    const action = quickActions.find((candidate) => candidate.id === mappedAction);
+    handleQuickAction(action);
+    return;
+  }
+
+  if (id === "coach") {
+    void handleSubmit("陪我把今天的训练动作拆到可执行：先问我一个必要问题，再给出下一步。");
+  }
+}
+
+function handleWorkspacePrimaryAction() {
+  const state = agentWorkspaceState.value;
+  if (state === "unavailable") {
+    openPath("/auth");
+    return;
+  }
+  if (state === "locked") {
+    openPath("/upgrade");
+    return;
+  }
+  if (state === "failed") {
+    void handleRetryAgentWorkspace();
+  }
+}
+
+function handleWorkspaceSecondaryAction() {
+  const state = agentWorkspaceState.value;
+  if (state === "locked") {
+    openPath("/home#quick");
+    return;
+  }
+  openPath("/home");
+}
+
+function handleWarmShellPrimaryAction() {
+  const state = agentWorkspaceState.value;
+  if (state === "failed") {
+    void handleRetryAgentWorkspace();
+    return;
+  }
+  if (state === "locked" || state === "unavailable") {
+    openPath("/upgrade");
+  }
+}
+
+function handleWarmShellSecondaryAction() {
+  const state = agentWorkspaceState.value;
+  if (state === "locked" || state === "unavailable") {
+    openPath("/home#quick");
+    return;
+  }
+  openPath("/home");
+}
+
+async function handleRestartConversation() {
+  if (!canUseAgent.value || pending.value || agentSessionSyncing.value) return;
+
+  aiResponding.value = false;
+  pending.value = false;
+
+  const previousSessionSnapshot = {
+    conversationId: conversationId.value,
+    messages: [...messages.value],
+    draft: draft.value,
+    planAttachStatus: { ...planAttachStatus.value },
+    agentSessionHistory: [...agentSessionHistory.value],
+    agentSessionState: {
+      ...agentSessionState.value,
+      session: agentSessionState.value.session ? { ...agentSessionState.value.session } : null
+    }
+  };
+  const optimisticSession = createOptimisticAgentSession();
+  const optimisticSessionId = optimisticSession.id;
+  const restorePreviousSession = () => {
+    if (currentAgentSessionId.value !== optimisticSessionId) return;
+    const currentDraft = draft.value;
+    conversationId.value = previousSessionSnapshot.conversationId;
+    messages.value = previousSessionSnapshot.messages;
+    draft.value = normalizeText(currentDraft) ? currentDraft : previousSessionSnapshot.draft;
+    planAttachStatus.value = previousSessionSnapshot.planAttachStatus;
+    agentSessionHistory.value = previousSessionSnapshot.agentSessionHistory;
+    agentSessionState.value = previousSessionSnapshot.agentSessionState;
+    autoScrollEnabled.value = false;
+  };
+  conversationId.value = optimisticSessionId;
+  messages.value = [];
+  draft.value = "";
+  planAttachStatus.value = {};
+  agentSessionState.value = {
+    loading: false,
+    session: optimisticSession,
+    error: "",
+    reasonCode: "ok",
+    isVip: true
+  };
+  await nextTick();
+  autoScrollEnabled.value = false;
+
+  agentSessionSyncing.value = true;
+  const syncPromise = createAgentNewSession()
+    .then(async (result) => {
+      if (!result?.ok || !result?.session?.id) {
+        if (applyAgentAccessFailure(result)) return { ok: false };
+        restorePreviousSession();
+        const message = normalizeText(result?.message) || "新对话创建失败，请稍后再试。";
+        showAgentToast(message);
+        return { ok: false };
+      }
+
+      const session = result.session;
+      agentSessionHistory.value = normalizeSessionHistory(result.sessions);
+      if (currentAgentSessionId.value === optimisticSessionId) {
+        conversationId.value = session.id;
+        planAttachStatus.value = {};
+        agentSessionState.value = {
+          loading: false,
+          session,
+          error: "",
+          reasonCode: "ok",
+          isVip: true
+        };
+        await nextTick();
+        autoScrollEnabled.value = false;
+      }
+      void loadAgentHistoryList({ silent: true });
+      return { ok: true, session };
+    })
+    .catch(() => {
+      restorePreviousSession();
+      showAgentToast("新对话创建失败，请稍后再试。");
+      return { ok: false };
+    })
+    .finally(() => {
+      if (agentSessionSyncPromise === syncPromise) {
+        agentSessionSyncPromise = null;
+        agentSessionSyncing.value = false;
+      }
+    });
+
+  agentSessionSyncPromise = syncPromise;
+}
+
+async function handleDeleteHistory() {
+  if (!canUseAgent.value || pending.value) return;
+  if (typeof window !== "undefined") {
+    const confirmed = window.confirm("确定要删除所有 AI 私教聊天记录吗？删除后无法恢复。");
+    if (!confirmed) return;
+  }
+
+  aiResponding.value = false;
+  pending.value = true;
+  try {
+    const result = await deleteAgentChatHistory();
+    if (!result?.ok || !result?.session?.id) {
+      if (applyAgentAccessFailure(result)) return;
+      const message = normalizeText(result?.message) || "历史对话操作失败，请稍后再试。";
+      if (typeof window !== "undefined") window.alert(message);
+      return;
+    }
+
+    const session = result.session;
+    conversationId.value = session.id;
+    messages.value = [];
+    draft.value = "";
+    planAttachStatus.value = {};
+    agentSessionHistory.value = [];
+    agentHistoryError.value = "";
+    agentSessionState.value = {
+      loading: false,
+      session,
+      error: "",
+      reasonCode: "ok",
+      isVip: true
+    };
+    await nextTick();
+    autoScrollEnabled.value = false;
+    showAgentToast("历史已清空");
+  } catch {
+    if (typeof window !== "undefined") {
+      window.alert("历史对话操作失败，请稍后再试。");
+    }
+  } finally {
+    pending.value = false;
+  }
+}
+
+async function handleSessionHistorySelect(item) {
+  const sessionId = normalizeText(item?.id);
+  if (!sessionId || sessionId === currentAgentSessionId.value || pending.value || historyBusy.value) return;
+
+  aiResponding.value = false;
+  agentSessionSwitching.value = true;
+  try {
+    const result = await switchAgentSession(sessionId);
+    if (!result?.ok || !result?.session?.id) {
+      if (applyAgentAccessFailure(result)) return;
+      const message = normalizeText(result?.message) || "历史对话操作失败，请稍后再试。";
+      if (typeof window !== "undefined") window.alert(message);
+      return;
+    }
+
+    conversationId.value = result.session.id;
+    messages.value = normalizeStoredMessages(result.messages);
+    planAttachStatus.value = {};
+    agentSessionHistory.value = normalizeSessionHistory(result.sessions);
+    agentSessionState.value = {
+      loading: false,
+      session: result.session,
+      error: "",
+      reasonCode: "ok",
+      isVip: true
+    };
+    await nextTick();
+    scrollToBottom("auto");
+  } catch {
+    if (typeof window !== "undefined") {
+      window.alert("历史对话操作失败，请稍后再试。");
+    }
+  } finally {
+    agentSessionSwitching.value = false;
+  }
+}
+
+async function handleDeleteSessionHistory(item) {
+  const sessionId = normalizeText(item?.id);
+  if (!sessionId || pending.value || historyBusy.value) return;
+
+  aiResponding.value = false;
+  deletingAgentSessionId.value = sessionId;
+  try {
+    const result = await deleteAgentSession(sessionId);
+    if (!result?.ok) {
+      if (applyAgentAccessFailure(result)) return;
+      const message = normalizeText(result?.message) || "删除历史对话失败，请稍后再试。";
+      showAgentToast(message);
+      return;
+    }
+
+    const nextHistory = normalizeSessionHistory(result.sessions);
+    const nextSession = result.session?.id ? result.session : null;
+    agentSessionHistory.value = nextHistory;
+    agentHistoryError.value = "";
+
+    if (sessionId === currentAgentSessionId.value) {
+      conversationId.value = normalizeText(nextSession?.id) || `agent_${Date.now().toString(36)}`;
+      messages.value = normalizeStoredMessages(result.messages);
+      draft.value = "";
+      planAttachStatus.value = {};
+      agentSessionState.value = {
+        loading: false,
+        session: nextSession,
+        error: "",
+        reasonCode: "ok",
+        isVip: true
+      };
+      await nextTick();
+      autoScrollEnabled.value = false;
+    }
+
+    showAgentToast("历史对话已删除");
+    void loadAgentHistoryList({ silent: true });
+  } catch {
+    showAgentToast("删除历史对话失败，请稍后再试。");
+  } finally {
+    deletingAgentSessionId.value = "";
+  }
+}
+
+function showAgentToast(message) {
+  const normalized = normalizeText(message);
+  if (!normalized) return;
+  agentToast.value = normalized;
+
+  if (agentToastTimer && typeof window !== "undefined") {
+    window.clearTimeout(agentToastTimer);
+  }
+
+  if (typeof window !== "undefined") {
+    agentToastTimer = window.setTimeout(() => {
+      agentToast.value = "";
+      agentToastTimer = 0;
+    }, 2400);
+  }
+}
+
+function createOptimisticAgentSession() {
+  const now = new Date().toISOString();
+  const id = `${OPTIMISTIC_AGENT_SESSION_ID_PREFIX}${Date.now().toString(36)}`;
+  return {
+    id,
+    title: "新对话",
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    last_message_at: now,
+    message_count: 0,
+    preview: "",
+    optimistic: true
+  };
+}
+
+function isOptimisticAgentSession(session) {
+  const sessionId = normalizeText(session?.id);
+  return Boolean(session?.optimistic || sessionId.startsWith(OPTIMISTIC_AGENT_SESSION_ID_PREFIX));
+}
+
+async function waitForAgentSessionSync() {
+  if (!agentSessionSyncPromise) return true;
+  const result = await agentSessionSyncPromise;
+  return Boolean(result?.ok && result?.session?.id);
 }
 
 function handleRecommendedQuestion(item) {
@@ -377,7 +1798,48 @@ function handleRecommendedQuestion(item) {
 }
 
 function handleConclusionDetail() {
+  if (conclusionPanelState.value !== "ready") return;
   void handleSubmit("请展开说明今天 AI 结论里的问题，并给我一个可以马上执行的提分步骤。");
+}
+
+async function saveDraftSuggestionPlan() {
+  if (!draftPlanSuggestion.value || planState.value.saving) return null;
+
+  planState.value = {
+    ...planState.value,
+    saving: true,
+    error: ""
+  };
+
+  const result = await saveAgentPlan(draftPlanSuggestion.value);
+  if (result?.ok && result?.plan) {
+    planState.value = {
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      saving: false,
+      error: "",
+      reasonCode: normalizeText(result.reason_code),
+      plan: result.plan,
+      updatedAt: Date.now()
+    };
+    persistCachedAgentInsights();
+    return result.plan;
+  }
+
+  if (!result?.ok && applyAgentAccessFailure(result)) return null;
+
+  planState.value = {
+    ...planState.value,
+    loading: false,
+    refreshing: false,
+    retrying: false,
+    saving: false,
+    error: resolveAgentReasonMessage(normalizeText(result?.reason_code), normalizeText(result?.message) || "保存今日计划失败，请稍后再试。"),
+    reasonCode: normalizeText(result?.reason_code),
+    plan: null
+  };
+  return null;
 }
 
 async function handleAttachPlan(message) {
@@ -400,16 +1862,41 @@ async function handleAttachPlan(message) {
   if (result?.ok && result?.plan) {
     planState.value = {
       loading: false,
+      refreshing: false,
+      retrying: false,
       saving: false,
       error: "",
       reasonCode: normalizeText(result.reason_code),
-      plan: result.plan
+      plan: result.plan,
+      updatedAt: Date.now()
+    };
+    persistCachedAgentInsights();
+    planAttachStatus.value = {
+      ...clearSavedPlanAttachStatuses(),
+      [message.id]: {
+        state: "saved",
+        message: "已接入今日计划"
+      }
+    };
+    return;
+  }
+
+  if (applyAgentAccessFailure(result)) {
+    planState.value = {
+      loading: false,
+      refreshing: false,
+      retrying: false,
+      saving: false,
+      error: "",
+      reasonCode: normalizeText(result?.reason_code),
+      plan: null,
+      updatedAt: planState.value.updatedAt || 0
     };
     planAttachStatus.value = {
       ...planAttachStatus.value,
       [message.id]: {
-        state: "saved",
-        message: "已接入今日计划"
+        state: "error",
+        message: normalizeText(result?.message) || "AI 私教为 VIP 专属功能。"
       }
     };
     return;
@@ -419,7 +1906,7 @@ async function handleAttachPlan(message) {
   planState.value = {
     ...planState.value,
     saving: false,
-    error: errorMessage,
+    error: resolveAgentReasonMessage(normalizeText(result?.reason_code), errorMessage),
     reasonCode: normalizeText(result?.reason_code)
   };
   planAttachStatus.value = {
@@ -435,15 +1922,37 @@ function getPlanAttachStatus(message) {
   return planAttachStatus.value?.[message?.id] || { state: "idle", message: "" };
 }
 
-function handleStartTraining() {
-  if (!hasExecutablePlan.value) {
-    void handleSubmit(PLAN_GENERATION_PROMPT);
-    return;
+function clearSavedPlanAttachStatuses() {
+  return Object.fromEntries(
+    Object.entries(planAttachStatus.value || {}).map(([messageId, status]) => [
+      messageId,
+      status?.state === "saved" ? { state: "idle", message: "" } : status
+    ])
+  );
+}
+
+async function handleStartTraining() {
+  if (!hasExecutablePlan.value) return;
+  if (isPlanComplete.value) return;
+
+  if (!hasSavedExecutablePlan.value) {
+    const savedPlan = await saveDraftSuggestionPlan();
+    if (!savedPlan) return;
   }
 
-  if (isPlanComplete.value) return;
-  const nextItem = executablePlanItems.value.find((item) => !item.is_complete) || executablePlanItems.value[0];
+  const nextItem = displayPlanItems.value.find((item) => !item.is_complete) || displayPlanItems.value[0];
   openPath(nextItem?.route || "/ra");
+}
+
+async function handlePlanItemClick(item) {
+  if (!item || item.is_complete || planState.value.saving) return;
+
+  if (!hasSavedExecutablePlan.value) {
+    const savedPlan = await saveDraftSuggestionPlan();
+    if (!savedPlan) return;
+  }
+
+  openPath(item.route || "/ra");
 }
 
 function handleNav(item) {
@@ -492,12 +2001,53 @@ function createMessage(role, content, options = {}) {
   };
 }
 
+function normalizeStoredMessages(sourceMessages) {
+  return (Array.isArray(sourceMessages) ? sourceMessages : [])
+    .map((item) => {
+      const role = normalizeText(item?.role).toLowerCase();
+      const content = normalizeText(item?.content);
+      if ((role !== "user" && role !== "assistant") || !content) return null;
+
+      return {
+        id: normalizeText(item?.id) || `${role}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        role,
+        content,
+        time: formatMessageTime(item?.created_at),
+        tone: "default",
+        metaLabel: role === "assistant" ? "AI 私教" : "你",
+        planSuggestion: isPlainObject(item?.metadata?.plan_suggestion) ? item.metadata.plan_suggestion : null
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeSessionHistory(sourceSessions) {
+  return (Array.isArray(sourceSessions) ? sourceSessions : [])
+    .map((session) => ({
+      id: normalizeText(session?.id),
+      title: normalizeText(session?.title).slice(0, 30) || "未命名对话",
+      status: normalizeText(session?.status) || "archived",
+      created_at: normalizeText(session?.created_at),
+      updated_at: normalizeText(session?.updated_at),
+      last_message_at: normalizeText(session?.last_message_at),
+      message_count: Number.isFinite(Number(session?.message_count)) ? Math.max(0, Math.round(Number(session.message_count))) : 0,
+      preview: normalizeText(session?.preview).slice(0, 80)
+    }))
+    .filter((session) => session.id)
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.last_message_at || left.updated_at || left.created_at || "") || 0;
+      const rightTime = Date.parse(right.last_message_at || right.updated_at || right.created_at || "") || 0;
+      return rightTime - leftTime;
+    });
+}
+
 function buildRecentMessagesPayload(sourceMessages) {
   return (Array.isArray(sourceMessages) ? sourceMessages : [])
     .filter((item) => item?.tone !== "error")
     .map((item) => ({
       role: normalizeText(item?.role).toLowerCase(),
-      content: normalizeText(item?.content)
+      content: normalizeText(item?.content),
+      plan_suggestion: isPlainObject(item?.planSuggestion) ? item.planSuggestion : null
     }))
     .filter((item) => (item.role === "user" || item.role === "assistant") && item.content)
     .slice(-MAX_RECENT_MESSAGES);
@@ -509,6 +2059,30 @@ function formatCurrentTime(date = new Date()) {
   return `${hour}:${minute}`;
 }
 
+function formatMessageTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return formatCurrentTime();
+  return formatCurrentTime(date);
+}
+
+function formatHistoryTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "刚刚";
+
+  const diffMs = Date.now() - date.getTime();
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+  if (diffMs >= 0 && diffMs < minuteMs) return "刚刚";
+  if (diffMs >= 0 && diffMs < hourMs) return `${Math.max(1, Math.floor(diffMs / minuteMs))} 分钟前`;
+  if (diffMs >= 0 && diffMs < dayMs) return `${Math.max(1, Math.floor(diffMs / hourMs))} 小时前`;
+  if (diffMs >= 0 && diffMs < 7 * dayMs) return `${Math.max(1, Math.floor(diffMs / dayMs))} 天前`;
+
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${month}-${day}`;
+}
+
 function renderMessageContent(value) {
   return parseAgentContent(value);
 }
@@ -517,7 +2091,7 @@ function handleComposerKeydown(event) {
   if (event.key !== "Enter" || event.shiftKey) return;
 
   event.preventDefault();
-  if (pending.value || !draft.value.trim()) return;
+  if (composerDisabled.value || !draft.value.trim()) return;
   void handleSubmit();
 }
 
@@ -529,7 +2103,14 @@ function normalizeReadableText(value) {
   const normalized = normalizeText(value);
   if (!normalized) return "";
   if (/[�]/.test(normalized)) return "";
-  if (/(?:绉|璇|寤|浠|鍒|鏃|鐢|缁|浜|鍙|噺)/.test(normalized)) return "";
+  if (/(?:绉|璇|寤|浠|鍒|鏃|鐢|缁|浜|鍙|噺|诲|堪|粌|槸)/.test(normalized)) return "";
+  return normalized;
+}
+
+function formatOptionalMetric(value) {
+  if (value === null || value === undefined) return "待识别";
+  const normalized = normalizeReadableText(value);
+  if (!normalized || normalized.toLowerCase() === "null" || normalized.toLowerCase() === "nan") return "待识别";
   return normalized;
 }
 
@@ -544,809 +2125,952 @@ function normalizeText(value) {
 </script>
 
 <template>
-  <div class="agent-replica-page">
-    <div class="agent-scale-slot" :style="scaledSlotStyle">
-      <div class="agent-canvas" :style="canvasScaleStyle">
-        <aside class="agent-sidebar">
-          <div class="agent-brand">
-            <div class="agent-brand-mark" aria-hidden="true"></div>
-            <div class="agent-brand-text">开口</div>
+  <AITutorLoading
+    v-if="isWarmShellState"
+    :mode="agentWorkspaceState"
+    :user-id="userDisplayName"
+    :nav-items="agentLoadingNavItems"
+    :steps="agentWarmShellSteps"
+    :feature-items="agentWarmShellFeatures"
+    :progress-percent="agentWarmShellProgressPercent"
+    :title="agentWarmShellTitle"
+    :subtitle="agentWarmShellSubtitle"
+    :progress-note="agentWarmShellProgressNote"
+    :primary-action-label="agentWarmPrimaryActionLabel"
+    :primary-action-loading-label="agentWarmPrimaryActionLoadingLabel"
+    :primary-action-loading="pending"
+    :secondary-action-label="agentWarmSecondaryActionLabel"
+    @primary-action="handleWarmShellPrimaryAction"
+    @secondary-action="handleWarmShellSecondaryAction"
+  />
+  <AIWorkspace
+    v-else-if="!isWarmShellState"
+    v-model:draft="draft"
+    :nav-items="navItems"
+    :user-display-name="userDisplayName"
+    :user-initial="userInitial"
+    :user-avatar-url="userAvatarUrl"
+    :show-user-avatar="showUserAvatar"
+    :workspace-state="agentWorkspaceState"
+    :workspace-status-label="workspaceStatusLabel"
+    :workbench-title="workbenchTitle"
+    :workbench-description="workbenchDescription"
+    :can-use-agent="canUseAgent"
+    :pending="aiResponding"
+    :composer-disabled="composerDisabled"
+    :messages="messages"
+    :session-history="displayAgentSessionHistory"
+    :history-loading="agentHistoryLoading"
+    :history-error="agentHistoryError"
+    :history-switching="historyBusy"
+    :deleting-session-id="deletingAgentSessionId"
+    :overview-stats="overviewStats"
+    :practice-overview-rows="practiceOverviewRows"
+    :capability-cards="capabilityCards"
+    :quick-actions="quickActions"
+    :agent-toast="agentToast"
+    :daily-conclusion="dailyConclusion"
+    :conclusion-panel-state="conclusionPanelState"
+    :conclusion-unavailable-message="conclusionUnavailableMessage"
+    :conclusion-refreshing="dailySuggestionState.refreshing"
+    :conclusion-retrying="dailySuggestionState.retrying"
+    :display-plan-items="displayPlanItems"
+    :display-plan-total-minutes="displayPlanTotalMinutes"
+    :has-executable-plan="hasExecutablePlan"
+    :has-saved-executable-plan="hasSavedExecutablePlan"
+    :is-plan-complete="isPlanComplete"
+    :plan-panel-state="planPanelState"
+    :plan-progress-percentage="planProgressPercentage"
+    :plan-progress-display="planProgressDisplay"
+    :plan-progress-aria-label="planProgressAriaLabel"
+    :plan-status-message="planStatusMessage"
+    :plan-unavailable-title="planUnavailableTitle"
+    :plan-unavailable-message="planUnavailableMessage"
+    :plan-saving="planState.saving"
+    :plan-loading="planState.loading"
+    :plan-refreshing="planState.refreshing"
+    :plan-retrying="planState.retrying"
+    :start-training-label="startTrainingLabel"
+    :remaining-plan-minutes="remainingPlanMinutes"
+    :recommended-questions="recommendedQuestions"
+    :question-panel-state="questionPanelState"
+    :question-unavailable-message="questionUnavailableMessage"
+    :insight-status-text="insightStatusText"
+    :plan-attach-status="planAttachStatus"
+    @submit="handleSubmit"
+    @quick-action="handleQuickAction"
+    @feature-select="handleCapabilitySelect"
+    @restart-conversation="handleRestartConversation"
+    @delete-history="handleDeleteHistory"
+    @session-select="handleSessionHistorySelect"
+    @delete-session="handleDeleteSessionHistory"
+    @avatar-error="handleAvatarError"
+    @conclusion-detail="handleConclusionDetail"
+    @retry-conclusion="handleRetryDailySuggestion"
+    @retry-plan="handleRetryExecutablePlan"
+    @generate-plan="handleGeneratePlanFromPlanCard"
+    @start-training="handleStartTraining"
+    @plan-item-click="handlePlanItemClick"
+    @recommended-question="handleRecommendedQuestion"
+    @attach-plan="handleAttachPlan"
+  />
+  <div v-else class="agent-page">
+    <aside class="agent-sidebar">
+      <div class="agent-brand" aria-label="开口">
+        <span class="agent-brand-mark" aria-hidden="true"></span>
+        <strong>开口</strong>
+      </div>
+
+      <nav class="agent-nav" aria-label="AI 私教页面导航">
+        <button
+          v-for="item in navItems"
+          :key="item.key"
+          class="agent-nav-item"
+          :class="{ 'agent-nav-item--active': item.active }"
+          type="button"
+          @click="handleNav(item)"
+        >
+          <span class="agent-nav-icon" aria-hidden="true">
+            <AgentIcon :name="item.icon" />
+          </span>
+          <span>{{ item.label }}</span>
+        </button>
+      </nav>
+
+      <section class="agent-resource-card" aria-label="PTE 备考资料包">
+        <p class="agent-resource-title">PTE 备考资料包</p>
+        <p class="agent-resource-copy">真题 · 高频词汇 · 模板</p>
+        <button class="agent-resource-button" type="button">免费领取</button>
+      </section>
+    </aside>
+
+    <main class="agent-shell">
+      <header class="agent-topbar">
+        <div class="agent-heading">
+          <span class="agent-kicker">AI Tutor Workspace</span>
+          <h1>AI 私教工作台</h1>
+          <p>围绕你的练习记录，恢复主聊天、生成今日洞察，并把建议变成可执行训练。</p>
+        </div>
+
+        <div class="agent-top-actions">
+          <span class="agent-status-pill" :class="`agent-status-pill--${agentWorkspaceState}`">
+            <span aria-hidden="true"></span>
+            {{ workspaceStatusLabel }}
+          </span>
+
+          <div class="agent-session-actions" v-if="canUseAgent">
+            <button class="agent-soft-button" type="button" :disabled="pending" @click="handleRestartConversation">
+              新对话
+            </button>
+            <button class="agent-soft-button agent-soft-button--danger" type="button" :disabled="pending" @click="handleDeleteHistory">
+              清空历史
+            </button>
           </div>
 
-          <nav class="agent-nav" aria-label="AI 私教页面导航">
-            <button
-              v-for="item in navItems"
-              :key="item.key"
-              class="agent-nav-item"
-              :class="{ 'agent-nav-item--active': item.active }"
-              type="button"
-              @click="handleNav(item)"
-            >
-              <span class="agent-nav-icon" :class="`agent-nav-icon--${item.icon}`" aria-hidden="true"></span>
-              <span>{{ item.label }}</span>
-            </button>
-          </nav>
+          <button class="agent-profile" type="button" @click="openPath('/profile')">
+            <span class="agent-profile-avatar">
+              <img v-if="showUserAvatar" :src="userAvatarUrl" alt="" @error="handleAvatarError" />
+              <b v-else>{{ userInitial }}</b>
+            </span>
+            <strong>{{ userDisplayName }}</strong>
+          </button>
+        </div>
+      </header>
 
-          <section class="agent-resource-card">
-            <p class="agent-resource-title">PTE 备考资料包</p>
-            <p class="agent-resource-copy">真题 · 高频词汇 · 模板</p>
-            <button class="agent-resource-button" type="button">免费领取</button>
-            <div class="agent-gift" aria-hidden="true">
-              <span class="agent-gift-box"></span>
-              <span class="agent-gift-lid"></span>
-              <span class="agent-gift-ribbon"></span>
+      <section class="agent-workspace-grid" :class="{ 'agent-workspace-grid--single': !showInsightPanel }">
+        <section class="agent-chat-workbench" :class="{ 'agent-chat-workbench--focus': !showInsightPanel }" aria-label="AI 私教聊天工作区">
+          <p v-if="agentToast" class="agent-toast" role="status">{{ agentToast }}</p>
+
+          <div class="agent-workbench-head">
+            <div>
+              <span class="agent-section-kicker">Main chat</span>
+              <h2>{{ workbenchTitle }}</h2>
+              <p>{{ workbenchDescription }}</p>
+            </div>
+            <div v-if="!isBlockingWorkspaceState" class="agent-workbench-meta" aria-label="聊天状态">
+              <span>{{ isConversationEmpty ? "New thread" : `${messages.length} 条消息` }}</span>
+              <strong>{{ currentAgentSessionId ? "Session ready" : "Local mode" }}</strong>
+            </div>
+          </div>
+
+          <div v-if="isBlockingWorkspaceState" class="agent-state-screen" :class="`agent-state-screen--${agentWorkspaceState}`">
+            <div class="agent-state-card">
+              <div class="agent-state-hero">
+                <span class="agent-state-icon" :class="{ 'agent-state-icon--loading': agentWorkspaceState === 'restoring' }" aria-hidden="true">
+                  <AgentIcon :name="workspaceStateMeta.icon" />
+                </span>
+                <span class="agent-section-kicker">{{ workspaceStateMeta.eyebrow }}</span>
+                <h2>{{ workspaceStateMeta.title }}</h2>
+                <p>{{ workspaceStateMeta.description }}</p>
+              </div>
+
+              <div v-if="agentWorkspaceState === 'restoring'" class="agent-restore-grid" aria-label="恢复进度">
+                <article v-for="(item, index) in restoreChecklist" :key="item.id" class="agent-restore-step">
+                  <span :class="{ 'agent-restore-step-dot--active': index < 2 }" class="agent-restore-step-dot" aria-hidden="true">
+                    <AgentIcon :name="index < 1 ? 'check' : 'loader'" />
+                  </span>
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.copy }}</p>
+                </article>
+              </div>
+
+              <ul v-else-if="agentWorkspaceState === 'locked'" class="agent-lock-list">
+                <li v-for="feature in vipLockFeatures" :key="feature">
+                  <AgentIcon name="check" />
+                  <span>{{ feature }}</span>
+                </li>
+              </ul>
+
+              <p v-if="stateSupportText" class="agent-state-note">{{ stateSupportText }}</p>
+
+              <div v-if="workspaceStateMeta.primaryLabel || workspaceStateMeta.secondaryLabel" class="agent-state-actions">
+                <button
+                  v-if="workspaceStateMeta.primaryLabel"
+                  class="agent-primary-button"
+                  type="button"
+                  :disabled="pending"
+                  @click="handleWorkspacePrimaryAction"
+                >
+                  {{ pending && agentWorkspaceState === 'failed' ? "检查中..." : workspaceStateMeta.primaryLabel }}
+                </button>
+                <button
+                  v-if="workspaceStateMeta.secondaryLabel"
+                  class="agent-secondary-button"
+                  type="button"
+                  :disabled="pending && agentWorkspaceState !== 'locked'"
+                  @click="handleWorkspaceSecondaryAction"
+                >
+                  {{ workspaceStateMeta.secondaryLabel }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <template v-else>
+            <div v-if="isConversationEmpty" class="agent-empty-workspace">
+              <section class="agent-empty-intro" aria-label="AI 私教空状态欢迎">
+                <div class="agent-empty-copy">
+                  <span class="agent-empty-badge">
+                    <AgentIcon name="spark" />
+                    准备就绪
+                  </span>
+                  <h2>从一个真实问题开始，AI 会把它变成下一步训练。</h2>
+                  <p>这里是主入口。你可以直接输入，也可以先让 AI 读取近期练习，生成今日优先级和训练动作。</p>
+                  <p class="agent-empty-entry-note">下方输入框会保留上下文；快捷入口只是帮你更快开始。</p>
+                </div>
+                <div class="agent-empty-visual" aria-hidden="true">
+                  <img src="/agent/hero-workstation.png" alt="" />
+                  <div class="agent-empty-orbit agent-empty-orbit--one">Practice logs</div>
+                  <div class="agent-empty-orbit agent-empty-orbit--two">AI plan</div>
+                </div>
+              </section>
+
+              <section class="agent-stats-row" aria-label="训练概览">
+                <article v-for="stat in overviewStats" :key="stat.label" class="agent-stat-item">
+                  <span>{{ stat.label }}</span>
+                  <strong>{{ stat.value }}</strong>
+                  <p>{{ stat.helper }}</p>
+                </article>
+              </section>
+
+              <section class="agent-capability-grid" aria-label="AI 私教能力">
+                <article v-for="item in capabilityCards" :key="item.id" class="agent-capability-item">
+                  <span aria-hidden="true"><AgentIcon :name="item.icon" /></span>
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.text }}</p>
+                </article>
+              </section>
+            </div>
+
+            <div v-else ref="messagesBodyRef" class="agent-message-list">
+              <div
+                v-for="message in messages"
+                :key="message.id"
+                class="agent-message"
+                :class="message.role === 'user' ? 'agent-message--user' : 'agent-message--assistant'"
+              >
+                <img
+                  v-if="message.role === 'assistant'"
+                  class="agent-message-avatar agent-message-avatar--assistant"
+                  src="/agent/assistant-avatar.png"
+                  alt="AI 私教头像"
+                />
+
+                <div class="agent-message-stack">
+                  <label v-if="message.role === 'assistant'" class="agent-message-label">{{ message.metaLabel }}</label>
+                  <div class="agent-bubble" :class="{ 'agent-bubble--error': message.tone === 'error' }">
+                    <div class="agent-bubble-content">
+                      <template v-for="(block, blockIndex) in renderMessageContent(message.content)" :key="`${message.id}-${blockIndex}`">
+                        <p v-if="block.type === 'paragraph'" class="agent-bubble-paragraph">
+                          {{ block.text }}
+                        </p>
+
+                        <div v-else-if="block.type === 'table'" class="agent-table-wrap">
+                          <table class="agent-table">
+                            <thead>
+                              <tr>
+                                <th
+                                  v-for="(header, headerIndex) in block.headers"
+                                  :key="`${message.id}-${blockIndex}-header-${headerIndex}`"
+                                >
+                                  {{ header }}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr
+                                v-for="(row, rowIndex) in block.rows"
+                                :key="`${message.id}-${blockIndex}-row-${rowIndex}`"
+                              >
+                                <td
+                                  v-for="(cell, cellIndex) in row"
+                                  :key="`${message.id}-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`"
+                                >
+                                  {{ cell }}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </template>
+                    </div>
+                    <time>{{ message.time }}</time>
+                  </div>
+
+                  <div v-if="message.role === 'assistant' && message.planSuggestion" class="agent-plan-suggestion-actions">
+                    <button
+                      type="button"
+                      class="agent-plan-suggestion-button"
+                      :class="{ 'agent-plan-suggestion-button--saved': getPlanAttachStatus(message).state === 'saved' }"
+                      :disabled="planState.saving || getPlanAttachStatus(message).state === 'saved'"
+                      @click="handleAttachPlan(message)"
+                    >
+                      {{
+                        getPlanAttachStatus(message).state === 'saving'
+                          ? '正在接入...'
+                          : getPlanAttachStatus(message).state === 'saved'
+                            ? '已接入今日计划'
+                            : '一键接入可执行计划'
+                      }}
+                    </button>
+                    <p
+                      v-if="getPlanAttachStatus(message).message && getPlanAttachStatus(message).state === 'error'"
+                      class="agent-plan-suggestion-error"
+                    >
+                      {{ getPlanAttachStatus(message).message }}
+                    </p>
+                  </div>
+                </div>
+
+                <span v-if="message.role === 'user'" class="agent-message-avatar agent-message-avatar--user" aria-hidden="true">
+                  {{ userInitial }}
+                </span>
+              </div>
+
+              <div v-if="aiResponding" class="agent-message agent-message--assistant agent-message--thinking" aria-live="polite" aria-label="AI 私教思考中">
+                <img class="agent-message-avatar agent-message-avatar--assistant" src="/agent/assistant-avatar.png" alt="AI 私教头像" />
+                <div class="agent-message-stack">
+                  <label class="agent-message-label">AI 私教</label>
+                  <div class="agent-bubble agent-bubble--pending">
+                    <div class="agent-typing-indicator">
+                      <span class="agent-typing-label">思考中</span>
+                      <span class="agent-typing-dots" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <footer class="agent-composer-zone">
+              <div class="agent-quick-actions" aria-label="快捷操作">
+                <button
+                  v-for="action in quickActions"
+                  :key="action.id"
+                  class="agent-quick-button"
+                  type="button"
+                  :disabled="composerDisabled"
+                  @click="handleQuickAction(action)"
+                >
+                  <AgentIcon :name="action.icon" />
+                  <span>{{ action.label }}</span>
+                </button>
+              </div>
+
+              <form class="agent-composer" @submit.prevent="handleSubmit()">
+                <textarea
+                  v-model="draft"
+                  rows="1"
+                  class="agent-composer-input"
+                  :placeholder="canUseAgent ? '问 AI：我今天该先练什么？或选择上方快捷操作...' : '恢复聊天完成后可输入问题'"
+                  :disabled="composerDisabled"
+                  @keydown="handleComposerKeydown"
+                ></textarea>
+                <button class="agent-composer-send" type="submit" :disabled="composerDisabled || !draft.trim()" aria-label="发送">
+                  <AgentIcon name="send" />
+                </button>
+              </form>
+
+              <p class="agent-disclaimer">AI 内容仅供参考，请结合个人实际情况判断。</p>
+            </footer>
+          </template>
+        </section>
+
+        <aside v-if="showInsightPanel" class="agent-insight-panel" aria-label="AI 私教简报">
+          <div class="agent-insight-head">
+            <div>
+              <span class="agent-section-kicker">Insight system</span>
+              <h2>AI 私教简报</h2>
+            </div>
+            <span class="agent-insight-status">{{ insightStatusText }}</span>
+          </div>
+
+          <section class="agent-insight-section">
+            <div class="agent-side-title">
+              <span aria-hidden="true"><AgentIcon name="spark" /></span>
+              <div>
+                <h3>今日 AI 结论</h3>
+                <p>{{ dailyConclusion.label }}</p>
+              </div>
+            </div>
+
+            <div v-if="conclusionPanelState === 'loading'" class="agent-skeleton-stack" aria-label="今日结论加载中">
+              <span></span>
+              <span></span>
+              <span></span>
+              <p class="agent-skeleton-note">正在生成今日洞察...</p>
+            </div>
+            <div v-else-if="conclusionPanelState === 'ready'" class="agent-conclusion-copy">
+              <strong>{{ dailyConclusion.title }}</strong>
+              <p>{{ dailyConclusion.summary }}</p>
+              <button type="button" class="agent-inline-action" :disabled="pending" @click="handleConclusionDetail">
+                {{ dailyConclusion.cta }}
+                <AgentIcon name="chevron-right" />
+              </button>
+            </div>
+            <div v-else class="agent-unavailable-box">
+              <strong>暂不可用</strong>
+              <p>{{ conclusionUnavailableMessage }}</p>
+              <button
+                v-if="dailySuggestionState.error && canUseAgent"
+                type="button"
+                class="agent-inline-action agent-inline-action--compact"
+                :disabled="dailySuggestionState.loading"
+                @click="loadDailySuggestion"
+              >
+                重试今日洞察
+              </button>
+            </div>
+          </section>
+
+          <section class="agent-insight-section">
+            <div class="agent-side-title">
+              <span aria-hidden="true"><AgentIcon name="plan" /></span>
+              <div>
+                <h3>AI 可执行计划</h3>
+                <p>{{ hasSavedExecutablePlan ? `剩余 ${remainingPlanMinutes} 分钟` : "训练动作与进度" }}</p>
+              </div>
+              <div class="agent-progress-ring" :style="{ '--agent-plan-progress': `${planProgressPercentage * 3.6}deg` }" :aria-label="planProgressAriaLabel">
+                {{ planProgressDisplay }}
+              </div>
+            </div>
+
+            <div v-if="planPanelState === 'loading'" class="agent-skeleton-stack" aria-label="计划加载中">
+              <span></span>
+              <span></span>
+              <span></span>
+              <p class="agent-skeleton-note">正在同步今日计划...</p>
+            </div>
+            <div v-else-if="planPanelState === 'ready'" class="agent-plan-block">
+              <div class="agent-plan-summary">
+                <span>{{ hasSavedExecutablePlan ? "今日计划" : "AI 建议草案" }}</span>
+                <strong>{{ displayPlanTotalMinutes || "--" }} 分钟</strong>
+              </div>
+              <div class="agent-plan-list">
+                <button
+                  v-for="(item, index) in displayPlanItems"
+                  :key="`${item.task_type}-${item.label}-${index}`"
+                  type="button"
+                  class="agent-plan-row"
+                  :disabled="item.is_complete || planState.saving"
+                  @click="handlePlanItemClick(item)"
+                >
+                  <span class="agent-plan-check" :class="{ 'agent-plan-check--done': item.is_complete }" aria-hidden="true">
+                    <AgentIcon v-if="item.is_complete" name="check" />
+                  </span>
+                  <span class="agent-plan-tag" :style="{ backgroundColor: item.color }">{{ item.task_type }}</span>
+                  <span class="agent-plan-main">
+                    <strong>{{ item.label }}</strong>
+                    <small>{{ item.focus }}</small>
+                  </span>
+                  <span class="agent-plan-count">
+                    <template v-if="hasSavedExecutablePlan">{{ item.effective_completed_count || 0 }}/{{ item.target_count || item.count }}</template>
+                    <template v-else>{{ item.count }} 次</template>
+                  </span>
+                </button>
+              </div>
+              <p v-if="planStatusMessage" class="agent-plan-source">{{ planStatusMessage }}</p>
+              <button
+                class="agent-primary-button agent-primary-button--wide"
+                type="button"
+                :disabled="planState.loading || planState.saving || isPlanComplete"
+                @click="handleStartTraining"
+              >
+                {{ startTrainingLabel }}
+              </button>
+            </div>
+            <div v-else class="agent-unavailable-box">
+              <strong>暂无可执行计划</strong>
+              <p>{{ planUnavailableMessage }}</p>
+              <button
+                v-if="planState.error && canUseAgent"
+                type="button"
+                class="agent-inline-action agent-inline-action--compact"
+                :disabled="planState.loading"
+                @click="refreshExecutablePlan"
+              >
+                重试今日计划
+              </button>
+            </div>
+          </section>
+
+          <section class="agent-insight-section agent-insight-section--last">
+            <div class="agent-side-title">
+              <span aria-hidden="true"><AgentIcon name="chat" /></span>
+              <div>
+                <h3>推荐追问</h3>
+                <p>继续把建议问到可执行</p>
+              </div>
+            </div>
+
+            <div v-if="questionPanelState === 'ready'" class="agent-question-list">
+              <button
+                v-for="item in recommendedQuestions"
+                :key="item.text"
+                type="button"
+                class="agent-question-item"
+                :disabled="pending"
+                @click="handleRecommendedQuestion(item)"
+              >
+                <span>{{ item.text }}</span>
+                <AgentIcon name="chevron-right" />
+              </button>
+            </div>
+            <div v-else class="agent-unavailable-box">
+              <strong>追问暂不可用</strong>
+              <p>{{ questionUnavailableMessage }}</p>
             </div>
           </section>
         </aside>
-
-        <main class="agent-main">
-          <header class="agent-topbar">
-            <div class="agent-greeting">
-              <h1>你好，{{ userDisplayName }} <span>👋</span></h1>
-              <p>坚持每天进步一点点，PTE 梦想更进一步！</p>
-            </div>
-
-            <div class="agent-top-actions">
-              <label class="agent-search" aria-label="搜索">
-                <input type="search" placeholder="搜索练习、题库、报告..." />
-                <span aria-hidden="true"></span>
-              </label>
-
-              <button class="agent-profile" type="button" @click="openPath('/profile')">
-                <span class="agent-profile-avatar" aria-hidden="true">
-                  <img v-if="showUserAvatar" :src="userAvatarUrl" :alt="`${userDisplayName}头像`" @error="handleAvatarError" />
-                  <b v-else>{{ userInitial }}</b>
-                </span>
-                <strong>{{ userDisplayName }}</strong>
-                <svg class="agent-profile-chevron" viewBox="0 0 20 20" aria-hidden="true">
-                  <path d="M5.5 7.5 10 12l4.5-4.5" />
-                </svg>
-              </button>
-            </div>
-          </header>
-
-          <section class="agent-content">
-            <section class="agent-chat-card" :class="{ 'agent-chat-card--empty': isConversationEmpty }">
-              <div v-if="!isConversationEmpty" class="agent-hero">
-                <img class="agent-hero-bot" src="/agent/hero-bot.png" alt="AI 私教机器人" />
-                <div class="agent-hero-copy">
-                  <div class="agent-hero-title-row">
-                    <h2>AI 私教</h2>
-                    <span>智能陪练 · 精准提分</span>
-                  </div>
-                  <p>根据你的练习记录，给你更具体、更可执行的备考建议</p>
-                </div>
-                <span class="agent-hero-star agent-hero-star--left" aria-hidden="true">✦</span>
-                <span class="agent-hero-star agent-hero-star--mid" aria-hidden="true">✦</span>
-                <span class="agent-hero-star agent-hero-star--right" aria-hidden="true">✦</span>
-                <span class="agent-hero-wave" aria-hidden="true"></span>
-              </div>
-
-              <div class="agent-chat-body" :class="{ 'agent-empty-panel': isConversationEmpty }">
-                <div v-if="isConversationEmpty" class="agent-empty-state">
-                  <div class="agent-empty-inner">
-                    <section class="agent-empty-intro" aria-label="AI 私教空状态欢迎">
-                      <h2>开始和 <span>AI 私教</span> 对话</h2>
-                      <p>基于你的练习记录，我会为你分析问题、提供建议并帮你制定提升计划。</p>
-                    </section>
-
-                    <div class="agent-empty-feature-grid" aria-label="AI 私教快捷功能">
-                      <button
-                        v-for="action in emptyFeatureActions"
-                        :key="action.id"
-                        type="button"
-                        class="agent-empty-feature-card"
-                        :class="`agent-empty-feature-card--${action.icon}`"
-                        :disabled="pending"
-                        @click="handleQuickAction(action)"
-                      >
-                        <span class="agent-empty-feature-icon">
-                          <span class="agent-quick-icon" :class="`agent-quick-icon--${action.icon}`" aria-hidden="true"></span>
-                        </span>
-                        <span class="agent-empty-feature-copy">
-                          <strong>{{ action.label }}</strong>
-                          <em v-if="action.id === 'weakness'">精准找出薄弱环节<br />针对性提升</em>
-                          <em v-else-if="action.id === 'today-plan'">根据你的时间与目标<br />定制专属计划</em>
-                          <em v-else-if="action.id === 'explain-score'">深入解析失分原因<br />理解得分要点</em>
-                          <em v-else>智能搭配题型组合<br />高效利用时间</em>
-                        </span>
-                      </button>
-                    </div>
-
-                    <div class="agent-empty-info-grid" aria-label="AI 私教说明卡片">
-                      <section v-for="card in emptyInfoCards" :key="card.id" class="agent-empty-info-card">
-                        <h3>
-                          <span class="agent-empty-info-icon" :class="`agent-empty-info-icon--${card.icon}`" aria-hidden="true"></span>
-                          {{ card.title }}
-                        </h3>
-                        <ul>
-                          <li v-for="item in card.items" :key="item">{{ item }}</li>
-                        </ul>
-                        <button type="button" :disabled="pending" @click="handleSubmit(card.items[0])" aria-label="发送示例问题">
-                          <span aria-hidden="true">→</span>
-                        </button>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-else ref="messagesBodyRef" class="agent-message-list">
-                  <div
-                    v-for="message in messages"
-                    :key="message.id"
-                    class="agent-message"
-                    :class="message.role === 'user' ? 'agent-message--user' : 'agent-message--assistant'"
-                  >
-                    <img
-                      v-if="message.role === 'assistant'"
-                      class="agent-message-avatar agent-message-avatar--assistant"
-                      src="/agent/assistant-avatar.png"
-                      alt="AI 私教头像"
-                    />
-
-                    <div class="agent-message-stack">
-                      <label v-if="message.role === 'assistant'" class="agent-message-label">{{ message.metaLabel }}</label>
-                      <div class="agent-bubble" :class="{ 'agent-bubble--error': message.tone === 'error' }">
-                        <div class="agent-bubble-content">
-                          <template v-for="(block, blockIndex) in renderMessageContent(message.content)" :key="`${message.id}-${blockIndex}`">
-                            <p v-if="block.type === 'paragraph'" class="agent-bubble-paragraph">
-                              {{ block.text }}
-                            </p>
-
-                            <div v-else-if="block.type === 'table'" class="agent-table-wrap">
-                              <table class="agent-table">
-                                <thead>
-                                  <tr>
-                                    <th
-                                      v-for="(header, headerIndex) in block.headers"
-                                      :key="`${message.id}-${blockIndex}-header-${headerIndex}`"
-                                    >
-                                      {{ header }}
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <tr
-                                    v-for="(row, rowIndex) in block.rows"
-                                    :key="`${message.id}-${blockIndex}-row-${rowIndex}`"
-                                  >
-                                    <td
-                                      v-for="(cell, cellIndex) in row"
-                                      :key="`${message.id}-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`"
-                                    >
-                                      {{ cell }}
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          </template>
-                        </div>
-                        <time>{{ message.time }}</time>
-                      </div>
-                      <div v-if="message.role === 'assistant' && message.planSuggestion" class="agent-plan-suggestion-actions">
-                        <button
-                          type="button"
-                          class="agent-plan-suggestion-button"
-                          :class="{ 'agent-plan-suggestion-button--saved': getPlanAttachStatus(message).state === 'saved' }"
-                          :disabled="planState.saving || getPlanAttachStatus(message).state === 'saved'"
-                          @click="handleAttachPlan(message)"
-                        >
-                          {{
-                            getPlanAttachStatus(message).state === 'saving'
-                              ? '正在接入...'
-                              : getPlanAttachStatus(message).state === 'saved'
-                                ? '已接入今日计划'
-                                : '一键接入可执行计划'
-                          }}
-                        </button>
-                        <p
-                          v-if="getPlanAttachStatus(message).message && getPlanAttachStatus(message).state === 'error'"
-                          class="agent-plan-suggestion-error"
-                        >
-                          {{ getPlanAttachStatus(message).message }}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span v-if="message.role === 'user'" class="agent-message-avatar agent-message-avatar--user" aria-hidden="true">
-                      {{ userInitial }}
-                    </span>
-                  </div>
-
-                  <div v-if="pending" class="agent-message agent-message--assistant">
-                    <img class="agent-message-avatar agent-message-avatar--assistant" src="/agent/assistant-avatar.png" alt="AI 私教头像" />
-                    <div class="agent-message-stack">
-                      <label class="agent-message-label">AI 私教</label>
-                      <div class="agent-bubble agent-bubble--pending">
-                        <p class="agent-bubble-paragraph">我正在思考，马上给你更具体的回答。</p>
-                        <time>{{ formatCurrentTime() }}</time>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="agent-composer-zone">
-                  <form class="agent-composer" @submit.prevent="handleSubmit()">
-                    <textarea
-                      v-model="draft"
-                      rows="1"
-                      class="agent-composer-input"
-                      placeholder="输入你的问题，或选择下方快捷操作..."
-                      :disabled="pending"
-                      @keydown="handleComposerKeydown"
-                    ></textarea>
-                    <button class="agent-composer-send" type="submit" :disabled="pending || !draft.trim()" aria-label="发送">
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M5 12 19 5l-4.6 14-3.2-5.3L5 12Z" />
-                        <path d="m11.2 13.7 7.5-8" />
-                      </svg>
-                    </button>
-                  </form>
-
-                  <div class="agent-quick-actions" aria-label="快捷操作">
-                    <button
-                      v-for="action in quickActions"
-                      :key="action.id"
-                      class="agent-quick-button"
-                      type="button"
-                      :disabled="pending"
-                      @click="handleQuickAction(action)"
-                    >
-                      <span class="agent-quick-icon" :class="`agent-quick-icon--${action.icon}`" aria-hidden="true"></span>
-                      <span>{{ action.label }}</span>
-                    </button>
-                  </div>
-
-                  <p class="agent-disclaimer">AI 内容仅供参考，请结合个人实际情况判断。</p>
-                </div>
-              </div>
-            </section>
-
-            <aside class="agent-right-rail">
-              <section class="agent-side-card agent-conclusion-card">
-                <div class="agent-side-title">
-                  <span class="agent-title-icon agent-title-icon--spark" aria-hidden="true">✦</span>
-                  <h3>今日 AI 结论</h3>
-                </div>
-
-                <div class="agent-conclusion-box">
-                  <div class="agent-conclusion-copy">
-                    <span class="agent-conclusion-label">{{ dailyConclusion.label }}</span>
-                    <strong>{{ dailyConclusion.title }}</strong>
-                    <p>{{ dailyConclusion.summary }}</p>
-                  </div>
-                  <div class="agent-conclusion-footer">
-                    <button type="button" class="agent-conclusion-action" @click="handleConclusionDetail">
-                      <span>{{ dailyConclusion.cta }}</span>
-                      <i aria-hidden="true">›</i>
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section class="agent-side-card agent-question-card">
-                <div class="agent-side-title">
-                  <span class="agent-title-icon agent-title-icon--chat" aria-hidden="true">•••</span>
-                  <h3>推荐追问</h3>
-                </div>
-
-                <div class="agent-question-list">
-                  <button
-                    v-for="item in recommendedQuestions"
-                    :key="item.text"
-                    type="button"
-                    class="agent-question-item"
-                    @click="handleRecommendedQuestion(item)"
-                  >
-                    <span class="agent-question-text">{{ item.text }}</span>
-                    <i aria-hidden="true">›</i>
-                  </button>
-                </div>
-              </section>
-
-              <section class="agent-side-card agent-plan-card">
-                <div class="agent-plan-head">
-                  <div class="agent-side-title">
-                    <span class="agent-title-icon agent-title-icon--plan" aria-hidden="true"></span>
-                    <h3>AI 可执行计划</h3>
-                  </div>
-                  <div
-                    class="agent-progress-ring"
-                    :style="{ '--agent-plan-progress': `${planProgressPercentage * 3.6}deg` }"
-                    :aria-label="`计划完成度 ${planProgressPercentage}%`"
-                  >
-                    {{ planProgressPercentage }}%
-                  </div>
-                </div>
-
-                <p class="agent-plan-subtitle">
-                  <template v-if="hasExecutablePlan">{{ activePlan.title }} · 剩余 {{ remainingPlanMinutes }} 分钟</template>
-                  <template v-else>{{ planStatusMessage }}</template>
-                </p>
-
-                <div v-if="hasExecutablePlan" class="agent-plan-list">
-                  <div
-                    v-for="item in executablePlanItems"
-                    :key="`${item.task_type}-${item.label}`"
-                    class="agent-plan-row"
-                  >
-                    <span class="agent-plan-check" :class="{ 'agent-plan-check--done': item.is_complete }" aria-hidden="true"></span>
-                    <span class="agent-plan-tag" :style="{ backgroundColor: item.color }">{{ item.task_type }}</span>
-                    <strong :title="item.focus">{{ item.label }}</strong>
-                    <span class="agent-plan-count">{{ item.effective_completed_count }}/{{ item.target_count }}</span>
-                    <time>{{ item.minutes }} 分钟</time>
-                  </div>
-                </div>
-                <div v-else class="agent-plan-empty">
-                  <p>{{ planStatusMessage }}</p>
-                </div>
-
-                <button
-                  class="agent-start-button"
-                  type="button"
-                  :disabled="planState.loading || planState.saving || isPlanComplete"
-                  @click="handleStartTraining"
-                >
-                  {{ startTrainingLabel }}
-                </button>
-              </section>
-            </aside>
-          </section>
-        </main>
-      </div>
-    </div>
+      </section>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.agent-replica-page {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 100vh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  background: #f6f9ff;
-}
-
-.agent-scale-slot {
-  position: relative;
-  overflow: visible;
-}
-
-.agent-canvas,
-.agent-canvas * {
-  box-sizing: border-box;
-}
-
-.agent-canvas {
-  position: relative;
+.agent-page {
+  --agent-bg: #f7f5ff;
+  --agent-bg-soft: #edf8fb;
+  --agent-surface: rgba(255, 255, 255, 0.82);
+  --agent-surface-strong: rgba(255, 255, 255, 0.94);
+  --agent-border: rgba(193, 201, 233, 0.74);
+  --agent-border-soft: rgba(216, 224, 244, 0.72);
+  --agent-text: #0e1934;
+  --agent-muted: #687795;
+  --agent-faint: #8a98b4;
+  --agent-primary: #5b5cf6;
+  --agent-primary-strong: #3840d2;
+  --agent-secondary: #13a7a8;
+  --agent-violet: #7c3aed;
+  --agent-teal: #16a6b1;
+  --agent-amber: #d78a1f;
+  --agent-danger: #ba4a4a;
+  --agent-shadow: 0 24px 70px rgba(36, 55, 105, 0.13);
   display: grid;
-  grid-template-columns: 360px 1fr;
-  width: 2560px;
-  height: 1399px;
-  overflow: hidden;
-  transform-origin: top left;
-  color: #132044;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 100vh;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  color: var(--agent-text);
   background:
-    radial-gradient(circle at 72% -8%, rgba(232, 236, 255, 0.86), transparent 28%),
-    linear-gradient(180deg, #fbfdff 0%, #f6f9ff 54%, #f8fbff 100%);
-  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif;
+    linear-gradient(135deg, rgba(242, 247, 255, 0.96) 0%, rgba(250, 253, 255, 0.92) 42%, rgba(247, 243, 255, 0.9) 72%, rgba(239, 250, 250, 0.86) 100%),
+    linear-gradient(180deg, #fbfdff 0%, var(--agent-bg) 100%);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+}
+
+.agent-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(75, 104, 170, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(75, 104, 170, 0.05) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.58), transparent 76%);
+}
+
+.agent-sidebar,
+.agent-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.agent-page * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 137, 180, 0.34) transparent;
+}
+
+.agent-page *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.agent-page *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(120, 137, 180, 0.34);
+  background-clip: padding-box;
+}
+
+.agent-page *::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .agent-sidebar {
-  position: relative;
-  height: 1399px;
-  padding: 32px 30px 0;
-  border-right: 1px solid #e6edf8;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(247, 250, 255, 0.98));
-  box-shadow: 26px 0 58px rgba(60, 88, 150, 0.055);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: 100vh;
+  padding: 28px 18px;
+  border-right: 1px solid rgba(212, 224, 245, 0.82);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px);
 }
 
 .agent-brand {
   display: flex;
   align-items: center;
-  gap: 22px;
-  padding-left: 26px;
+  gap: 12px;
+  padding: 0 4px 22px;
+}
+
+.agent-brand strong {
+  color: #10172e;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .agent-brand-mark {
   position: relative;
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #1674ff 0%, #1662ee 100%);
-  box-shadow: 0 18px 32px rgba(26, 105, 245, 0.2);
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--agent-primary), var(--agent-violet));
+  box-shadow: 0 16px 32px rgba(55, 88, 246, 0.24);
 }
 
 .agent-brand-mark::before {
   content: "";
   position: absolute;
-  left: 15px;
-  top: 13px;
-  width: 21px;
-  height: 27px;
-  border: 11px solid #fff;
+  left: 13px;
+  top: 11px;
+  width: 16px;
+  height: 21px;
+  border: 8px solid #fff;
   border-right: 0;
-  border-radius: 14px 0 0 14px;
+  border-radius: 12px 0 0 12px;
 }
 
 .agent-brand-mark::after {
   content: "";
   position: absolute;
-  right: 11px;
-  bottom: 11px;
-  width: 19px;
-  height: 19px;
-  border-radius: 6px;
+  right: 9px;
+  bottom: 9px;
+  width: 15px;
+  height: 15px;
+  border-radius: 5px;
   background: #fff;
-}
-
-.agent-brand-text {
-  color: #111629;
-  font-size: 42px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0;
 }
 
 .agent-nav {
   display: grid;
-  gap: 24px;
-  margin-top: 67px;
+  gap: 8px;
 }
 
 .agent-nav-item {
-  position: relative;
   display: flex;
   align-items: center;
-  width: 306px;
-  height: 72px;
-  gap: 24px;
-  border: 0;
-  border-radius: 10px;
-  padding: 0 28px;
+  gap: 12px;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 0 14px;
   background: transparent;
-  color: #6c7897;
+  color: #60708f;
   font: inherit;
-  font-size: 25px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 760;
   text-align: left;
   cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.agent-nav-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(203, 216, 244, 0.86);
+  background: rgba(255, 255, 255, 0.78);
+  color: #26375e;
 }
 
 .agent-nav-item--active {
-  color: #176cff;
-  background: linear-gradient(90deg, #e9efff 0%, rgba(242, 246, 255, 0.82) 100%);
-}
-
-.agent-nav-item--active::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -1px;
-  width: 6px;
-  height: 100%;
-  border-radius: 10px 0 0 10px;
-  background: #236cff;
+  border-color: rgba(70, 101, 245, 0.26);
+  background: linear-gradient(135deg, rgba(238, 243, 255, 0.96), rgba(245, 241, 255, 0.88));
+  color: var(--agent-primary-strong);
+  box-shadow: 0 14px 26px rgba(54, 84, 190, 0.08);
 }
 
 .agent-nav-icon {
-  position: relative;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
+  font-size: 20px;
   color: currentColor;
-  flex: 0 0 auto;
-}
-
-.agent-nav-icon::before,
-.agent-nav-icon::after {
-  content: "";
-  position: absolute;
-}
-
-.agent-nav-icon--home::before {
-  width: 18px;
-  height: 16px;
-  border: 3px solid currentColor;
-  border-top: 0;
-  border-radius: 3px;
-  top: 11px;
-}
-
-.agent-nav-icon--home::after {
-  width: 17px;
-  height: 17px;
-  border-left: 3px solid currentColor;
-  border-top: 3px solid currentColor;
-  transform: rotate(45deg);
-  top: 3px;
-}
-
-.agent-nav-icon--list::before {
-  width: 16px;
-  height: 18px;
-  border: 3px solid currentColor;
-  border-radius: 3px;
-}
-
-.agent-nav-icon--list::after {
-  width: 11px;
-  height: 3px;
-  top: 9px;
-  background: currentColor;
-  box-shadow: 0 7px 0 currentColor;
-}
-
-.agent-nav-icon--spark::before {
-  width: 9px;
-  height: 9px;
-  border-radius: 3px;
-  background: currentColor;
-  transform: rotate(45deg);
-}
-
-.agent-nav-icon--square::before,
-.agent-nav-icon--box::before {
-  width: 14px;
-  height: 14px;
-  border: 3px solid currentColor;
-  border-radius: 3px;
-}
-
-.agent-nav-icon--report::before {
-  width: 16px;
-  height: 16px;
-  border-radius: 2px;
-  border: 3px solid currentColor;
-  background:
-    linear-gradient(45deg, transparent 0 34%, currentColor 34% 42%, transparent 42% 58%, currentColor 58% 66%, transparent 66%);
-}
-
-.agent-nav-icon--circle::before {
-  width: 13px;
-  height: 13px;
-  border: 3px solid currentColor;
-  border-radius: 999px;
 }
 
 .agent-resource-card {
-  position: absolute;
-  left: 33px;
-  bottom: 125px;
-  width: 304px;
-  height: 265px;
+  margin-top: auto;
   overflow: hidden;
-  padding: 26px 24px;
-  border: 1px solid #edf2fb;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #f4f7ff 0%, #eef2ff 100%);
+  border: 1px solid rgba(196, 212, 244, 0.84);
+  border-radius: 18px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(241, 249, 250, 0.86)),
+    linear-gradient(90deg, rgba(91, 92, 246, 0.09), rgba(215, 138, 31, 0.08));
+  box-shadow: 0 16px 34px rgba(42, 64, 120, 0.08);
+}
+
+.agent-resource-title,
+.agent-resource-copy {
+  margin: 0;
 }
 
 .agent-resource-title {
-  margin: 0;
-  color: #2a365a;
-  font-size: 23px;
-  font-weight: 900;
+  font-size: 16px;
+  font-weight: 850;
 }
 
 .agent-resource-copy {
-  margin: 18px 0 0;
-  color: #7f8aaa;
-  font-size: 17px;
-  font-weight: 700;
+  margin-top: 8px;
+  color: var(--agent-muted);
+  font-size: 12px;
+  font-weight: 680;
 }
 
 .agent-resource-button {
-  position: relative;
-  z-index: 2;
-  height: 47px;
-  margin-top: 38px;
+  min-height: 38px;
+  margin-top: 16px;
   border: 0;
   border-radius: 999px;
-  padding: 0 25px;
-  background: linear-gradient(135deg, #7363ff, #8b72ff);
-  box-shadow: 0 18px 32px rgba(116, 101, 255, 0.24);
+  padding: 0 16px;
+  background: linear-gradient(135deg, var(--agent-primary), var(--agent-violet));
   color: #fff;
-  font-size: 17px;
-  font-weight: 800;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 780;
+  cursor: pointer;
+  box-shadow: 0 14px 24px rgba(55, 88, 246, 0.22);
 }
 
-.agent-gift {
-  position: absolute;
-  right: 22px;
-  bottom: 24px;
-  width: 92px;
-  height: 88px;
-  transform: rotate(-12deg);
-}
-
-.agent-gift-box,
-.agent-gift-lid {
-  position: absolute;
-  display: block;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #5e88ff, #8a6bff);
-  box-shadow: 0 16px 24px rgba(93, 117, 255, 0.2);
-}
-
-.agent-gift-box {
-  left: 18px;
-  bottom: 0;
-  width: 56px;
-  height: 54px;
-}
-
-.agent-gift-lid {
-  left: 10px;
-  top: 17px;
-  width: 72px;
-  height: 20px;
-}
-
-.agent-gift-ribbon {
-  position: absolute;
-  left: 40px;
-  top: 14px;
-  width: 13px;
-  height: 70px;
-  border-radius: 999px;
-  background: #ff9d3b;
-}
-
-.agent-gift::before,
-.agent-gift::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  width: 28px;
-  height: 22px;
-  border: 7px solid #686cff;
-  border-radius: 999px 999px 4px 999px;
-}
-
-.agent-gift::before {
-  left: 23px;
-  transform: rotate(28deg);
-}
-
-.agent-gift::after {
-  right: 21px;
-  transform: rotate(-28deg) scaleX(-1);
-}
-
-.agent-main {
-  position: relative;
-  height: 1399px;
+.agent-shell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
+  padding: 18px clamp(18px, 2.2vw, 42px) 18px;
 }
 
 .agent-topbar {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 130px;
-  border-bottom: 1px solid #e8eef8;
-  background: rgba(255, 255, 255, 0.44);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 2360px;
+  width: 100%;
+  flex: 0 0 auto;
+  margin: 0 auto 16px;
 }
 
-.agent-greeting {
-  position: absolute;
-  left: 126px;
-  top: 29px;
+.agent-heading {
+  min-width: 0;
 }
 
-.agent-greeting h1 {
+.agent-kicker,
+.agent-section-kicker {
+  display: inline-flex;
+  align-items: center;
+  color: var(--agent-primary);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.agent-heading h1,
+.agent-workbench-head h2,
+.agent-insight-head h2,
+.agent-state-hero h2,
+.agent-empty-intro h2 {
   margin: 0;
-  color: #16213f;
-  font-size: 31px;
-  font-weight: 900;
-  line-height: 1.24;
   letter-spacing: 0;
 }
 
-.agent-greeting h1 span {
-  font-size: 26px;
+.agent-heading h1 {
+  margin-top: 5px;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1.15;
 }
 
-.agent-greeting p {
+.agent-heading p {
+  max-width: 760px;
   margin: 9px 0 0;
-  color: #8996b4;
-  font-size: 18px;
-  font-weight: 700;
+  color: #61708e;
+  font-size: 14px;
+  font-weight: 660;
+  line-height: 1.65;
 }
 
 .agent-top-actions {
-  position: absolute;
-  top: 28px;
-  right: 78px;
   display: flex;
   align-items: center;
-  gap: 52px;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: max-content;
 }
 
-.agent-search {
+.agent-session-actions {
   display: flex;
   align-items: center;
-  width: 556px;
-  height: 62px;
-  border: 1px solid #e4eaf6;
+  gap: 8px;
+}
+
+.agent-status-pill,
+.agent-insight-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid rgba(199, 212, 242, 0.8);
   border-radius: 999px;
-  padding: 0 25px 0 31px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 12px 34px rgba(83, 103, 151, 0.055);
+  padding: 0 13px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #40517a;
+  font-size: 12px;
+  font-weight: 820;
+  white-space: nowrap;
 }
 
-.agent-search input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #536382;
+.agent-status-pill span {
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: #9aa9c5;
+}
+
+.agent-status-pill--restoring span {
+  background: var(--agent-primary);
+  animation: agentPulse 1.1s ease-in-out infinite;
+}
+
+.agent-status-pill--empty span,
+.agent-status-pill--chat span {
+  background: #22aa82;
+}
+
+.agent-status-pill--locked span,
+.agent-status-pill--failed span,
+.agent-status-pill--unavailable span {
+  background: var(--agent-amber);
+}
+
+.agent-soft-button,
+.agent-profile {
+  min-height: 38px;
+  border: 1px solid rgba(199, 212, 242, 0.82);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #40517a;
   font: inherit;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 820;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
-.agent-search input::placeholder {
-  color: #98a5c3;
+.agent-soft-button {
+  padding: 0 13px;
 }
 
-.agent-search span {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  color: #9aa7c2;
-  flex: 0 0 auto;
+.agent-soft-button:hover,
+.agent-profile:hover {
+  transform: translateY(-1px);
+  border-color: rgba(82, 111, 246, 0.32);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 12px 26px rgba(47, 69, 132, 0.08);
 }
 
-.agent-search span::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 16px;
-  height: 16px;
-  border: 3px solid currentColor;
-  border-radius: 999px;
+.agent-soft-button:disabled,
+.agent-primary-button:disabled,
+.agent-secondary-button:disabled,
+.agent-inline-action:disabled,
+.agent-quick-button:disabled,
+.agent-plan-row:disabled,
+.agent-question-item:disabled,
+.agent-composer-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
 }
 
-.agent-search span::after {
-  content: "";
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 11px;
-  height: 3px;
-  border-radius: 999px;
-  background: currentColor;
-  transform: rotate(45deg);
+.agent-soft-button--danger {
+  color: var(--agent-danger);
+  border-color: rgba(217, 162, 162, 0.8);
 }
 
 .agent-profile {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 18px;
-  border: 0;
-  background: transparent;
-  color: #16213f;
-  font: inherit;
-  cursor: pointer;
+  gap: 9px;
+  padding: 0 12px 0 6px;
+}
+
+.agent-profile-avatar,
+.agent-message-avatar {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  flex: 0 0 auto;
 }
 
 .agent-profile-avatar {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: linear-gradient(135deg, #eef3ff 0%, #dfe7ff 100%);
-  color: #496aff;
-  font-size: 22px;
-  font-weight: 950;
-  box-shadow: 0 0 0 4px #fff;
+  width: 30px;
+  height: 30px;
+  background: linear-gradient(135deg, #edf3ff, #e7e4ff);
+  color: var(--agent-primary);
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .agent-profile-avatar img {
@@ -1356,1341 +3080,1504 @@ function normalizeText(value) {
   object-fit: cover;
 }
 
-.agent-profile-avatar b {
-  font: inherit;
-  line-height: 1;
-}
-
 .agent-profile strong {
-  max-width: 190px;
+  max-width: 140px;
   overflow: hidden;
-  font-size: 21px;
-  font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-profile-chevron {
-  width: 16px;
-  height: 16px;
-  color: #7180a1;
-}
-
-.agent-profile-chevron path {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.1;
-}
-
-.agent-content {
-  position: absolute;
-  left: 130px;
-  top: 160px;
+.agent-workspace-grid {
   display: grid;
-  grid-template-columns: 1358px 610px;
-  gap: 45px;
-  width: 2013px;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 22px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 2360px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 auto;
 }
 
-.agent-chat-card {
-  height: 1206px;
-  overflow: hidden;
-  border: 1px solid #e9eef8;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 22px 60px rgba(67, 83, 126, 0.07);
+.agent-workspace-grid--single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.agent-hero {
+.agent-chat-workbench,
+.agent-insight-panel {
   position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--agent-border);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 253, 255, 0.76)),
+    linear-gradient(135deg, rgba(91, 92, 246, 0.05), rgba(19, 167, 168, 0.04));
+  box-shadow: var(--agent-shadow);
+  backdrop-filter: blur(20px);
+}
+
+.agent-chat-workbench {
   display: flex;
-  align-items: center;
-  height: 145px;
+  flex-direction: column;
   overflow: hidden;
-  border-radius: 18px 18px 0 0;
-  background: #eef3ff url("/agent/ai-tutor-hero-bg.png") center center / cover no-repeat;
 }
 
-.agent-hero-bot,
-.agent-hero-copy,
-.agent-hero-star,
-.agent-hero-wave {
-  display: none;
+.agent-chat-workbench--focus {
+  max-width: 1180px;
+  width: 100%;
+  justify-self: center;
 }
 
-.agent-hero-bot {
-  position: absolute;
-  left: 105px;
-  bottom: -4px;
-  width: 134px;
-  height: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 18px 22px rgba(96, 107, 166, 0.12));
-}
-
-.agent-hero-copy {
-  position: relative;
-  z-index: 2;
-  margin-left: 330px;
-}
-
-.agent-hero-title-row {
+.agent-workbench-head,
+.agent-insight-head {
   display: flex;
-  align-items: center;
-  gap: 33px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid rgba(207, 219, 242, 0.76);
+  flex: 0 0 auto;
+  padding: 18px 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 251, 255, 0.48));
 }
 
-.agent-hero-title-row h2 {
-  margin: 0;
-  color: #08153d;
-  font-size: 46px;
-  font-weight: 950;
-  line-height: 1;
-  letter-spacing: 0;
+.agent-workbench-head h2,
+.agent-insight-head h2 {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.22;
 }
 
-.agent-hero-title-row span {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  border-radius: 9px;
-  padding: 0 18px;
-  background: #dde5ff;
-  color: #6370b4;
-  font-size: 17px;
+.agent-workbench-head > div:first-child p {
+  max-width: 680px;
+  margin: 4px 0 0;
+  color: var(--agent-muted);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.agent-workbench-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 146px;
+  border: 1px solid rgba(205, 216, 242, 0.78);
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.68);
+  text-align: right;
+}
+
+.agent-workbench-meta span {
+  color: var(--agent-faint);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.agent-workbench-meta strong {
+  color: #263757;
+  font-size: 12px;
   font-weight: 900;
 }
 
-.agent-hero-copy p {
-  margin: 22px 0 0;
-  color: #47567e;
-  font-size: 20px;
-  font-weight: 850;
-}
-
-.agent-hero-star {
+.agent-toast {
   position: absolute;
-  color: #657dff;
-  font-size: 30px;
-  line-height: 1;
+  top: 18px;
+  left: 50%;
+  z-index: 10;
+  margin: 0;
+  transform: translateX(-50%);
+  border: 1px solid rgba(73, 190, 160, 0.28);
+  border-radius: 999px;
+  padding: 9px 14px;
+  background: rgba(240, 255, 250, 0.96);
+  color: #13795d;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 14px 28px rgba(23, 121, 93, 0.1);
 }
 
-.agent-hero-star--left {
-  left: 49px;
-  top: 64px;
-  font-size: 22px;
-}
-
-.agent-hero-star--mid {
-  left: 825px;
-  top: 44px;
-  font-size: 18px;
-}
-
-.agent-hero-star--right {
-  right: 176px;
-  top: 45px;
-}
-
-.agent-hero-wave {
-  position: absolute;
-  right: -15px;
-  top: -18px;
-  width: 620px;
-  height: 170px;
-  border: 2px solid rgba(154, 171, 255, 0.16);
-  border-color: rgba(142, 161, 255, 0.16) transparent transparent transparent;
-  border-radius: 50%;
-  transform: rotate(-5deg);
-}
-
-.agent-chat-body {
-  display: flex;
-  height: calc(100% - 145px);
-  flex-direction: column;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 100%),
-    radial-gradient(circle at 72% 36%, rgba(245, 247, 255, 0.72), transparent 36%);
-}
-
-.agent-chat-card--empty .agent-chat-body {
-  height: 100%;
-  background: transparent;
-}
-
-.agent-empty-panel {
-  position: relative;
-  overflow: hidden;
-  border-radius: 18px;
-  padding: 0 31px 18px;
-  background:
-    linear-gradient(180deg, rgba(239, 238, 255, 0.94) 0%, rgba(247, 249, 255, 0.96) 55%, rgba(255, 255, 255, 0.96) 100%),
-    radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.56) 24%, rgba(244, 247, 255, 0.15) 55%, transparent 70%);
-}
-
-.agent-empty-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: url("/agent/ai-tutor-empty-bg.png") center top / 100% 100% no-repeat;
-  opacity: 0.96;
-  pointer-events: none;
-}
-
-.agent-empty-panel::after {
-  content: "";
-  position: absolute;
-  right: 24px;
-  bottom: 14px;
-  left: 24px;
-  z-index: 0;
-  height: 210px;
-  border-radius: 0 0 18px 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.48) 52%, rgba(255, 255, 255, 0.78) 100%);
-  pointer-events: none;
-}
-
-.agent-empty-state {
-  position: relative;
-  z-index: 1;
+.agent-state-screen {
+  display: grid;
+  place-items: center;
+  flex: 1;
   min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  padding: 0;
-  background: transparent;
+  overflow-y: auto;
+  padding: 20px 28px;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.72), rgba(249, 246, 255, 0.72)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.76));
 }
 
-.agent-empty-inner {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 318px;
+.agent-state-card {
+  width: min(940px, 100%);
+  border: 1px solid rgba(199, 211, 241, 0.82);
+  border-radius: 30px;
+  padding: clamp(22px, 2.5vw, 34px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(246, 251, 255, 0.7)),
+    linear-gradient(135deg, rgba(91, 92, 246, 0.08), rgba(19, 167, 168, 0.06));
+  box-shadow: 0 24px 56px rgba(42, 60, 115, 0.1);
 }
 
-.agent-empty-intro {
+.agent-state-hero {
+  width: min(720px, 100%);
   text-align: center;
 }
 
-.agent-empty-intro h2 {
-  margin: 0;
-  color: #07163c;
-  font-size: 43px;
-  font-weight: 950;
-  line-height: 1.12;
-  letter-spacing: 0;
-}
-
-.agent-empty-intro h2 span {
-  color: #2f71ff;
-}
-
-.agent-empty-intro p {
-  margin: 18px 0 0;
-  color: #4f628e;
-  font-size: 21px;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
-.agent-empty-feature-grid {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 28px;
-  margin-top: 36px;
-}
-
-.agent-empty-feature-card {
-  display: flex;
-  align-items: center;
-  height: 132px;
-  border: 1px solid #e7edf9;
-  border-radius: 16px;
-  padding: 0 20px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 16px 36px rgba(58, 76, 123, 0.07);
-  color: #13264f;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.agent-empty-feature-card:disabled {
-  opacity: 0.62;
-  cursor: default;
-}
-
-.agent-empty-feature-icon {
-  display: grid;
-  place-items: center;
-  width: 60px;
-  height: 60px;
-  margin-right: 18px;
-  border-radius: 16px;
-  flex: 0 0 auto;
-}
-
-.agent-empty-feature-card--trend .agent-empty-feature-icon {
-  background: linear-gradient(180deg, #f3e5ff 0%, #f8f0ff 100%);
-  color: #8e55ee;
-}
-
-.agent-empty-feature-card--calendar .agent-empty-feature-icon {
-  background: linear-gradient(180deg, #edf3ff 0%, #f4f7ff 100%);
-  color: #2f7dff;
-}
-
-.agent-empty-feature-card--question .agent-empty-feature-icon {
-  background: linear-gradient(180deg, #fff0e5 0%, #fff7ef 100%);
-  color: #ff8b2d;
-}
-
-.agent-empty-feature-card--clock .agent-empty-feature-icon {
-  background: linear-gradient(180deg, #e4f8f1 0%, #f0fbf7 100%);
-  color: #26c39a;
-}
-
-.agent-empty-feature-icon .agent-quick-icon {
-  width: 31px;
-  height: 31px;
-  color: currentColor;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--trend::before {
-  width: 24px;
-  height: 18px;
-  border-left-width: 4px;
-  border-bottom-width: 4px;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--trend::after {
-  width: 20px;
-  height: 13px;
-  border-left-width: 4px;
-  border-top-width: 4px;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--calendar::before {
-  width: 25px;
-  height: 22px;
-  border-width: 4px;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--calendar::after {
-  width: 17px;
-  height: 4px;
-  top: 12px;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--question::before,
-.agent-empty-feature-icon .agent-quick-icon--clock::before {
-  width: 24px;
-  height: 24px;
-  border-width: 4px;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--question::after {
-  top: 0;
-  font-size: 20px;
-}
-
-.agent-empty-feature-icon .agent-quick-icon--clock::after {
-  width: 9px;
-  height: 9px;
-  border-left-width: 4px;
-  border-bottom-width: 4px;
-  top: 8px;
-}
-
-.agent-empty-feature-copy {
-  display: grid;
-  gap: 13px;
-  min-width: 0;
-}
-
-.agent-empty-feature-copy strong {
-  color: #12234f;
-  font-size: 21px;
-  font-weight: 950;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.agent-empty-feature-copy em {
-  color: #66759e;
-  font-size: 17px;
-  font-style: normal;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
-.agent-empty-info-grid {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 22px;
-  margin-top: 42px;
-}
-
-.agent-empty-info-card {
-  position: relative;
-  min-height: 212px;
-  border: 1px solid #e4ebf8;
-  border-radius: 16px;
-  padding: 29px 31px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 18px 38px rgba(58, 76, 123, 0.055);
-}
-
-.agent-empty-info-card h3 {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0;
-  color: #4e66ff;
-  font-size: 23px;
-  font-weight: 950;
-  line-height: 1;
-}
-
-.agent-empty-info-icon {
-  position: relative;
+.agent-state-icon {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  color: #6172ff;
-  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(106, 130, 242, 0.2);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(234, 243, 255, 0.9));
+  color: var(--agent-primary);
+  font-size: 34px;
+  box-shadow: 0 20px 44px rgba(70, 94, 170, 0.13);
 }
 
-.agent-empty-info-icon::before,
-.agent-empty-info-icon::after {
-  position: absolute;
+.agent-state-icon--loading {
+  animation: agentSpin 1.5s linear infinite;
 }
 
-.agent-empty-info-icon--message::before {
-  content: "";
-  width: 19px;
-  height: 15px;
-  border: 4px solid currentColor;
-  border-radius: 3px;
+.agent-state-hero h2 {
+  margin-top: 10px;
+  font-size: 32px;
+  font-weight: 930;
+  line-height: 1.15;
 }
 
-.agent-empty-info-icon--message::after {
-  content: "";
-  left: 7px;
-  bottom: 1px;
-  border-width: 5px 5px 0 0;
-  border-style: solid;
-  border-color: currentColor transparent transparent transparent;
-  transform: rotate(20deg);
+.agent-state-hero p {
+  max-width: 680px;
+  margin: 10px auto 0;
+  color: #5f6f90;
+  font-size: 15px;
+  font-weight: 620;
+  line-height: 1.8;
 }
 
-.agent-empty-info-icon--star::before {
-  content: "★";
-  color: currentColor;
-  font-size: 27px;
-  line-height: 1;
-}
-
-.agent-empty-info-icon--like::before {
-  content: "";
-  left: 8px;
-  top: 8px;
-  width: 15px;
-  height: 14px;
-  border-radius: 4px 4px 5px 5px;
-  background: currentColor;
-  transform: rotate(2deg);
-}
-
-.agent-empty-info-icon--like::after {
-  content: "";
-  left: 3px;
-  top: 12px;
-  width: 8px;
-  height: 10px;
-  border-radius: 3px;
-  background: currentColor;
-  box-shadow: 9px -10px 0 -2px currentColor;
-  transform: rotate(-15deg);
-}
-
-.agent-empty-info-card ul {
+.agent-restore-grid {
   display: grid;
-  gap: 20px;
-  margin: 30px 0 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(820px, 100%);
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.agent-restore-step {
+  border: 1px solid rgba(204, 216, 242, 0.86);
+  border-radius: 20px;
+  padding: 17px;
+  background: rgba(255, 255, 255, 0.74);
+  text-align: left;
+  box-shadow: 0 14px 32px rgba(45, 66, 125, 0.06);
+}
+
+.agent-restore-step-dot {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  background: rgba(236, 241, 252, 0.9);
+  color: #7a8aa8;
+}
+
+.agent-restore-step-dot--active {
+  background: rgba(228, 238, 255, 0.96);
+  color: var(--agent-primary);
+}
+
+.agent-restore-step strong,
+.agent-lock-list span,
+.agent-stat-item strong,
+.agent-capability-item strong,
+.agent-conclusion-copy strong,
+.agent-unavailable-box strong {
+  display: block;
+}
+
+.agent-restore-step strong {
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.agent-restore-step p {
+  margin: 6px 0 0;
+  color: var(--agent-muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.55;
+}
+
+.agent-lock-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: min(640px, 100%);
+  margin: 22px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.agent-empty-info-card li {
+.agent-lock-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  border: 1px solid rgba(209, 220, 243, 0.78);
+  border-radius: 14px;
+  padding: 0 13px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #40517a;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.agent-lock-list svg {
+  color: #18a67d;
+  font-size: 16px;
+}
+
+.agent-state-note {
+  width: min(640px, 100%);
+  margin: 16px auto 0;
+  border: 1px solid rgba(203, 216, 244, 0.78);
+  border-radius: 16px;
+  padding: 11px 14px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #61708e;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.agent-state-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.agent-primary-button,
+.agent-secondary-button,
+.agent-inline-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 860;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.agent-primary-button {
+  min-height: 44px;
+  border: 0;
+  padding: 0 20px;
+  background: linear-gradient(135deg, var(--agent-primary), var(--agent-violet));
+  color: #fff;
+  box-shadow: 0 16px 28px rgba(54, 88, 246, 0.22);
+}
+
+.agent-primary-button:hover:not(:disabled),
+.agent-secondary-button:hover:not(:disabled),
+.agent-inline-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.agent-primary-button--wide {
+  width: 100%;
+}
+
+.agent-secondary-button {
+  min-height: 44px;
+  border: 1px solid rgba(199, 212, 242, 0.9);
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #41527b;
+}
+
+.agent-empty-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 18px;
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+}
+
+.agent-empty-intro {
   position: relative;
-  margin: 0;
-  padding-left: 28px;
-  color: #5f6f96;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.25;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 22px;
+  align-items: center;
+  min-height: 220px;
+  border: 1px solid rgba(203, 216, 244, 0.82);
+  border-radius: 24px;
+  padding: 22px;
+  background:
+    linear-gradient(135deg, rgba(238, 245, 255, 0.9), rgba(248, 245, 255, 0.72) 55%, rgba(237, 250, 250, 0.72)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.48));
 }
 
-.agent-empty-info-card li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 5px;
-  width: 8px;
-  height: 8px;
-  border-top: 3px solid #b8c5e7;
-  border-right: 3px solid #b8c5e7;
-  transform: rotate(45deg);
+.agent-empty-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
 }
 
-.agent-empty-info-card button {
-  position: absolute;
-  right: 24px;
-  bottom: 24px;
+.agent-empty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid rgba(66, 96, 245, 0.18);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--agent-primary);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.agent-empty-badge svg {
+  font-size: 16px;
+}
+
+.agent-empty-intro h2 {
+  max-width: 780px;
+  margin-top: 14px;
+  font-size: 30px;
+  font-weight: 930;
+  line-height: 1.18;
+}
+
+.agent-empty-intro p {
+  max-width: 660px;
+  margin: 12px 0 0;
+  color: #60708f;
+  font-size: 15px;
+  font-weight: 630;
+  line-height: 1.75;
+}
+
+.agent-empty-entry-note {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 14px !important;
+  border: 1px solid rgba(203, 216, 244, 0.82);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #50607f !important;
+  font-size: 12px !important;
+  font-weight: 760 !important;
+  line-height: 1.35 !important;
+}
+
+.agent-empty-visual {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  border: 0;
-  border-radius: 999px;
-  background: #edf3ff;
-  color: #5d82ff;
-  font: inherit;
-  font-size: 25px;
-  font-weight: 900;
-  line-height: 1;
-  cursor: pointer;
+  overflow: hidden;
+  height: 190px;
+  border: 1px solid rgba(197, 212, 243, 0.72);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(230, 243, 246, 0.78));
 }
 
-.agent-empty-info-card button:disabled {
-  opacity: 0.62;
-  cursor: default;
+.agent-empty-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agent-empty-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 52%, rgba(15, 23, 42, 0.16));
+  pointer-events: none;
+}
+
+.agent-empty-orbit {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #394967;
+  font-size: 11px;
+  font-weight: 850;
+  box-shadow: 0 12px 22px rgba(32, 53, 102, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.agent-empty-orbit--one {
+  left: 12px;
+  top: 14px;
+}
+
+.agent-empty-orbit--two {
+  right: 12px;
+  bottom: 14px;
+  color: var(--agent-primary-strong);
+}
+
+.agent-stats-row,
+.agent-capability-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.agent-stats-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.agent-stat-item,
+.agent-capability-item {
+  border: 1px solid rgba(207, 219, 242, 0.8);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 14px 30px rgba(45, 66, 125, 0.06);
+}
+
+.agent-stat-item {
+  padding: 16px;
+}
+
+.agent-stat-item span {
+  color: var(--agent-faint);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.agent-stat-item strong {
+  margin-top: 7px;
+  font-size: 23px;
+  font-weight: 920;
+}
+
+.agent-stat-item p,
+.agent-capability-item p {
+  margin: 6px 0 0;
+  color: var(--agent-muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.55;
+}
+
+.agent-capability-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.agent-capability-item {
+  padding: 17px;
+}
+
+.agent-capability-item > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: rgba(231, 238, 255, 0.88);
+  color: var(--agent-primary);
+  font-size: 20px;
+}
+
+.agent-capability-item strong {
+  font-size: 15px;
+  font-weight: 850;
 }
 
 .agent-message-list {
-  display: flex;
+  flex: 1;
   min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 8px;
-  padding: 18px 36px 18px 39px;
   overflow-y: auto;
-}
-
-.agent-message-list::-webkit-scrollbar {
-  width: 0;
+  padding: 22px;
+  scroll-behavior: smooth;
 }
 
 .agent-message {
   display: flex;
-  align-items: flex-end;
-  gap: 19px;
-}
-
-.agent-message--assistant {
-  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .agent-message--user {
   justify-content: flex-end;
-  gap: 22px;
-  margin: -12px 34px -7px 0;
 }
 
 .agent-message-avatar {
-  display: grid;
-  place-items: center;
-  width: 45px;
-  height: 45px;
-  border-radius: 999px;
-  color: #5369ff;
-  font-size: 20px;
-  font-weight: 900;
-  flex: 0 0 auto;
-  object-fit: cover;
-  box-shadow: 0 10px 20px rgba(127, 142, 184, 0.16);
+  width: 36px;
+  height: 36px;
 }
 
 .agent-message-avatar--assistant {
-  width: 42px;
-  height: 42px;
+  background: #eef4ff;
+  border: 1px solid #d9e6ff;
 }
 
 .agent-message-avatar--user {
-  background: linear-gradient(135deg, #eef2ff 0%, #dfe7ff 100%);
+  background: linear-gradient(135deg, var(--agent-primary), var(--agent-secondary));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .agent-message-stack {
+  display: grid;
+  max-width: min(760px, 78%);
   min-width: 0;
+  gap: 6px;
 }
 
 .agent-message-label {
-  display: block;
-  margin: 0 0 7px 2px;
-  color: #9ba8c3;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1;
+  color: #75839e;
+  font-size: 12px;
+  font-weight: 780;
 }
 
 .agent-bubble {
-  width: fit-content;
-  max-width: 820px;
-  min-width: 780px;
-  border: 1px solid #dbe3f3;
-  border-radius: 14px;
-  padding: 12px 18px 9px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 10px 26px rgba(56, 75, 125, 0.055);
+  border: 1px solid rgba(203, 216, 244, 0.86);
+  border-radius: 22px;
+  padding: 15px 17px 12px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #243351;
+  box-shadow: 0 14px 32px rgba(48, 68, 123, 0.07);
 }
 
 .agent-message--user .agent-bubble {
-  min-width: 210px;
-  max-width: 310px;
-  border-color: #e4e8fb;
-  background: linear-gradient(180deg, #f1f3ff 0%, #edf1ff 100%);
-  box-shadow: 0 10px 22px rgba(86, 101, 189, 0.055);
-}
-
-.agent-bubble--pending {
-  min-width: 300px;
+  border-color: rgba(54, 88, 246, 0.28);
+  background: linear-gradient(135deg, #4358f5, #7c3aed);
+  color: #fff;
 }
 
 .agent-bubble--error {
-  border-color: #f5d0c7;
-  background: #fff6f3;
+  border-color: rgba(214, 128, 110, 0.48);
+  background: rgba(255, 245, 242, 0.92);
+  color: #884530;
 }
 
-.agent-bubble-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.agent-bubble--pending {
+  min-width: 96px;
+  max-width: max-content;
+  padding: 11px 14px;
+  border-color: rgba(124, 92, 62, 0.18);
+  background: rgba(245, 239, 228, 0.96);
+}
+
+.agent-typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #7c5c3e;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.agent-typing-label {
+  line-height: 1;
+}
+
+.agent-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 14px;
+}
+
+.agent-typing-dots span {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(124, 92, 62, 0.72);
+  transform-origin: center bottom;
+  animation: agentFallbackTypingDot 0.9s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.agent-typing-dots span:nth-child(2) { animation-delay: 0.14s; }
+.agent-typing-dots span:nth-child(3) { animation-delay: 0.28s; }
+
+@keyframes agentFallbackTypingDot {
+  0%, 72%, 100% { transform: translateY(0) scale(0.72); opacity: 0.34; }
+  28% { transform: translateY(-6px) scale(1.18); opacity: 1; }
+  44% { transform: translateY(1px) scale(0.92); opacity: 0.62; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-typing-dots span {
+    animation: none;
+    opacity: 0.72;
+  }
 }
 
 .agent-bubble-paragraph {
   margin: 0;
-  color: #263b70;
-  font-size: 17px;
-  font-weight: 750;
-  line-height: 1.34;
   white-space: pre-wrap;
-}
-
-.agent-bubble--error .agent-bubble-paragraph {
-  color: #9a4e3b;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.78;
 }
 
 .agent-bubble time {
   display: block;
-  margin-top: 4px;
-  color: #8b98ba;
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 1;
-  text-align: right;
+  margin-top: 10px;
+  color: currentColor;
+  font-size: 11px;
+  opacity: 0.58;
 }
 
 .agent-table-wrap {
   max-width: 100%;
   overflow-x: auto;
-  border: 1px solid rgba(229, 233, 245, 0.96);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(207, 219, 242, 0.9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .agent-table {
   min-width: 100%;
   border-collapse: collapse;
-  color: #263b70;
-  font-size: 16px;
-}
-
-.agent-table thead {
-  background: rgba(238, 242, 251, 0.96);
+  text-align: left;
+  font-size: 13px;
 }
 
 .agent-table th,
 .agent-table td {
-  padding: 9px 10px;
-  border-bottom: 1px solid rgba(235, 239, 247, 0.96);
-  text-align: left;
-  vertical-align: top;
+  border-bottom: 1px solid rgba(220, 228, 244, 0.9);
+  padding: 10px 12px;
+  color: #263451;
   white-space: nowrap;
+}
+
+.agent-table th {
+  background: #eef4ff;
+  font-weight: 850;
 }
 
 .agent-plan-suggestion-actions {
   display: flex;
-  width: fit-content;
-  max-width: 820px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 9px 0 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .agent-plan-suggestion-button {
-  min-height: 42px;
-  border: 1px solid rgba(99, 116, 255, 0.22);
-  border-radius: 12px;
-  padding: 0 18px;
-  background: linear-gradient(135deg, #6374ff 0%, #4d5df3 100%);
-  color: #fff;
+  min-height: 34px;
+  border: 1px solid rgba(52, 88, 246, 0.25);
+  border-radius: 999px;
+  padding: 0 13px;
+  background: rgba(239, 244, 255, 0.9);
+  color: var(--agent-primary);
   font: inherit;
-  font-size: 15px;
-  font-weight: 900;
-  box-shadow: 0 12px 24px rgba(82, 97, 246, 0.18);
+  font-size: 12px;
+  font-weight: 850;
   cursor: pointer;
 }
 
-.agent-plan-suggestion-button:disabled {
-  cursor: default;
-  opacity: 0.72;
-}
-
 .agent-plan-suggestion-button--saved {
-  border-color: rgba(52, 201, 162, 0.28);
-  background: linear-gradient(135deg, #37c9a3 0%, #28b78f 100%);
+  border-color: rgba(34, 170, 130, 0.32);
+  background: rgba(239, 255, 249, 0.9);
+  color: #158466;
 }
 
 .agent-plan-suggestion-error {
   margin: 0;
-  color: #b4513c;
-  font-size: 13px;
-  font-weight: 800;
+  color: var(--agent-danger);
+  font-size: 12px;
+  font-weight: 680;
 }
 
 .agent-composer-zone {
-  flex: 0 0 auto;
-  padding: 0 39px 14px;
-}
-
-.agent-empty-panel .agent-composer-zone {
-  position: relative;
-  z-index: 1;
-  padding: 0 8px 0;
-}
-
-.agent-composer {
-  display: flex;
-  align-items: center;
-  height: 58px;
-  border: 2px solid #d2dcff;
-  border-radius: 999px;
-  padding: 0 10px 0 34px;
-  background: #fff;
-  box-shadow: inset 0 0 0 1px rgba(244, 246, 255, 0.9);
-}
-
-.agent-empty-panel .agent-composer {
-  border-color: rgba(203, 214, 255, 0.92);
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow:
-    inset 0 0 0 1px rgba(248, 250, 255, 0.92),
-    0 16px 32px rgba(91, 105, 174, 0.08);
-  backdrop-filter: blur(5px);
-}
-
-.agent-composer-input {
-  width: 100%;
-  min-width: 0;
-  height: 32px;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
-  color: #1e315d;
-  font: inherit;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 32px;
-}
-
-.agent-composer-input::placeholder {
-  color: #9ca9c6;
-}
-
-.agent-composer-send {
-  display: grid;
-  place-items: center;
-  width: 47px;
-  height: 47px;
-  border: 0;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #6c70ff 0%, #5962f5 100%);
-  color: #fff;
-  box-shadow: 0 12px 22px rgba(90, 98, 245, 0.24);
-  flex: 0 0 auto;
-}
-
-.agent-composer-send:disabled {
-  opacity: 0.62;
-  box-shadow: none;
-}
-
-.agent-composer-send svg {
-  width: 25px;
-  height: 25px;
-}
-
-.agent-composer-send path:first-child {
-  fill: currentColor;
-}
-
-.agent-composer-send path:last-child {
-  fill: none;
-  stroke: #fff;
-  stroke-linecap: round;
-  stroke-width: 1.8;
+  border-top: 1px solid rgba(207, 219, 242, 0.76);
+  padding: 14px 18px 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 251, 255, 0.88)),
+    linear-gradient(90deg, rgba(91, 92, 246, 0.04), rgba(19, 167, 168, 0.04));
 }
 
 .agent-quick-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  margin-top: 14px;
-}
-
-.agent-empty-panel .agent-quick-actions {
-  margin-top: 17px;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 10px;
 }
 
 .agent-quick-button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 221px;
-  height: 48px;
-  gap: 12px;
-  border: 1px solid #e0e6f4;
-  border-radius: 13px;
-  padding: 0 22px;
-  background: linear-gradient(180deg, #fbfcff 0%, #f6f8ff 100%);
-  color: #6271ab;
+  gap: 7px;
+  min-height: 36px;
+  border: 1px solid rgba(202, 215, 242, 0.88);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #41527b;
   font: inherit;
-  font-size: 18px;
-  font-weight: 900;
-  box-shadow: 0 8px 20px rgba(92, 107, 156, 0.04);
+  font-size: 12px;
+  font-weight: 820;
   white-space: nowrap;
   cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
-.agent-empty-panel .agent-quick-button {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: rgba(220, 226, 247, 0.92);
-  box-shadow:
-    0 12px 26px rgba(85, 99, 157, 0.055),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.54);
-  backdrop-filter: blur(4px);
+.agent-quick-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(52, 88, 246, 0.3);
+  background: rgba(245, 248, 255, 0.96);
 }
 
-.agent-quick-button:disabled {
-  opacity: 0.6;
+.agent-quick-button svg {
+  font-size: 15px;
 }
 
-.agent-quick-icon {
-  position: relative;
+.agent-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid rgba(177, 194, 235, 0.95);
+  border-radius: 24px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.72), 0 18px 38px rgba(47, 69, 132, 0.1);
+}
+
+.agent-composer:focus-within {
+  border-color: rgba(52, 88, 246, 0.42);
+  box-shadow: 0 0 0 4px rgba(52, 88, 246, 0.1), 0 14px 30px rgba(47, 69, 132, 0.08);
+}
+
+.agent-composer-input {
+  width: 100%;
+  min-height: 48px;
+  max-height: 138px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--agent-text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 1.55;
+}
+
+.agent-composer-input::placeholder {
+  color: #91a0bc;
+}
+
+.agent-composer-send {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  color: #6877ff;
-  flex: 0 0 auto;
-}
-
-.agent-quick-icon::before,
-.agent-quick-icon::after {
-  content: "";
-  position: absolute;
-}
-
-.agent-quick-icon--trend::before {
-  width: 19px;
-  height: 14px;
-  border-left: 3px solid currentColor;
-  border-bottom: 3px solid currentColor;
-}
-
-.agent-quick-icon--trend::after {
-  width: 16px;
-  height: 10px;
-  border-left: 3px solid currentColor;
-  border-top: 3px solid currentColor;
-  transform: rotate(135deg);
-  right: 1px;
-  top: 5px;
-}
-
-.agent-quick-icon--calendar::before {
-  width: 19px;
-  height: 17px;
-  border: 3px solid currentColor;
-  border-radius: 3px;
-}
-
-.agent-quick-icon--calendar::after {
-  width: 13px;
-  height: 3px;
-  top: 8px;
-  background: currentColor;
-}
-
-.agent-quick-icon--question::before {
-  width: 18px;
-  height: 18px;
-  border: 3px solid currentColor;
-  border-radius: 999px;
-}
-
-.agent-quick-icon--question::after {
-  content: "?";
-  top: 1px;
-  color: currentColor;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.agent-quick-icon--clock::before {
-  width: 18px;
-  height: 18px;
-  border: 3px solid currentColor;
-  border-radius: 999px;
-}
-
-.agent-quick-icon--clock::after {
-  width: 7px;
-  height: 7px;
-  border-left: 3px solid currentColor;
-  border-bottom: 3px solid currentColor;
-  transform: rotate(-45deg);
-  top: 5px;
-}
-
-.agent-quick-icon--heart::before {
-  content: "♡";
-  top: -6px;
-  color: #ff5c87;
-  font-size: 30px;
-  font-weight: 900;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--agent-primary), var(--agent-violet));
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 14px 24px rgba(54, 88, 246, 0.24);
 }
 
 .agent-disclaimer {
-  margin: 10px 0 0;
-  color: #a1aec7;
-  font-size: 15px;
-  font-weight: 700;
-  text-align: center;
+  margin: 10px 2px 0;
+  color: #8a98b3;
+  font-size: 11px;
+  font-weight: 660;
 }
 
-.agent-empty-panel .agent-disclaimer {
-  margin-top: 13px;
-  color: #9faac1;
-}
-
-.agent-right-rail {
-  display: grid;
-  gap: 28px;
-}
-
-.agent-side-card {
-  overflow: hidden;
-  border: 1px solid #edf1fa;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 18px 48px rgba(67, 83, 126, 0.075);
-}
-
-.agent-conclusion-card {
-  height: 350px;
+.agent-insight-panel {
   display: flex;
   flex-direction: column;
-  padding: 34px 32px 28px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
-.agent-question-card {
-  height: 350px;
-  display: flex;
-  flex-direction: column;
-  padding: 34px 30px 28px;
+.agent-insight-head {
+  align-items: center;
 }
 
-.agent-plan-card {
-  display: flex;
-  min-height: 500px;
-  flex-direction: column;
-  padding: 37px 33px 40px;
+.agent-insight-head h2 {
+  font-size: 21px;
+}
+
+.agent-insight-section {
+  position: relative;
+  padding: 18px;
+  border-bottom: 1px solid rgba(207, 219, 242, 0.72);
+}
+
+.agent-insight-section::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(91, 92, 246, 0.72), rgba(19, 167, 168, 0.62));
+  opacity: 0.55;
+}
+
+.agent-insight-section--last {
+  border-bottom: 0;
 }
 
 .agent-side-title {
-  display: flex;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 17px;
+  gap: 11px;
+}
+
+.agent-side-title > span {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(232, 238, 255, 0.96), rgba(235, 250, 250, 0.9));
+  color: var(--agent-primary);
+  font-size: 19px;
+}
+
+.agent-side-title h3,
+.agent-side-title p {
+  margin: 0;
 }
 
 .agent-side-title h3 {
-  margin: 0;
-  color: #101d3f;
-  font-size: 27px;
-  font-weight: 950;
-  line-height: 1;
-  letter-spacing: 0;
+  font-size: 15px;
+  font-weight: 900;
 }
 
-.agent-title-icon {
+.agent-side-title p {
+  margin-top: 4px;
+  color: var(--agent-faint);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.agent-skeleton-stack {
   display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  color: #5e70ff;
-  flex: 0 0 auto;
+  gap: 10px;
+  margin-top: 16px;
 }
 
-.agent-title-icon--spark {
-  font-size: 35px;
-  line-height: 1;
+.agent-skeleton-stack span {
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(232, 240, 255, 0.82), rgba(248, 251, 255, 0.9), rgba(232, 240, 255, 0.82));
+  background-size: 220% 100%;
+  animation: agentShimmer 1.4s ease-in-out infinite;
 }
 
-.agent-title-icon--chat {
-  border-radius: 999px;
-  background: linear-gradient(135deg, #6275ff, #7b82ff);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.agent-title-icon--plan {
-  position: relative;
-  border: 3px solid #5d71ff;
-  border-radius: 5px;
-}
-
-.agent-title-icon--plan::before,
-.agent-title-icon--plan::after {
-  content: "";
-  position: absolute;
-  top: -7px;
-  width: 4px;
-  height: 9px;
-  border-radius: 999px;
-  background: #5d71ff;
-}
-
-.agent-title-icon--plan::before {
-  left: 6px;
-}
-
-.agent-title-icon--plan::after {
-  right: 6px;
-}
-
-.agent-conclusion-box {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  margin-top: 28px;
-  border: 1px solid #f0ddc9;
-  border-radius: 18px;
-  padding: 22px 20px 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 250, 245, 0.98) 0%, rgba(255, 253, 251, 0.96) 100%),
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 56%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  overflow: hidden;
-}
-
-.agent-conclusion-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.agent-conclusion-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  border-radius: 999px;
-  padding: 0 12px;
-  background: rgba(99, 115, 255, 0.12);
-  color: #6472df;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-}
-
-.agent-conclusion-copy strong {
-  color: #17315b;
-  font-size: 17px;
-  font-weight: 900;
+.agent-skeleton-note {
+  margin: 2px 0 0;
+  color: #73819e;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1.5;
 }
 
+.agent-conclusion-copy,
+.agent-unavailable-box,
+.agent-plan-block {
+  margin-top: 14px;
+}
+
+.agent-conclusion-copy {
+  border: 1px solid rgba(203, 216, 244, 0.82);
+  border-radius: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.agent-conclusion-copy strong {
+  color: #172341;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
 .agent-conclusion-copy p {
-  margin: 0;
-  color: #54678f;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.72;
+  margin: 9px 0 0;
+  color: #5f6e8e;
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.65;
 }
 
-.agent-conclusion-footer {
-  margin-top: auto;
-  border-top: 1px solid rgba(196, 204, 236, 0.54);
-  padding-top: 10px;
+.agent-inline-action {
+  gap: 6px;
+  min-height: 34px;
+  margin-top: 13px;
+  border: 1px solid rgba(52, 88, 246, 0.2);
+  padding: 0 12px;
+  background: rgba(239, 244, 255, 0.92);
+  color: var(--agent-primary);
+  font-size: 12px;
 }
 
-.agent-conclusion-action {
+.agent-inline-action--compact {
+  min-height: 32px;
+  margin-top: 10px;
+  padding: 0 11px;
+}
+
+.agent-unavailable-box {
+  border: 1px dashed rgba(194, 208, 237, 0.95);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(248, 251, 255, 0.7);
+}
+
+.agent-unavailable-box strong {
+  color: #445477;
+  font-size: 14px;
+  font-weight: 880;
+}
+
+.agent-unavailable-box p {
+  margin: 7px 0 0;
+  color: #73819e;
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.6;
+}
+
+.agent-progress-ring {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background:
+    conic-gradient(var(--agent-primary) var(--agent-plan-progress), rgba(223, 231, 247, 0.95) 0),
+    #fff;
+  color: #344567;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 7px rgba(255, 255, 255, 0.95);
+}
+
+.agent-plan-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 42px;
-  border: 0;
-  border-radius: 12px;
-  padding: 0 10px 0 16px;
-  background: linear-gradient(90deg, rgba(243, 246, 255, 0.9) 0%, rgba(255, 255, 255, 0.54) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  color: #5d72f8;
+  gap: 12px;
+  border: 1px solid rgba(203, 216, 244, 0.82);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(239, 245, 255, 0.92), rgba(250, 248, 255, 0.86));
+}
+
+.agent-plan-summary span {
+  color: #6d7c98;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.agent-plan-summary strong {
+  font-size: 18px;
+  font-weight: 930;
+}
+
+.agent-plan-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.agent-plan-row,
+.agent-question-item {
+  border: 1px solid rgba(204, 217, 244, 0.86);
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
   font: inherit;
-  font-size: 15px;
-  font-weight: 900;
   cursor: pointer;
-  transition:
-    background-color 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
-.agent-conclusion-action span {
-  display: inline-flex;
+.agent-plan-row {
+  display: grid;
+  grid-template-columns: 22px 42px minmax(0, 1fr) auto;
   align-items: center;
-  min-height: 100%;
+  gap: 9px;
+  min-height: 58px;
+  border-radius: 16px;
+  padding: 9px;
+  text-align: left;
 }
 
-.agent-conclusion-action i,
-.agent-question-item i {
-  color: #6c7da7;
-  font-style: normal;
-  font-size: 28px;
-  font-weight: 400;
-  line-height: 1;
+.agent-plan-row:hover:not(:disabled),
+.agent-question-item:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(52, 88, 246, 0.28);
+  background: rgba(247, 250, 255, 0.96);
 }
 
-.agent-conclusion-action i {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
+.agent-plan-check {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(183, 197, 229, 0.9);
   border-radius: 999px;
-  background: rgba(93, 114, 248, 0.1);
-  color: #5d72f8;
-  font-size: 22px;
+  color: #fff;
 }
 
-.agent-conclusion-action:hover {
-  background: linear-gradient(90deg, rgba(236, 240, 255, 0.98) 0%, rgba(248, 250, 255, 0.76) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
-  color: #4e64ed;
+.agent-plan-check--done {
+  border-color: #22aa82;
+  background: #22aa82;
 }
 
-.agent-conclusion-action:focus-visible {
-  outline: 3px solid rgba(93, 114, 248, 0.22);
-  outline-offset: 2px;
+.agent-plan-tag {
+  display: grid;
+  place-items: center;
+  min-width: 38px;
+  min-height: 24px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.agent-plan-main {
+  min-width: 0;
+}
+
+.agent-plan-main strong,
+.agent-plan-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-plan-main strong {
+  color: #21304f;
+  font-size: 13px;
+  font-weight: 860;
+}
+
+.agent-plan-main small {
+  margin-top: 3px;
+  color: #7b89a4;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.agent-plan-count {
+  color: #4c5d80;
+  font-size: 12px;
+  font-weight: 860;
+  white-space: nowrap;
+}
+
+.agent-plan-source {
+  margin: 10px 2px 12px;
+  color: #75839d;
+  font-size: 12px;
+  font-weight: 640;
+  line-height: 1.55;
 }
 
 .agent-question-list {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 9px;
-  margin-top: 28px;
-  padding-bottom: 18px;
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .agent-question-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 51px;
-  border: 1px solid rgba(227, 234, 252, 0.96);
-  border-radius: 14px;
-  padding: 0 18px 0 20px;
-  background:
-    linear-gradient(180deg, rgba(247, 249, 255, 0.98) 0%, rgba(241, 245, 255, 0.95) 100%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
-  color: #445887;
-  font: inherit;
-  font-size: 16px;
-  font-weight: 800;
-  text-align: left;
-  cursor: pointer;
-}
-
-.agent-question-text {
-  flex: 1 1 auto;
-  padding-right: 14px;
-  line-height: 1.4;
-}
-
-.agent-plan-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.agent-progress-ring {
-  display: grid;
-  place-items: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 999px;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    conic-gradient(#6172ff 0deg, #6172ff var(--agent-plan-progress, 0deg), #e9edff var(--agent-plan-progress, 0deg), #e9edff 360deg) border-box;
-  border: 6px solid transparent;
-  color: #64708e;
-  font-size: 16px;
-  font-weight: 950;
-}
-
-.agent-plan-subtitle {
-  margin: 22px 0 0;
-  color: #40527d;
-  font-size: 19px;
-  font-weight: 900;
-}
-
-.agent-plan-list {
-  display: grid;
-  gap: 0;
-  margin-top: 24px;
-  border: 1px solid #e6ebf6;
-  border-radius: 14px;
-  padding: 15px 17px;
-  background: rgba(255, 255, 255, 0.95);
-}
-
-.agent-plan-row {
-  display: grid;
-  grid-template-columns: 32px 42px minmax(0, 1fr) 48px 70px;
-  align-items: center;
-  min-height: 40px;
   gap: 10px;
+  min-height: 44px;
+  border-radius: 15px;
+  padding: 0 12px;
+  color: #314263;
+  font-size: 12px;
+  font-weight: 760;
+  text-align: left;
 }
 
-.agent-plan-check {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  border: 3px solid #cfd7e8;
-  border-radius: 999px;
-}
-
-.agent-plan-check--done {
-  border-color: #37c9a3;
-  background: #37c9a3;
-}
-
-.agent-plan-check--done::after {
-  content: "";
-  position: absolute;
-  left: 7px;
-  top: 4px;
-  width: 7px;
-  height: 12px;
-  border-right: 3px solid #fff;
-  border-bottom: 3px solid #fff;
-  transform: rotate(42deg);
-}
-
-.agent-plan-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36px;
-  height: 25px;
-  border-radius: 7px;
-  padding: 0 6px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.agent-plan-row strong {
+.agent-question-item span {
+  min-width: 0;
   overflow: hidden;
-  color: #314673;
-  font-size: 18px;
-  font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-plan-row time {
-  color: #6f7b9d;
-  font-size: 18px;
-  font-weight: 800;
-  text-align: right;
-  white-space: nowrap;
+@keyframes agentPulse {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
 }
 
-.agent-plan-count {
-  color: #5b6c98;
-  font-size: 15px;
-  font-weight: 900;
-  text-align: right;
-  white-space: nowrap;
+@keyframes agentSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.agent-plan-empty {
-  display: grid;
-  min-height: 150px;
-  place-items: center;
-  margin-top: 24px;
-  border: 1px dashed rgba(198, 208, 235, 0.95);
-  border-radius: 14px;
-  padding: 20px;
-  background: rgba(248, 250, 255, 0.78);
-  text-align: center;
+@keyframes agentShimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
 }
 
-.agent-plan-empty p {
-  margin: 0;
-  color: #617096;
-  font-size: 16px;
-  font-weight: 850;
-  line-height: 1.55;
+@media (min-width: 1600px) {
+  .agent-page {
+    grid-template-columns: 276px minmax(0, 1fr);
+  }
+
+  .agent-workspace-grid {
+    grid-template-columns: minmax(0, 1fr) 410px;
+  }
+
+  .agent-heading h1 {
+    font-size: 38px;
+  }
+
+  .agent-state-hero h2 {
+    font-size: 42px;
+  }
 }
 
-.agent-start-button {
-  display: block;
-  width: 100%;
-  height: 62px;
-  margin-top: 34px;
-  border: 0;
-  border-radius: 11px;
-  background: linear-gradient(135deg, #6374ff 0%, #4d5df3 100%);
-  color: #fff;
-  font: inherit;
-  font-size: 20px;
-  font-weight: 950;
-  box-shadow: 0 18px 32px rgba(82, 97, 246, 0.22);
-  cursor: pointer;
+@media (min-width: 2400px) {
+  .agent-workspace-grid,
+  .agent-topbar {
+    max-width: 2480px;
+  }
+
+  .agent-workspace-grid {
+    grid-template-columns: minmax(0, 1fr) 430px;
+  }
 }
 
-.agent-start-button:disabled {
-  cursor: default;
-  opacity: 0.72;
+@media (min-width: 3000px) {
+  .agent-workspace-grid,
+  .agent-topbar {
+    max-width: 2360px;
+  }
+}
+
+@media (max-width: 1500px) {
+  .agent-page {
+    grid-template-columns: 224px minmax(0, 1fr);
+  }
+
+  .agent-shell {
+    padding: 18px 18px 20px;
+  }
+
+  .agent-workspace-grid {
+    grid-template-columns: minmax(0, 1fr) 332px;
+    gap: 16px;
+    min-height: 0;
+  }
+
+  .agent-heading h1 {
+    font-size: 28px;
+  }
+
+  .agent-heading p {
+    font-size: 13px;
+  }
+
+  .agent-top-actions {
+    gap: 8px;
+  }
+
+  .agent-session-actions {
+    display: none;
+  }
+
+  .agent-workbench-head,
+  .agent-insight-head {
+    padding: 16px 18px;
+  }
+
+  .agent-empty-workspace,
+  .agent-message-list {
+    padding: 18px;
+  }
+
+  .agent-empty-intro {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    min-height: 214px;
+    padding: 20px;
+  }
+
+  .agent-empty-intro h2 {
+    font-size: 28px;
+  }
+
+  .agent-empty-visual {
+    height: 168px;
+  }
+
+  .agent-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-state-screen {
+    min-height: 0;
+  }
+
+  .agent-state-hero h2 {
+    font-size: 30px;
+  }
+
+  .agent-insight-section {
+    padding: 15px;
+  }
+
+  .agent-plan-row {
+    grid-template-columns: 18px 38px minmax(0, 1fr) auto;
+    min-height: 52px;
+    gap: 7px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .agent-page {
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .agent-page {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    min-height: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(212, 224, 245, 0.82);
+  }
+
+  .agent-brand {
+    padding: 0;
+    flex: 0 0 auto;
+  }
+
+  .agent-brand strong {
+    font-size: 24px;
+  }
+
+  .agent-brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .agent-brand-mark::before {
+    left: 10px;
+    top: 9px;
+    width: 13px;
+    height: 17px;
+    border-width: 7px;
+  }
+
+  .agent-brand-mark::after {
+    right: 7px;
+    bottom: 7px;
+    width: 12px;
+    height: 12px;
+  }
+
+  .agent-nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    flex: 1 1 auto;
+  }
+
+  .agent-nav-item {
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 0 12px;
+  }
+
+  .agent-resource-card {
+    display: none;
+  }
+
+  .agent-workspace-grid,
+  .agent-workspace-grid--single {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-shell {
+    height: auto;
+    min-height: calc(100vh - 65px);
+    overflow: visible;
+  }
+
+  .agent-workspace-grid {
+    min-height: auto;
+  }
+
+  .agent-insight-panel {
+    overflow: visible;
+  }
+
+  .agent-insight-panel {
+    order: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .agent-shell {
+    padding: 14px 12px 18px;
+  }
+
+  .agent-topbar {
+    display: grid;
+    gap: 14px;
+  }
+
+  .agent-top-actions {
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .agent-profile strong {
+    max-width: 96px;
+  }
+
+  .agent-heading h1 {
+    font-size: 25px;
+  }
+
+  .agent-heading p {
+    font-size: 13px;
+  }
+
+  .agent-workbench-head {
+    display: grid;
+  }
+
+  .agent-workbench-head p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .agent-state-screen {
+    min-height: 520px;
+    padding: 30px 18px;
+  }
+
+  .agent-state-hero h2 {
+    font-size: 28px;
+  }
+
+  .agent-state-hero p {
+    font-size: 14px;
+  }
+
+  .agent-restore-grid,
+  .agent-lock-list {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-empty-intro,
+  .agent-stats-row,
+  .agent-capability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-empty-visual {
+    display: none;
+  }
+
+  .agent-empty-intro h2 {
+    font-size: 27px;
+  }
+
+  .agent-message-stack {
+    max-width: min(100%, 680px);
+  }
+
+  .agent-message--user .agent-message-stack {
+    max-width: calc(100% - 48px);
+  }
+
+  .agent-composer {
+    grid-template-columns: minmax(0, 1fr) 42px;
+  }
+
+  .agent-composer-send {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .agent-side-title {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .agent-progress-ring {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-top: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 </style>

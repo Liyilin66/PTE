@@ -6,21 +6,17 @@ import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { isDIEnabled } from "@/lib/di-feature";
 import { requestDailyAiSuggestion } from "@/lib/agent";
-import { formatInteger, formatScore, loadHomeAnalyticsSnapshotForAuth } from "@/lib/home-analytics";
+import { buildHomeAnalyticsSnapshotFromRows, formatInteger, formatScore } from "@/lib/home-analytics";
 import {
+  buildDashboardScoreTrendRowsFromRows,
+  buildDashboardWeeklyPracticeRowsFromRows,
   buildDesktopDashboardState,
   createEmptyDesktopDashboardState,
   fetchDashboardPracticeRowsForAuth,
   fetchDashboardRecentPracticeRowsForAuth,
-  fetchDashboardScoreTrendRowsForAuth,
   fetchDashboardWeaknessRowsForAuth,
-  fetchDashboardWeeklyPracticeRowsForAuth
 } from "@/lib/home-desktop-dashboard";
 
-const DESIGN_WIDTH = 2560;
-const DESIGN_HEIGHT = 1399;
-const DESKTOP_BOTTOM_SAFE_SPACE = 160;
-const MAX_DESKTOP_SCALE = 0.67;
 const TREND_MIN_SCORE = 10;
 const TREND_MAX_SCORE = 90;
 const TREND_TICKS = [90, 70, 50, 30, 10];
@@ -31,11 +27,11 @@ const TREND_CHART = {
   bottom: 176
 };
 const WEEKLY_GOAL_TASKS = [
-  { type: "RA", name: "朗读句子", accent: "#6d5df7" },
-  { type: "WFD", name: "写作填空", accent: "#20c887" },
-  { type: "WE", name: "写作议论文", accent: "#3e7bff" },
-  { type: "DI", name: "描述图表", accent: "#7062f7" },
-  { type: "RTS", name: "复述句子", accent: "#ff8a24" }
+  { type: "RA", name: "朗读句子", accent: "#8a6845" },
+  { type: "WFD", name: "写作填空", accent: "#6d8f72" },
+  { type: "WE", name: "写作议论文", accent: "#9a7a54" },
+  { type: "DI", name: "描述图表", accent: "#8f735b" },
+  { type: "RTS", name: "复述句子", accent: "#b07a4b" }
 ];
 
 const router = useRouter();
@@ -43,7 +39,6 @@ const authStore = useAuthStore();
 const practiceStore = usePracticeStore();
 const { tasks } = storeToRefs(practiceStore);
 const dashboard = ref(createEmptyDesktopDashboardState());
-const replicaScale = ref(MAX_DESKTOP_SCALE);
 const weeklyGoalState = ref(createWeeklyGoalState());
 const goalModalOpen = ref(false);
 const goalDraft = ref(createEmptyWeeklyGoals());
@@ -70,17 +65,17 @@ const fallbackFocusTasks = [
 ];
 
 const fallbackStatCards = [
-  { label: "平均得分", value: "--", suffix: "", helper: "暂无上周对比", color: "#4e82ff", icon: "✓" },
-  { label: "练习总量", value: "0", suffix: "题", helper: "今日完成 0 题", color: "#20c887", icon: "✓" },
-  { label: "连续学习", value: "0", suffix: "天", helper: "今天开始建立节奏", color: "#ff7b21", icon: "●" }
+  { label: "平均得分", value: "--", suffix: "", helper: "暂无上周对比", color: "#8a6845", icon: "✓" },
+  { label: "练习总量", value: "0", suffix: "题", helper: "今日完成 0 题", color: "#6d8f72", icon: "✓" },
+  { label: "连续学习", value: "0", suffix: "天", helper: "今天开始建立节奏", color: "#b07a4b", icon: "●" }
 ];
 
 const fallbackQuickModules = [
-  { title: "RA", subtitle: "朗读句子\n流利表达", color: "#6d5df7", icon: "●" },
-  { title: "WFD", subtitle: "写作填空\n语法拼写", color: "#20c887", icon: "◆" },
-  { title: "RTS", subtitle: "复述句子\n逻辑连贯", color: "#ff8a24", icon: "▤" },
-  { title: "DI", subtitle: "描述图表\n数据分析", color: "#7062f7", icon: "◔" },
-  { title: "WE", subtitle: "写作议论文\n结构论证", color: "#3e7bff", icon: "▣" }
+  { title: "RA", subtitle: "朗读句子\n流利表达", color: "#8a6845", icon: "●" },
+  { title: "WFD", subtitle: "写作填空\n语法拼写", color: "#6d8f72", icon: "◆" },
+  { title: "RTS", subtitle: "复述句子\n逻辑连贯", color: "#b07a4b", icon: "▤" },
+  { title: "DI", subtitle: "描述图表\n数据分析", color: "#8f735b", icon: "◔" },
+  { title: "WE", subtitle: "写作议论文\n结构论证", color: "#9a7a54", icon: "▣" }
 ];
 
 const fallbackHeatRows = [
@@ -102,11 +97,11 @@ const fallbackHeatDays = [
 const heatLegendLevels = [1, 2, 3, 4];
 
 const taskVisuals = {
-  RA: { title: "RA", subtitle: "朗读句子\n流利表达", color: "#6d5df7", icon: "●", path: "/ra" },
-  WFD: { title: "WFD", subtitle: "写作填空\n语法拼写", color: "#20c887", icon: "◆", path: "/wfd" },
-  RTS: { title: "RTS", subtitle: "复述句子\n逻辑连贯", color: "#ff8a24", icon: "▤", path: "/rts" },
-  DI: { title: "DI", subtitle: "描述图表\n数据分析", color: "#7062f7", icon: "◔", path: "/di" },
-  WE: { title: "WE", subtitle: "写作议论文\n结构论证", color: "#3e7bff", icon: "▣", path: "/we" }
+  RA: { title: "RA", subtitle: "朗读句子\n流利表达", color: "#8a6845", icon: "●", path: "/ra" },
+  WFD: { title: "WFD", subtitle: "写作填空\n语法拼写", color: "#6d8f72", icon: "◆", path: "/wfd" },
+  RTS: { title: "RTS", subtitle: "复述句子\n逻辑连贯", color: "#b07a4b", icon: "▤", path: "/rts" },
+  DI: { title: "DI", subtitle: "描述图表\n数据分析", color: "#8f735b", icon: "◔", path: "/di" },
+  WE: { title: "WE", subtitle: "写作议论文\n结构论证", color: "#9a7a54", icon: "▣", path: "/we" }
 };
 
 const navItems = computed(() =>
@@ -138,16 +133,6 @@ const showUserAvatar = computed(() => Boolean(userAvatarUrl.value) && !avatarLoa
 const homeAnalytics = computed(() => dashboard.value.homeAnalytics || {});
 const heroSubtitle = computed(() => dashboard.value.heroTask?.subtitle || "根据真实练习记录自动生成今日任务");
 const focusTitle = computed(() => dashboard.value.heroTask?.title || "今日重点");
-
-const scaledSlotStyle = computed(() => ({
-  width: `${Math.ceil(DESIGN_WIDTH * replicaScale.value)}px`,
-  height: `${Math.ceil((DESIGN_HEIGHT + DESKTOP_BOTTOM_SAFE_SPACE) * replicaScale.value)}px`
-}));
-
-const canvasScaleStyle = computed(() => ({
-  height: `${DESIGN_HEIGHT + DESKTOP_BOTTOM_SAFE_SPACE}px`,
-  transform: `scale(${replicaScale.value})`
-}));
 
 const currentWeekStartKey = computed(() => getWeekStartKey());
 const weeklyGoalStorageKey = computed(() => {
@@ -190,7 +175,7 @@ const statCards = computed(() => {
       value: averageScore === null || averageScore === undefined ? "--" : formatScore(averageScore),
       suffix: averageScore === null || averageScore === undefined ? "" : "/90",
       helper: homeAnalytics.value.scoredCount ? scoreComparisonText : "暂无上周对比",
-      color: "#4e82ff",
+      color: "#8a6845",
       icon: "✓"
     },
     {
@@ -198,7 +183,7 @@ const statCards = computed(() => {
       value: formatInteger(homeAnalytics.value.totalCount || 0),
       suffix: "题",
       helper: `今日完成 ${formatInteger(homeAnalytics.value.todayCount || 0)} 题`,
-      color: "#20c887",
+      color: "#6d8f72",
       icon: "✓"
     },
     {
@@ -206,7 +191,7 @@ const statCards = computed(() => {
       value: formatInteger(homeAnalytics.value.currentStreak || 0),
       suffix: "天",
       helper: longestStreak ? `最长 ${formatInteger(longestStreak)} 天` : "今天开始建立节奏",
-      color: "#ff7b21",
+      color: "#b07a4b",
       icon: "●"
     }
   ];
@@ -294,7 +279,7 @@ const weeklyGoalSummary = computed(() => {
 });
 const weeklyGoalButtonLabel = computed(() => (weeklyGoalIsSet.value ? "调整目标" : "去设置目标"));
 const weeklyGoalRingStyle = computed(() => ({
-  background: `conic-gradient(#5b6fff ${weeklyGoalPercent.value * 3.6}deg, #edf2fb 0deg)`
+  background: `conic-gradient(#8a6845 ${weeklyGoalPercent.value * 3.6}deg, #e4dbcc 0deg)`
 }));
 const weeklyGoalChips = computed(() =>
   WEEKLY_GOAL_TASKS.map((task) => {
@@ -373,10 +358,17 @@ const weeklyStudyFoot = computed(() => {
   return `${prefix} ${formatScore(hours)} 小时`;
 });
 
+function formatTrendAxisLabel(label) {
+  const text = `${label || ""}`.trim();
+  const match = text.match(/^(\d{1,2})[-/.](\d{1,2})$/);
+  if (!match) return text.replace(/-/g, "/");
+  return `${Number.parseInt(match[1], 10)}/${Number.parseInt(match[2], 10)}`;
+}
+
 const trendLabels = computed(() => {
   const points = dashboard.value.scoreTrend;
-  if (!Array.isArray(points) || !points.length) return ["05-10", "05-11", "05-12", "05-13", "05-14", "05-15", "05-16"];
-  return points.map((point) => point.label);
+  if (!Array.isArray(points) || !points.length) return ["5/10", "5/11", "5/12", "5/13", "5/14", "5/15", "5/16"];
+  return points.map((point) => formatTrendAxisLabel(point.label));
 });
 
 const trendSourcePoints = computed(() => {
@@ -489,9 +481,11 @@ const weakItems = computed(() => {
   const source = Array.isArray(realItems) ? realItems : [];
   return source.slice(0, 3).map((item, index) => ({
     rank: index + 1,
+    accent: item.accent || "#b07a4b",
     title: item.title ? `${item.label || ""} ${item.title}`.trim() : item.title,
     metricLabel: item.metricLabel || (typeof item.averageScore === "number" ? `均分 ${formatScore(item.averageScore)}` : "--"),
-    delta: item.deltaText || "暂无上周对比"
+    delta: item.deltaText || "暂无上周对比",
+    deltaMuted: !item.deltaText || /暂无|--/.test(`${item.deltaText}`)
   }));
 });
 
@@ -506,7 +500,8 @@ const recentItems = computed(() => {
     title: item.title,
     score: item.metricLabel || item.scoreLabel || item.score || "暂无分数",
     time: item.timeLabel || item.time || "--",
-    color: item.accent || item.color || "#7868ff"
+    color: item.accent || item.color || "#8a6845",
+    scoreMuted: /暂无|--/.test(`${item.metricLabel || item.scoreLabel || item.score || ""}`)
   }));
 });
 
@@ -1038,47 +1033,28 @@ async function loadDashboard(options = {}) {
       dashboard.value = createEmptyDesktopDashboardState();
     }
     try {
-      if (authStore.user || !authStore.loaded) {
+      if (!authStore.loaded) {
         await authStore.loadStatus();
       }
       loadWeeklyGoals();
 
-      const analyticsSnapshot = await loadHomeAnalyticsSnapshotForAuth(authStore);
-      let rows = [];
-      let weeklyRows = [];
-      let weaknessRows = [];
-      let recentRows = [];
-      let trendRows = { currentRows: [], previousRows: [] };
-
-      try {
-        rows = await fetchDashboardPracticeRowsForAuth(authStore);
-      } catch (error) {
-        console.warn("Replica dashboard rows load failed:", error);
-      }
-
-      try {
-        weeklyRows = await fetchDashboardWeeklyPracticeRowsForAuth(authStore);
-      } catch (error) {
-        console.warn("Replica dashboard weekly rows load failed:", error);
-      }
-
-      try {
-        weaknessRows = await fetchDashboardWeaknessRowsForAuth(authStore);
-      } catch (error) {
-        console.warn("Replica dashboard weakness rows load failed:", error);
-      }
-
-      try {
-        recentRows = await fetchDashboardRecentPracticeRowsForAuth(authStore);
-      } catch (error) {
-        console.warn("Replica dashboard recent rows load failed:", error);
-      }
-
-      try {
-        trendRows = await fetchDashboardScoreTrendRowsForAuth(authStore);
-      } catch (error) {
-        console.warn("Replica dashboard trend rows load failed:", error);
-      }
+      const [rows, weaknessRows, recentRows] = await Promise.all([
+        fetchDashboardPracticeRowsForAuth(authStore).catch((error) => {
+          console.warn("Replica dashboard rows load failed:", error);
+          return [];
+        }),
+        fetchDashboardWeaknessRowsForAuth(authStore).catch((error) => {
+          console.warn("Replica dashboard weakness rows load failed:", error);
+          return [];
+        }),
+        fetchDashboardRecentPracticeRowsForAuth(authStore).catch((error) => {
+          console.warn("Replica dashboard recent rows load failed:", error);
+          return [];
+        })
+      ]);
+      const analyticsSnapshot = buildHomeAnalyticsSnapshotFromRows(rows);
+      const weeklyRows = buildDashboardWeeklyPracticeRowsFromRows(rows);
+      const trendRows = buildDashboardScoreTrendRowsFromRows(rows);
 
       dashboard.value = buildDesktopDashboardState(analyticsSnapshot, rows, {
         diEnabled: isDIEnabled(),
@@ -1106,13 +1082,6 @@ async function loadDashboard(options = {}) {
       dashboardLoadPromise = null;
     }
   }
-}
-
-function updateReplicaScale() {
-  if (typeof window === "undefined") return;
-  const widthScale = window.innerWidth / DESIGN_WIDTH;
-  const heightScale = window.innerHeight / DESIGN_HEIGHT;
-  replicaScale.value = Number(Math.max(0.1, Math.min(widthScale, heightScale, MAX_DESKTOP_SCALE)).toFixed(4));
 }
 
 function handleNav(item) {
@@ -1160,10 +1129,8 @@ function handleGlobalKeydown(event) {
 }
 
 onMounted(() => {
-  updateReplicaScale();
   loadWeeklyGoals();
   loadCachedDailySuggestion();
-  window.addEventListener("resize", updateReplicaScale);
   window.addEventListener("focus", refreshDashboardOnFocus);
   window.addEventListener("keydown", handleGlobalKeydown);
   document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -1171,7 +1138,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("resize", updateReplicaScale);
   window.removeEventListener("focus", refreshDashboardOnFocus);
   window.removeEventListener("keydown", handleGlobalKeydown);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -1180,8 +1146,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="home-replica-page">
-    <div class="home-replica-scale-slot" :style="scaledSlotStyle">
-      <div class="home-replica-canvas" :style="canvasScaleStyle">
+    <div class="home-replica-scale-slot">
+      <div class="home-replica-canvas">
       <aside class="replica-sidebar">
         <div class="replica-brand">
           <div class="replica-brand-mark" aria-hidden="true"></div>
@@ -1331,14 +1297,16 @@ onBeforeUnmount(() => {
                 <p class="replica-daily-ai-headline">{{ dailyAiSuggestion.headline }}</p>
                 <p class="replica-daily-ai-reason">{{ dailyAiSuggestion.reason }}</p>
                 <p class="replica-daily-ai-advice">{{ dailyAiSuggestion.advice }}</p>
-                <div class="replica-daily-ai-pills">
-                  <span v-for="task in dailyAiSuggestionTasks" :key="`${task.task_type}-${task.count}`">
-                    {{ task.task_type }} {{ task.count }} 道
-                  </span>
-                </div>
-                <div class="replica-daily-ai-footer">
-                  <time>{{ dailyAiSuggestionTimeLabel }}</time>
-                  <div>
+                <div class="replica-daily-ai-bottom">
+                  <div class="replica-daily-ai-meta">
+                    <div class="replica-daily-ai-pills">
+                      <span v-for="task in dailyAiSuggestionTasks" :key="`${task.task_type}-${task.count}`">
+                        {{ task.task_type }} {{ task.count }} 道
+                      </span>
+                    </div>
+                    <time>{{ dailyAiSuggestionTimeLabel }}</time>
+                  </div>
+                  <div class="replica-daily-ai-actions">
                     <button type="button" class="replica-daily-ai-primary" @click="openDailySuggestionPractice">
                       {{ dailyAiSuggestion.cta_text || "开始练习" }}
                     </button>
@@ -1454,11 +1422,15 @@ onBeforeUnmount(() => {
                 <h3>我的弱项 Top 3</h3>
               </div>
               <div v-if="hasWeakItems" class="replica-weak-list">
-                <div v-for="item in weakItems" :key="item.rank" class="replica-weak-row">
-                  <span>{{ item.rank }}</span>
-                  <strong>{{ item.title }}</strong>
-                  <em>{{ item.metricLabel }}</em>
-                  <i>{{ item.delta }}</i>
+                <div v-for="item in weakItems" :key="item.rank" class="replica-weak-row" :style="{ '--weak-accent': item.accent }">
+                  <span class="replica-weak-rank">{{ item.rank }}</span>
+                  <div class="replica-weak-main">
+                    <strong>{{ item.title }}</strong>
+                    <div class="replica-weak-meta">
+                      <em>{{ item.metricLabel }}</em>
+                      <i :class="{ 'is-muted': item.deltaMuted }">{{ item.delta }}</i>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div v-else class="replica-weak-empty">
@@ -1472,11 +1444,15 @@ onBeforeUnmount(() => {
               </div>
               <div v-if="hasRecentItems" class="replica-recent-list">
                 <div v-for="item in recentItems" :key="item.key" class="replica-recent-row">
-                  <span :style="{ backgroundColor: item.color }">{{ item.type }}</span>
-                  <strong>{{ item.title }}</strong>
-                  <em>{{ item.score }}</em>
-                  <time>{{ item.time }}</time>
-                  <i>›</i>
+                  <span class="replica-recent-type" :style="{ backgroundColor: item.color }">{{ item.type }}</span>
+                  <div class="replica-recent-main">
+                    <strong>{{ item.title }}</strong>
+                    <div class="replica-recent-meta">
+                      <em :class="{ 'is-muted': item.scoreMuted }">{{ item.score }}</em>
+                      <time>{{ item.time }}</time>
+                    </div>
+                  </div>
+                  <i aria-hidden="true">›</i>
                 </div>
               </div>
               <div v-else class="replica-recent-empty">
@@ -2424,7 +2400,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .replica-daily-ai-pills span {
@@ -2439,38 +2415,55 @@ onBeforeUnmount(() => {
   font-weight: 950;
 }
 
-.replica-daily-ai-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.replica-daily-ai-bottom {
   margin-top: auto;
+  padding-top: 15px;
+  display: grid;
+  gap: 12px;
 }
 
-.replica-daily-ai-footer time {
+.replica-daily-ai-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px 12px;
+}
+
+.replica-daily-ai-meta time {
   color: #9aa6bb;
   font-size: 12px;
   font-weight: 850;
   white-space: nowrap;
 }
 
-.replica-daily-ai-footer div {
-  display: flex;
+.replica-daily-ai-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
 }
 
-.replica-daily-ai-footer button {
-  height: 34px;
+.replica-daily-ai-actions button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 38px;
+  width: 100%;
   border: 1px solid #e4eaf8;
-  border-radius: 9px;
-  padding: 0 13px;
+  border-radius: 11px;
+  padding: 7px 12px;
+  align-items: center;
+  justify-content: center;
   font-size: 13px;
   font-weight: 950;
+  line-height: 1.18;
+  text-align: center;
+  white-space: nowrap;
   transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
 
-.replica-daily-ai-footer button:hover {
+.replica-daily-ai-actions button:hover {
   transform: translateY(-1px);
 }
 
@@ -3081,10 +3074,18 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   margin-left: 50px;
-  margin-top: -11px;
+  margin-top: -7px;
   color: #7b88a3;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 850;
+  line-height: 1;
+  column-gap: 4px;
+}
+
+.replica-trend-labels span {
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .replica-trend-card .replica-bottom-foot {
@@ -3124,95 +3125,2094 @@ onBeforeUnmount(() => {
 
 .replica-weak-row {
   display: grid;
-  grid-template-columns: 41px minmax(0, 1fr) 92px 95px;
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  height: 62px;
-  padding: 0 13px;
+  gap: 15px;
+  min-height: 84px;
+  padding: 15px 17px;
   border: 1px solid #e9eef7;
-  border-radius: 13px;
-  background: #fff;
+  border-left: 2px solid var(--weak-accent, #ff6d35);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 9% 14%, rgba(116, 133, 255, 0.06), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 255, 0.96));
+  box-shadow: 0 10px 24px rgba(72, 94, 138, 0.05);
 }
 
-.replica-weak-row span {
+.replica-weak-rank {
   display: grid;
   place-items: center;
-  width: 31px;
-  height: 31px;
-  border-radius: 10px;
-  background: #fff2ec;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 109, 53, 0.14);
+  border-radius: 13px;
+  background: #fff3ee;
   color: #ff6d35;
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 950;
+  line-height: 1;
+  box-shadow: inset 0 -8px 15px rgba(255, 109, 53, 0.08);
+}
+
+.replica-weak-main {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
 }
 
 .replica-weak-row strong {
   min-width: 0;
   overflow: hidden;
   color: #26304d;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 950;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.replica-weak-row em,
-.replica-weak-row i {
-  color: #7b88a3;
+.replica-weak-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.replica-weak-meta em,
+.replica-weak-meta i {
   font-size: 13px;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 850;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
-.replica-weak-row i {
-  color: #8a75ff;
+.replica-weak-meta em {
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #f4f7ff;
+  color: #5365ca;
+}
+
+.replica-weak-meta i {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: #7c66ff;
+  text-overflow: ellipsis;
+}
+
+.replica-weak-meta i::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d7deef;
+}
+
+.replica-weak-meta i.is-muted {
+  color: #9aa6bb;
 }
 
 .replica-recent-row {
   display: grid;
-  grid-template-columns: 43px minmax(0, 1fr) 104px 108px 18px;
+  grid-template-columns: 46px minmax(0, 1fr) 24px;
   align-items: center;
-  gap: 13px;
-  height: 63px;
-  padding: 0 15px;
+  gap: 15px;
+  min-height: 82px;
+  padding: 14px 16px;
   border: 1px solid #e8edf7;
-  border-radius: 13px;
-  background: #fff;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 252, 255, 0.96));
+  box-shadow: 0 10px 24px rgba(72, 94, 138, 0.05);
 }
 
-.replica-recent-row span {
+.replica-recent-type {
   display: grid;
   place-items: center;
-  width: 35px;
-  height: 35px;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 950;
+  line-height: 1;
+  box-shadow: inset 0 -10px 18px rgba(0, 0, 0, 0.08);
+}
+
+.replica-recent-main {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
 }
 
 .replica-recent-row strong {
   min-width: 0;
   overflow: hidden;
   color: #25304d;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 950;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.replica-recent-row em,
-.replica-recent-row time,
-.replica-recent-row i {
-  color: #687693;
-  font-size: 14px;
+.replica-recent-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.replica-recent-meta em,
+.replica-recent-meta time {
+  color: #64728f;
+  font-size: 13px;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 850;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
+.replica-recent-meta em {
+  max-width: 128px;
+  overflow: hidden;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #f4f7ff;
+  color: #5269d7;
+  text-overflow: ellipsis;
+}
+
+.replica-recent-meta em.is-muted {
+  background: #f7f9fd;
+  color: #98a4b8;
+}
+
+.replica-recent-meta time {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: #8b97ad;
+  text-overflow: ellipsis;
+}
+
+.replica-recent-meta time::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d7deef;
+}
+
 .replica-recent-row i {
-  color: #72809c;
-  font-size: 26px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #f7f9ff;
+  color: #8a98b4;
+  font-size: 21px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Desktop responsive pass: keep the existing visual language but remove the
+   fixed 2560x1399 scaled canvas so the page can use the available viewport. */
+.home-replica-page {
+  --desktop-shell-max: 1920px;
+  --desktop-sidebar-width: clamp(224px, 14vw, 300px);
+  --desktop-gutter: clamp(18px, 2vw, 40px);
+  --desktop-card-gap: clamp(16px, 1.45vw, 28px);
+  padding-bottom: max(32px, env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(circle at 72% -8%, rgba(225, 231, 255, 0.82), transparent 26%),
+    linear-gradient(180deg, #f9fbff 0%, #f6f9ff 48%, #f8fbff 100%);
+}
+
+.home-replica-scale-slot {
+  width: min(100%, var(--desktop-shell-max));
+  min-height: 100vh;
+  margin: 0 auto;
+}
+
+.home-replica-canvas {
+  width: 100%;
+  height: auto;
+  min-height: 100vh;
+  transform: none;
+  overflow: visible;
+  grid-template-columns: var(--desktop-sidebar-width) minmax(0, 1fr);
+  background: transparent;
+}
+
+.replica-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  height: auto;
+  padding: clamp(24px, 2vw, 34px) clamp(16px, 1.45vw, 30px);
+}
+
+.replica-brand {
+  gap: 14px;
+  padding-left: clamp(4px, 1vw, 18px);
+}
+
+.replica-brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.replica-brand-mark::before {
+  left: 12px;
+  top: 11px;
+  width: 17px;
+  height: 22px;
+  border-width: 9px;
+}
+
+.replica-brand-mark::after {
+  right: 9px;
+  bottom: 9px;
+  width: 16px;
+  height: 16px;
+}
+
+.replica-brand-text {
+  font-size: 30px;
+}
+
+.replica-nav {
+  gap: 12px;
+  margin-top: clamp(34px, 5vh, 66px);
+}
+
+.replica-nav-item {
+  width: 100%;
+  height: 54px;
+  gap: 14px;
+  padding: 0 18px;
+  font-size: 17px;
+}
+
+.replica-nav-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+}
+
+.replica-resource-card {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  width: 100%;
+  height: auto;
+  min-height: 214px;
+  margin-top: auto;
+  padding: 22px 20px;
+}
+
+.replica-resource-title {
+  font-size: 18px;
+}
+
+.replica-resource-copy {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.replica-resource-button {
+  height: 40px;
+  margin-top: 24px;
+  padding: 0 18px;
+  font-size: 14px;
+}
+
+.replica-gift {
+  width: 78px;
+  height: 74px;
+}
+
+.replica-main {
+  min-width: 0;
+  height: auto;
+}
+
+.replica-topbar {
+  position: relative;
+  inset: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 102px;
+  height: auto;
+  padding: 22px var(--desktop-gutter);
+}
+
+.replica-greeting,
+.replica-top-actions {
+  position: static;
+}
+
+.replica-greeting h1 {
+  font-size: 25px;
+}
+
+.replica-greeting p {
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.replica-top-actions {
+  gap: 18px;
+}
+
+.replica-profile {
+  gap: 12px;
+}
+
+.replica-profile-avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 17px;
+}
+
+.replica-profile strong {
+  max-width: 150px;
+  font-size: 16px;
+}
+
+.replica-content {
+  position: relative;
+  left: auto;
+  top: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  gap: var(--desktop-card-gap);
+  width: 100%;
+  height: auto;
+  padding: var(--desktop-gutter);
+}
+
+.replica-left-column,
+.replica-right-column {
+  position: static;
+  display: grid;
+  gap: var(--desktop-card-gap);
+  width: auto;
+  min-width: 0;
+}
+
+.replica-hero {
+  width: 100%;
+  height: auto;
+  min-height: 520px;
+  border-radius: 20px;
+  background-size: cover;
+}
+
+.replica-hero-copy {
+  left: 32px;
+  top: 34px;
+  width: min(56%, 520px);
+}
+
+.replica-hero-copy h2 {
+  font-size: 38px;
+}
+
+.replica-hero-copy > p {
+  margin-top: 14px;
+  font-size: 17px;
+}
+
+.replica-focus-card {
+  width: min(100%, 500px);
+  height: auto;
+  min-height: 204px;
+  margin-top: 16px;
+  padding: 22px 24px;
+}
+
+.replica-focus-card h3 {
+  gap: 10px;
+  margin-bottom: 16px;
+  font-size: 18px;
+}
+
+.replica-focus-row {
+  grid-template-columns: 20px minmax(120px, 1fr) minmax(90px, 0.85fr) 42px;
+  gap: 10px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.replica-stat-grid {
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
+  gap: 16px;
+}
+
+.replica-stat-card {
+  gap: 14px;
+  height: auto;
+  min-height: 128px;
+  padding: 20px 18px;
+}
+
+.replica-stat-icon {
+  width: 38px;
+  height: 38px;
+  margin-top: 16px;
+  font-size: 20px;
+}
+
+.replica-stat-card > div {
+  transform: translateY(-6px);
+}
+
+.replica-stat-card p,
+.replica-stat-card small,
+.replica-stat-card em {
+  font-size: 13px;
+}
+
+.replica-stat-card strong {
+  margin-top: 8px;
+  font-size: 30px;
+}
+
+.replica-quick-card {
+  width: 100%;
+  height: auto;
+  min-height: 214px;
+  margin-top: 0;
+  padding: 22px;
+}
+
+.replica-quick-grid {
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.replica-quick-item {
+  grid-template-columns: 38px minmax(0, 1fr) 12px;
+  height: 126px;
+  gap: 9px;
+}
+
+.replica-quick-icon {
+  width: 38px;
+  height: 38px;
+  font-size: 17px;
+}
+
+.replica-quick-item strong {
+  font-size: 18px;
+}
+
+.replica-quick-item p {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.replica-quick-item em {
+  font-size: 24px;
+}
+
+.replica-ai-card {
+  height: auto;
+  min-height: 500px;
+  padding: 24px;
+}
+
+.replica-section-head {
+  gap: 16px;
+}
+
+.replica-section-head h3,
+.replica-bottom-title h3 {
+  font-size: 20px;
+}
+
+.replica-section-head h3 span {
+  font-size: 28px;
+}
+
+.replica-section-head h3 small {
+  font-size: 13px;
+}
+
+.replica-section-head button {
+  height: 42px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.replica-suggestion {
+  height: auto;
+  min-height: 58px;
+  margin-top: 18px;
+  padding: 13px 18px;
+}
+
+.replica-suggestion strong,
+.replica-chat-bubble p {
+  font-size: 14px;
+}
+
+.replica-chat-list {
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.replica-chat-row {
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.replica-chat-row img {
+  width: 38px;
+  height: 38px;
+}
+
+.replica-chat-bubble {
+  width: 100%;
+  min-height: 86px;
+  padding: 14px 16px 10px;
+}
+
+.replica-ai-actions {
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.replica-ai-actions button {
+  height: 58px;
+  font-size: 14px;
+}
+
+.replica-side-card-grid {
+  gap: var(--desktop-card-gap);
+  margin-top: 0;
+}
+
+.replica-mini-card,
+.replica-goal-card {
+  height: auto;
+  min-height: 248px;
+  padding: 22px;
+}
+
+.replica-mini-title strong,
+.replica-goal-title strong {
+  font-size: 18px;
+}
+
+.replica-daily-ai-headline {
+  font-size: 18px;
+}
+
+.replica-goal-body p {
+  max-width: 190px;
+}
+
+.replica-goal-chip-list {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.replica-bottom-grid {
+  position: static;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--desktop-card-gap);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.replica-bottom-grid .replica-card {
+  height: auto;
+  min-height: 300px;
+  min-width: 0;
+  padding: 20px;
+}
+
+.replica-heatmap-row i {
+  width: min(32px, 100%);
+}
+
+.replica-trend-chart {
+  height: 168px;
+}
+
+.replica-weak-row {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 13px;
+  min-height: 82px;
+  height: auto;
+  padding: 14px 15px;
+}
+
+.replica-recent-row {
+  grid-template-columns: 44px minmax(0, 1fr) 24px;
+  gap: 12px;
+  min-height: 80px;
+  height: auto;
+  padding: 13px 14px;
+}
+
+@media (max-width: 1700px) {
+  .home-replica-page {
+    --desktop-shell-max: 100%;
+  }
+
+  .replica-bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1320px) {
+  .home-replica-page {
+    --desktop-sidebar-width: 220px;
+    --desktop-gutter: 18px;
+    --desktop-card-gap: 16px;
+  }
+
+  .replica-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .replica-right-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .replica-side-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .replica-hero {
+    min-height: 500px;
+  }
+}
+
+@media (max-width: 1120px) {
+  .home-replica-page {
+    --desktop-sidebar-width: 204px;
+  }
+
+  .replica-sidebar {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .replica-nav-item {
+    padding: 0 14px;
+    font-size: 15px;
+  }
+
+  .replica-brand-text {
+    font-size: 26px;
+  }
+
+  .replica-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .replica-hero {
+    display: grid;
+    min-height: 0;
+    padding: 24px;
+    background-position: center top;
+  }
+
+  .replica-hero-copy {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100%;
+  }
+
+  .replica-hero-copy h2 {
+    font-size: 34px;
+    white-space: normal;
+  }
+
+  .replica-focus-card {
+    width: min(100%, 560px);
+  }
+
+  .replica-stat-grid {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 22px;
+  }
+
+  .replica-stat-card {
+    min-height: 118px;
+  }
+
+  .replica-bottom-grid,
+  .replica-side-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Warm workbench redesign: keeps the existing data/route bindings, replaces only the desktop visual system. */
+.home-replica-page {
+  --warm-page: #ede8df;
+  --warm-shell: #e6dfd4;
+  --warm-surface: #f8f1e6;
+  --warm-surface-strong: #fbf7ef;
+  --warm-card: #fffaf1;
+  --warm-card-soft: #f4ecdf;
+  --warm-line: #d9d0bf;
+  --warm-line-soft: rgba(137, 112, 82, 0.16);
+  --warm-ink: #2f281f;
+  --warm-muted: #8d8272;
+  --warm-soft: #b6aa98;
+  --warm-brown: #8a6845;
+  --warm-brown-dark: #6f5033;
+  --warm-green: #6d8f72;
+  --warm-shadow: 0 18px 42px rgba(110, 87, 57, 0.08);
+  --warm-shadow-soft: 0 10px 24px rgba(110, 87, 57, 0.06);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 78% 8%, rgba(255, 250, 241, 0.9), transparent 30%),
+    linear-gradient(180deg, #f0eadf 0%, var(--warm-page) 46%, #e8e1d6 100%) !important;
+  color: var(--warm-ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+}
+
+.home-replica-scale-slot {
+  width: 100% !important;
+  min-height: 100vh !important;
+  height: auto !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+.home-replica-canvas {
+  display: grid !important;
+  grid-template-columns: 204px minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  min-height: 100vh !important;
+  height: auto !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.replica-sidebar {
+  position: sticky !important;
+  top: 0 !important;
+  left: auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 100vh !important;
+  padding: 22px 12px 18px !important;
+  background: rgba(225, 218, 206, 0.88) !important;
+  border-right: 1px solid var(--warm-line) !important;
+  box-shadow: none !important;
+  color: var(--warm-muted) !important;
+  backdrop-filter: blur(10px);
+}
+
+.replica-brand {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 6px 24px !important;
+  border-bottom: 1px solid rgba(137, 112, 82, 0.08) !important;
+}
+
+.replica-brand-mark {
+  position: relative !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 9px !important;
+  background: var(--warm-brown) !important;
+  box-shadow: none !important;
+}
+
+.replica-brand-mark::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 9px !important;
+  top: 9px !important;
+  display: block !important;
+  width: 5px !important;
+  height: 5px !important;
+  border-radius: 2px !important;
+  background: rgba(255, 250, 241, 0.82) !important;
+  box-shadow:
+    9px 0 0 rgba(255, 250, 241, 0.82),
+    0 9px 0 rgba(255, 250, 241, 0.82),
+    9px 9px 0 rgba(255, 250, 241, 0.82) !important;
+}
+
+.replica-brand-mark::after {
+  display: none !important;
+}
+
+.replica-brand-text {
+  color: #251f18 !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+}
+
+.replica-nav {
+  display: grid !important;
+  gap: 10px !important;
+  width: 100% !important;
+  margin: 30px 0 0 !important;
+  padding: 0 !important;
+}
+
+.replica-nav-item {
+  display: grid !important;
+  grid-template-columns: 18px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 0 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #948a7a !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  text-align: left !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.replica-nav-item:hover {
+  background: rgba(255, 250, 241, 0.44) !important;
+  color: #70583e !important;
+}
+
+.replica-nav-item--active {
+  background: #d8cab4 !important;
+  border-color: #cbbda7 !important;
+  color: var(--warm-brown-dark) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 241, 0.34) !important;
+}
+
+.replica-nav-item::before,
+.replica-nav-item::after {
+  display: none !important;
+}
+
+.replica-nav-icon {
+  display: block !important;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 4px !important;
+  background: currentColor !important;
+  color: inherit !important;
+  opacity: 0.22 !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+.replica-nav-item--active .replica-nav-icon {
+  opacity: 1 !important;
+}
+
+.replica-resource-card {
+  position: absolute !important;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: 18px !important;
+  width: auto !important;
+  min-height: 96px !important;
+  height: auto !important;
+  padding: 14px 12px !important;
+  border: 1px solid #d1c4ae !important;
+  border-radius: 9px !important;
+  background: rgba(214, 202, 181, 0.72) !important;
+  box-shadow: none !important;
+}
+
+.replica-resource-title {
+  margin: 0 !important;
+  color: #755c3e !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.replica-resource-copy {
+  margin: 7px 0 12px !important;
+  color: #9a8d79 !important;
+  font-size: 11px !important;
+}
+
+.replica-resource-button {
+  min-width: 68px !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--warm-brown) !important;
+  color: #fff7ec !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.replica-gift {
+  display: none !important;
+}
+
+.replica-main {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100vh !important;
+  height: auto !important;
+  overflow: visible !important;
+  background: rgba(239, 234, 224, 0.64) !important;
+}
+
+.replica-topbar {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  padding: 0 28px !important;
+  border-bottom: 1px solid var(--warm-line) !important;
+  background: rgba(225, 218, 206, 0.82) !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(12px);
+}
+
+.replica-greeting {
+  position: static !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+.replica-greeting h1 {
+  margin: 0 !important;
+  color: #9e8f7c !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+}
+
+.replica-greeting h1 span {
+  display: none !important;
+}
+
+.replica-greeting p {
+  display: none !important;
+}
+
+.replica-top-actions {
+  position: static !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.replica-profile {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  padding: 0 12px 0 6px !important;
+  border: 1px solid rgba(137, 112, 82, 0.16) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 250, 241, 0.58) !important;
+  color: #6f6251 !important;
+  box-shadow: none !important;
+}
+
+.replica-profile-avatar {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+  background: #d8cab4 !important;
+  color: var(--warm-brown-dark) !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.replica-profile strong {
+  color: #7c705f !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.replica-profile-chevron {
+  width: 14px !important;
+  height: 14px !important;
+  stroke: #9b8f7d !important;
+}
+
+.replica-content {
+  position: static !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.42fr) minmax(340px, 0.86fr) !important;
+  gap: 18px !important;
+  width: min(100%, 1680px) !important;
+  max-width: 1680px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  margin: 0 auto !important;
+  padding: 24px 28px 34px !important;
+}
+
+.replica-left-column,
+.replica-right-column {
+  position: static !important;
+  display: grid !important;
+  grid-auto-rows: max-content !important;
+  gap: 18px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+}
+
+.replica-right-column {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.replica-card,
+.replica-hero,
+.replica-focus-card,
+.replica-chat-bubble,
+.replica-suggestion {
+  border: 1px solid var(--warm-line-soft) !important;
+  background: rgba(255, 250, 241, 0.78) !important;
+  color: var(--warm-ink) !important;
+  box-shadow: var(--warm-shadow-soft) !important;
+}
+
+.replica-card {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  border-radius: 12px !important;
+}
+
+.replica-hero {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.78fr) !important;
+  gap: 20px !important;
+  align-items: stretch !important;
+  min-height: 430px !important;
+  height: auto !important;
+  padding: 26px !important;
+  overflow: hidden !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(135deg, rgba(255, 250, 241, 0.88) 0%, rgba(246, 238, 225, 0.92) 54%, rgba(232, 222, 206, 0.72) 100%) !important;
+}
+
+.replica-hero::before,
+.replica-hero::after {
+  display: none !important;
+}
+
+.replica-hero-copy {
+  position: static !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.replica-hero-copy h2 {
+  max-width: 560px !important;
+  margin: 0 !important;
+  color: #2b241d !important;
+  font-size: clamp(32px, 2.6vw, 48px) !important;
+  font-weight: 760 !important;
+  line-height: 1.06 !important;
+  letter-spacing: 0 !important;
+  white-space: normal !important;
+}
+
+.replica-hero-copy h2 span {
+  color: var(--warm-brown) !important;
+}
+
+.replica-hero-copy p {
+  max-width: 500px !important;
+  margin: 14px 0 0 !important;
+  color: #817565 !important;
+  font-size: 14px !important;
+  line-height: 1.65 !important;
+}
+
+.replica-focus-card {
+  width: min(100%, 520px) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin-top: 26px !important;
+  padding: 18px !important;
+  border-radius: 12px !important;
+  background: rgba(248, 241, 230, 0.84) !important;
+}
+
+.replica-focus-card h3 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 0 14px !important;
+  color: #3d3328 !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+}
+
+.replica-focus-card h3 span,
+.replica-section-head h3 span,
+.replica-mini-title span,
+.replica-goal-title span,
+.replica-bottom-title h3 span {
+  color: var(--warm-brown) !important;
+  font-size: 14px !important;
+}
+
+.replica-focus-row {
+  display: grid !important;
+  grid-template-columns: 22px minmax(88px, 0.52fr) minmax(120px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 36px !important;
+  padding: 8px 0 !important;
+  border-top: 1px solid rgba(137, 112, 82, 0.09) !important;
+}
+
+.replica-focus-row:first-of-type {
+  border-top: 0 !important;
+}
+
+.replica-check {
+  display: grid !important;
+  place-items: center !important;
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 50% !important;
+  background: rgba(109, 143, 114, 0.18) !important;
+  color: #527456 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.replica-focus-row strong {
+  min-width: 0 !important;
+  color: #514537 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.replica-progress {
+  width: 100% !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: #e5dccd !important;
+  overflow: hidden !important;
+}
+
+.replica-progress b {
+  display: block !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: linear-gradient(90deg, var(--warm-brown), #b08a5a) !important;
+}
+
+.replica-focus-row em {
+  color: #8f826f !important;
+  font-size: 12px !important;
+  font-style: normal !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.replica-stat-grid {
+  position: static !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.replica-stat-card {
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  min-height: 112px !important;
+  height: auto !important;
+  padding: 16px !important;
+  border: 1px solid rgba(137, 112, 82, 0.14) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 250, 241, 0.68) !important;
+  box-shadow: none !important;
+}
+
+.replica-stat-icon,
+.replica-quick-icon {
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 10px !important;
+  color: #fff8ed !important;
+  box-shadow: none !important;
+}
+
+.replica-stat-icon {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 16px !important;
+}
+
+.replica-stat-card p {
+  margin: 0 !important;
+  color: var(--warm-muted) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+}
+
+.replica-stat-card strong {
+  display: block !important;
+  margin-top: 6px !important;
+  color: #2f281f !important;
+  font-size: 29px !important;
+  font-weight: 760 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+}
+
+.replica-stat-card small {
+  color: #867865 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+.replica-stat-card em {
+  display: block !important;
+  margin-top: 8px !important;
+  color: #9b8c78 !important;
+  font-size: 12px !important;
+  font-style: normal !important;
+  line-height: 1.35 !important;
+}
+
+.replica-quick-card,
+.replica-ai-card,
+.replica-mini-card,
+.replica-goal-card,
+.replica-bottom-grid .replica-card {
+  padding: 20px !important;
+  background: rgba(255, 250, 241, 0.72) !important;
+}
+
+.replica-quick-card h3,
+.replica-section-head h3,
+.replica-bottom-title h3,
+.replica-mini-title strong,
+.replica-goal-title strong {
+  margin: 0 !important;
+  color: #3a3127 !important;
+  font-size: 16px !important;
+  font-weight: 780 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0 !important;
+}
+
+.replica-quick-grid {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  margin-top: 16px !important;
+}
+
+.replica-quick-item {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-content: start !important;
+  align-items: start !important;
+  gap: 9px !important;
+  min-height: 118px !important;
+  height: auto !important;
+  padding: 14px !important;
+  border: 1px solid rgba(137, 112, 82, 0.14) !important;
+  border-radius: 11px !important;
+  background: rgba(248, 241, 230, 0.72) !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+}
+
+.replica-quick-item:hover {
+  background: #fffaf1 !important;
+  border-color: rgba(138, 104, 69, 0.28) !important;
+  transform: translateY(-1px);
+}
+
+.replica-quick-icon {
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 15px !important;
+}
+
+.replica-quick-item strong {
+  display: block !important;
+  color: #342b22 !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+}
+
+.replica-quick-item p {
+  margin: 6px 0 0 !important;
+  color: var(--warm-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  white-space: pre-line !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+
+.replica-quick-item em {
+  position: absolute !important;
+  top: 14px !important;
+  right: 14px !important;
+  color: #b8ac9a !important;
+  font-size: 18px !important;
+  font-style: normal !important;
+}
+
+.replica-ai-card {
+  min-height: 430px !important;
+  height: auto !important;
+  border-radius: 12px !important;
+}
+
+.replica-section-head,
+.replica-bottom-title,
+.replica-goal-head,
+.replica-mini-title {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+}
+
+.replica-section-head h3 small {
+  color: var(--warm-muted) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.replica-section-head button {
+  height: 34px !important;
+  padding: 0 13px !important;
+  border: 1px solid rgba(138, 104, 69, 0.18) !important;
+  border-radius: 999px !important;
+  background: rgba(244, 236, 223, 0.82) !important;
+  color: var(--warm-brown-dark) !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  box-shadow: none !important;
+}
+
+.replica-suggestion {
+  display: grid !important;
+  grid-template-columns: 28px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 52px !important;
+  height: auto !important;
+  margin-top: 18px !important;
+  padding: 12px 14px !important;
+  border-radius: 11px !important;
+  background: rgba(244, 236, 223, 0.72) !important;
+}
+
+.replica-suggestion span {
+  display: grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  background: rgba(109, 143, 114, 0.16) !important;
+  color: #597a5d !important;
+  font-size: 13px !important;
+}
+
+.replica-suggestion strong,
+.replica-chat-bubble p {
+  color: #4e4234 !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+
+.replica-chat-list {
+  display: grid !important;
+  gap: 12px !important;
+  margin-top: 16px !important;
+}
+
+.replica-chat-row {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  align-items: start !important;
+}
+
+.replica-chat-row img {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  filter: sepia(0.16) saturate(0.75) brightness(0.96) !important;
+}
+
+.replica-chat-bubble {
+  width: 100% !important;
+  min-height: 82px !important;
+  padding: 12px 14px !important;
+  border-radius: 11px !important;
+  background: rgba(255, 250, 241, 0.66) !important;
+}
+
+.replica-chat-bubble time {
+  display: block !important;
+  margin-top: 8px !important;
+  color: #aa9c88 !important;
+  font-size: 11px !important;
+}
+
+.replica-ai-actions {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  margin-top: 18px !important;
+}
+
+.replica-ai-actions button,
+.replica-daily-ai-primary,
+.replica-daily-ai-secondary,
+.replica-goal-button,
+.replica-goal-modal-secondary,
+.replica-goal-modal-clear,
+.replica-goal-modal-save {
+  border-radius: 9px !important;
+  border: 1px solid rgba(138, 104, 69, 0.18) !important;
+  box-shadow: none !important;
+  font-weight: 750 !important;
+}
+
+.replica-ai-actions button {
+  min-height: 48px !important;
+  height: auto !important;
+  padding: 10px 12px !important;
+  background: rgba(244, 236, 223, 0.72) !important;
+  color: #6e573b !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+
+.replica-ai-actions button span {
+  color: var(--warm-brown) !important;
+}
+
+.replica-side-card-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 18px !important;
+  margin: 0 !important;
+}
+
+.replica-mini-card,
+.replica-goal-card {
+  min-height: 238px !important;
+  border-radius: 12px !important;
+}
+
+.replica-mini-title em,
+.replica-goal-head-actions em {
+  padding: 4px 9px !important;
+  border-radius: 999px !important;
+  background: rgba(109, 143, 114, 0.14) !important;
+  color: #5d7b61 !important;
+  font-size: 11px !important;
+  font-style: normal !important;
+  font-weight: 750 !important;
+}
+
+.replica-daily-ai-headline {
+  margin: 16px 0 0 !important;
+  color: #332b22 !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  line-height: 1.36 !important;
+}
+
+.replica-daily-ai-reason,
+.replica-daily-ai-advice {
+  color: #817461 !important;
+  font-size: 12px !important;
+  line-height: 1.58 !important;
+}
+
+.replica-daily-ai-advice {
+  margin-bottom: 0 !important;
+}
+
+.replica-daily-ai-bottom {
+  display: grid !important;
+  gap: 12px !important;
+  margin-top: 14px !important;
+}
+
+.replica-daily-ai-pills {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+}
+
+.replica-daily-ai-pills span,
+.replica-goal-chip {
+  border: 1px solid rgba(138, 104, 69, 0.14) !important;
+  border-radius: 999px !important;
+  background: rgba(244, 236, 223, 0.74) !important;
+  color: #725b3e !important;
+  font-size: 11px !important;
+  font-weight: 750 !important;
+}
+
+.replica-daily-ai-meta time {
+  display: block !important;
+  margin-top: 8px !important;
+  color: #aa9c88 !important;
+  font-size: 11px !important;
+}
+
+.replica-daily-ai-actions {
+  display: flex !important;
+  gap: 9px !important;
+}
+
+.replica-daily-ai-primary,
+.replica-goal-button,
+.replica-goal-modal-save {
+  min-height: 34px !important;
+  padding: 0 14px !important;
+  background: var(--warm-brown) !important;
+  color: #fff8ec !important;
+}
+
+.replica-daily-ai-secondary,
+.replica-goal-modal-secondary,
+.replica-goal-modal-clear {
+  min-height: 34px !important;
+  padding: 0 14px !important;
+  background: rgba(255, 250, 241, 0.74) !important;
+  color: #725b3e !important;
+}
+
+.replica-goal-body {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  margin-top: 18px !important;
+}
+
+.replica-goal-percent {
+  color: #312820 !important;
+  font-size: 42px !important;
+  font-weight: 780 !important;
+  line-height: 1 !important;
+}
+
+.replica-goal-body p {
+  margin-top: 8px !important;
+  color: var(--warm-muted) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+.replica-goal-ring {
+  width: 86px !important;
+  height: 86px !important;
+  border-radius: 50% !important;
+  box-shadow: inset 0 0 0 8px rgba(255, 250, 241, 0.68) !important;
+}
+
+.replica-goal-ring span {
+  color: var(--warm-brown-dark) !important;
+  background: #fffaf1 !important;
+}
+
+.replica-goal-track {
+  height: 7px !important;
+  margin: 18px 0 14px !important;
+  border-radius: 999px !important;
+  background: #e5dccd !important;
+  overflow: hidden !important;
+}
+
+.replica-goal-track span {
+  display: block !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: linear-gradient(90deg, var(--warm-brown), #ad8758) !important;
+}
+
+.replica-goal-chip-list {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+}
+
+.replica-goal-chip {
+  display: grid !important;
+  gap: 3px !important;
+  padding: 7px 4px !important;
+  text-align: center !important;
+}
+
+.replica-goal-chip.is-muted {
+  opacity: 0.56 !important;
+}
+
+.replica-goal-chip.is-complete {
+  background: rgba(109, 143, 114, 0.14) !important;
+  color: #58775a !important;
+}
+
+.replica-goal-button {
+  width: 100% !important;
+  margin-top: 14px !important;
+}
+
+.replica-bottom-grid {
+  position: static !important;
+  grid-column: 1 / -1 !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 18px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+}
+
+.replica-bottom-grid .replica-card {
+  min-height: 300px !important;
+  height: auto !important;
+}
+
+.replica-bottom-foot {
+  margin: 14px 0 0 !important;
+  color: #9c8f7b !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+.replica-heatmap {
+  margin-top: 16px !important;
+}
+
+.replica-heatmap-days,
+.replica-heatmap-row {
+  display: grid !important;
+  grid-template-columns: 34px repeat(7, minmax(18px, 1fr)) !important;
+  gap: 7px !important;
+  align-items: center !important;
+}
+
+.replica-heatmap-days span,
+.replica-heatmap-row strong {
+  color: #9a8d79 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.replica-heatmap-row {
+  margin-top: 8px !important;
+}
+
+.replica-heatmap-row i,
+.replica-heat-legend i {
+  border: 1px solid rgba(137, 112, 82, 0.1) !important;
+  border-radius: 6px !important;
+  background: #ece4d8 !important;
+}
+
+.replica-heatmap-row i {
+  width: 100% !important;
+  height: 24px !important;
+}
+
+.replica-heatmap-row i.heat-1,
+.replica-heat-legend i.heat-1 {
+  background: #e7ddcd !important;
+}
+
+.replica-heatmap-row i.heat-2,
+.replica-heat-legend i.heat-2 {
+  background: #d7c6ad !important;
+}
+
+.replica-heatmap-row i.heat-3,
+.replica-heat-legend i.heat-3 {
+  background: #b99467 !important;
+}
+
+.replica-heatmap-row i.heat-4,
+.replica-heat-legend i.heat-4 {
+  background: #89643f !important;
+}
+
+.replica-heatmap-row i.is-today,
+.replica-heatmap-days .is-today {
+  outline: 2px solid rgba(138, 104, 69, 0.3) !important;
+  outline-offset: 2px !important;
+}
+
+.replica-heat-legend {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-top: 15px !important;
+  color: #9b8e7b !important;
+  font-size: 11px !important;
+}
+
+.replica-trend-chart {
+  width: 100% !important;
+  height: 170px !important;
+  margin-top: 10px !important;
+}
+
+.replica-trend-chart .trend-grid {
+  stroke: rgba(137, 112, 82, 0.13) !important;
+}
+
+.replica-trend-chart text {
+  fill: #9c8f7b !important;
+  font-size: 11px !important;
+}
+
+.replica-trend-chart .trend-line {
+  stroke: var(--warm-brown) !important;
+  stroke-width: 3 !important;
+}
+
+.replica-trend-chart circle {
+  fill: #fffaf1 !important;
+  stroke: var(--warm-brown) !important;
+  stroke-width: 3 !important;
+}
+
+.trend-empty-state {
+  fill: #9c8f7b !important;
+}
+
+.replica-trend-labels {
+  display: grid !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+  gap: 2px !important;
+  margin: 4px 0 0 38px !important;
+}
+
+.replica-trend-labels span {
+  color: #9c8f7b !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+
+.replica-score-chip {
+  min-width: 78px !important;
+  padding: 6px 10px !important;
+  border-radius: 999px !important;
+  background: rgba(244, 236, 223, 0.78) !important;
+  color: #7a664a !important;
+  font-size: 10px !important;
+  line-height: 1.25 !important;
+  text-align: right !important;
+}
+
+.replica-score-chip strong {
+  color: #3b3025 !important;
+  font-size: 15px !important;
+}
+
+.replica-weak-list,
+.replica-recent-list {
+  display: grid !important;
+  gap: 10px !important;
+  margin-top: 16px !important;
+}
+
+.replica-weak-row,
+.replica-recent-row {
+  min-height: 72px !important;
+  height: auto !important;
+  padding: 12px !important;
+  border: 1px solid rgba(137, 112, 82, 0.12) !important;
+  border-radius: 11px !important;
+  background: rgba(248, 241, 230, 0.66) !important;
+  box-shadow: none !important;
+}
+
+.replica-weak-row {
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr) !important;
+  gap: 11px !important;
+  border-left: 3px solid var(--weak-accent, var(--warm-brown)) !important;
+}
+
+.replica-weak-rank {
+  display: grid !important;
+  place-items: center !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  background: rgba(138, 104, 69, 0.14) !important;
+  color: var(--warm-brown-dark) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.replica-weak-main strong,
+.replica-recent-main strong {
+  color: #3a3127 !important;
+  font-size: 13px !important;
+  font-weight: 780 !important;
+  line-height: 1.35 !important;
+}
+
+.replica-weak-meta,
+.replica-recent-meta {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin-top: 7px !important;
+}
+
+.replica-weak-meta em,
+.replica-weak-meta i,
+.replica-recent-meta em,
+.replica-recent-meta time {
+  color: #8d806d !important;
+  font-size: 11px !important;
+  font-style: normal !important;
+}
+
+.replica-weak-empty,
+.replica-recent-empty {
+  margin-top: 16px !important;
+  padding: 16px !important;
+  border: 1px dashed rgba(137, 112, 82, 0.2) !important;
+  border-radius: 11px !important;
+  background: rgba(244, 236, 223, 0.58) !important;
+  color: #918471 !important;
+  font-size: 12px !important;
+  line-height: 1.6 !important;
+}
+
+.replica-recent-row {
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) 14px !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.replica-recent-type {
+  display: grid !important;
+  place-items: center !important;
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 10px !important;
+  color: #fff8ed !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}
+
+.replica-recent-row > i {
+  color: #b6aa98 !important;
+  font-style: normal !important;
+}
+
+.replica-goal-modal-layer {
+  background: rgba(56, 47, 37, 0.28) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.replica-goal-modal {
+  border: 1px solid rgba(137, 112, 82, 0.18) !important;
+  border-radius: 18px !important;
+  background: #fffaf1 !important;
+  color: var(--warm-ink) !important;
+  box-shadow: var(--warm-shadow) !important;
+}
+
+.replica-goal-modal h2 {
+  color: #342b22 !important;
+}
+
+.replica-goal-modal p,
+.replica-goal-modal-summary,
+.replica-goal-form-row strong small {
+  color: var(--warm-muted) !important;
+}
+
+.replica-goal-form-row {
+  border: 1px solid rgba(137, 112, 82, 0.14) !important;
+  background: rgba(248, 241, 230, 0.72) !important;
+}
+
+.replica-goal-form-row input {
+  border-color: rgba(137, 112, 82, 0.2) !important;
+  background: #fffaf1 !important;
+  color: #342b22 !important;
+}
+
+@media (min-width: 1800px) {
+  .home-replica-canvas {
+    grid-template-columns: 220px minmax(0, 1fr) !important;
+  }
+
+  .replica-content {
+    gap: 22px !important;
+    padding: 28px 34px 40px !important;
+  }
+
+  .replica-left-column,
+  .replica-right-column,
+  .replica-side-card-grid,
+  .replica-bottom-grid {
+    gap: 22px !important;
+  }
+
+  .replica-hero {
+    min-height: 470px !important;
+  }
+}
+
+@media (max-width: 1700px) {
+  .replica-bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 1320px) {
+  .home-replica-canvas {
+    grid-template-columns: 198px minmax(0, 1fr) !important;
+  }
+
+  .replica-content {
+    grid-template-columns: minmax(0, 1.44fr) minmax(326px, 0.84fr) !important;
+    gap: 16px !important;
+    padding: 20px 20px 30px !important;
+  }
+
+  .replica-left-column,
+  .replica-right-column,
+  .replica-side-card-grid {
+    gap: 16px !important;
+  }
+
+  .replica-hero {
+    min-height: 414px !important;
+    padding: 22px !important;
+  }
+
+  .replica-quick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .replica-stat-card {
+    min-height: 102px !important;
+    padding: 14px !important;
+  }
+
+  .replica-ai-actions {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 1120px) {
+  .home-replica-canvas {
+    grid-template-columns: 190px minmax(0, 1fr) !important;
+  }
+
+  .replica-content {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .replica-hero {
+    grid-template-columns: minmax(0, 1fr) !important;
+    min-height: 0 !important;
+  }
+
+  .replica-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    margin-top: 20px !important;
+  }
+
+  .replica-side-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 }
 </style>
