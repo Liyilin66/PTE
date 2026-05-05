@@ -4,6 +4,7 @@
 /.omx/state/
 /.omx/team/
 /.omx/metrics.json
+/.omc/
 
 # Root-level build and dependency output
 /node_modules/
