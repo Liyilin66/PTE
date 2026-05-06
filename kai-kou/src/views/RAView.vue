@@ -1,11 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
-import NavBar from "@/components/NavBar.vue";
-import OrangeButton from "@/components/OrangeButton.vue";
+import { useRoute, useRouter } from "vue-router";
 import RecordingWave from "@/components/RecordingWave.vue";
-import TimerBar from "@/components/TimerBar.vue";
-import { getRandomQuestion } from "@/lib/questions";
+import { fetchQuestions, getQuestionById, getRandomQuestion } from "@/lib/questions";
 import {
   fetchRAHistoryByQuestion,
   fetchRAQuestionPerformance,
@@ -25,6 +22,7 @@ const defaultQuestion = {
 };
 
 const router = useRouter();
+const route = useRoute();
 const practiceStore = usePracticeStore();
 const authStore = useAuthStore();
 const uiStore = useUIStore();
@@ -35,6 +33,7 @@ const questionIndex = ref(1);
 const phase = computed(() => practiceStore.phase);
 const questionLoading = ref(true);
 const question = ref({ ...defaultQuestion });
+const questionList = ref([]);
 
 const wordCount = computed(() => getQuestionWordCountValue(question.value));
 const estimatedDurationSeconds = computed(() => clampNumber(Math.round(wordCount.value / 2.6), 18, 45));
@@ -44,17 +43,139 @@ const difficultyLabel = computed(() => {
   if (difficulty >= 3) return "困难";
   return "中等";
 });
-const difficultyPillClass = computed(() => {
+const difficultyLevelClass = computed(() => {
   const difficulty = Number(question.value?.difficulty || 2);
-  if (difficulty <= 1) return "bg-green-100 text-green-700";
-  if (difficulty >= 3) return "bg-red-100 text-red-600";
-  return "bg-orange/15 text-orange";
+  if (difficulty <= 1) return "easy";
+  if (difficulty >= 3) return "hard";
+  return "medium";
 });
 const readingRhythmHint = computed(() => {
   if (wordCount.value <= 25) return "句子较短，开口果断，结尾稍收稳。";
   if (wordCount.value <= 45) return "中等长度，按意群停顿，保持稳定语速。";
   return "句子偏长，前半句放慢，逗号处短停后再推进。";
 });
+const steps = [
+  { label: "准备阅读" },
+  { label: "开始录音" },
+  { label: "提交评测" },
+  { label: "查看结果" }
+];
+const currentStep = computed(() => {
+  if (phase.value === "done") return 3;
+  if (phase.value === "processing") return 2;
+  if (phase.value === "recording" && hasFinalizedRecording.value) return 2;
+  if (phase.value === "recording") return 1;
+  return 0;
+});
+const questionTotal = computed(() => Math.max(questionList.value.length || 0, questionIndex.value, 1));
+const currentQuestionBankIndex = computed(() => {
+  const currentId = `${question.value?.id || ""}`.trim();
+  if (!currentId) return -1;
+  return questionList.value.findIndex((item) => `${item?.id || ""}`.trim() === currentId);
+});
+const currentQuestionNumber = computed(() => (
+  currentQuestionBankIndex.value >= 0 ? currentQuestionBankIndex.value + 1 : questionIndex.value
+));
+const completedQuestionCount = computed(() => Math.max(0, Math.min(currentQuestionNumber.value - 1, questionTotal.value)));
+const sessionProgressPercent = computed(() => (
+  questionTotal.value ? Math.round((completedQuestionCount.value / questionTotal.value) * 100) : 0
+));
+const stepProgressPercent = computed(() => Math.round(((currentStep.value + 1) / steps.length) * 100));
+const timerRemainingSeconds = computed(() => {
+  if (phase.value === "recording" && !hasFinalizedRecording.value) return timer.remaining.value;
+  if (phase.value === "preparing") return timer.remaining.value;
+  return 0;
+});
+const timerProgressValue = computed(() => {
+  if (phase.value === "recording" && !hasFinalizedRecording.value) {
+    return 100 - timer.progress.value;
+  }
+  return timer.progress.value;
+});
+const statusBanner = computed(() => {
+  if (phase.value === "processing" || phase.value === "done") {
+    return {
+      kind: "done",
+      title: "正在提交 AI 评测，稍后进入结果页",
+      subtitle: "评分链路保持原有 RA 后端逻辑，完成后自动跳转。",
+      seconds: "AI"
+    };
+  }
+  if (phase.value === "recording" && hasFinalizedRecording.value) {
+    return {
+      kind: "done",
+      title: "录音已完成，可以试听后提交评测",
+      subtitle: "如果声音不清楚，可以重新录音；确认后提交 AI 评分。",
+      seconds: "OK"
+    };
+  }
+  if (phase.value === "recording") {
+    return {
+      kind: "rec",
+      title: "正在录音中，请完整朗读屏幕中的文字",
+      subtitle: "保持稳定语速，最长 40 秒，时间到会自动进入提交准备。",
+      seconds: timerRemainingSeconds.value
+    };
+  }
+  return {
+    kind: "prep",
+    title: "请先准备，倒计时结束后自动开始录音",
+    subtitle: "在准备时间内先完整阅读题目，感受整段节奏",
+    seconds: timerRemainingSeconds.value
+  };
+});
+const primaryActionLabel = computed(() => {
+  if (phase.value === "preparing") return isStartingRecording.value ? "麦克风准备中..." : "立即开始录音";
+  if (phase.value === "recording" && hasFinalizedRecording.value) return isSubmitting.value ? "提交中..." : "提交评测";
+  if (phase.value === "recording") return canFinishRecording.value ? "结束录音" : "录音中...";
+  if (phase.value === "processing" || phase.value === "done") return "评测处理中...";
+  return "重新开始";
+});
+const primaryActionDisabled = computed(() => {
+  if (questionLoading.value || isStartingRecording.value) return true;
+  if (phase.value === "preparing") return false;
+  if (phase.value === "recording" && hasFinalizedRecording.value) return !canSubmitEvaluation.value;
+  if (phase.value === "recording") return !canFinishRecording.value;
+  return phase.value === "processing" || phase.value === "done";
+});
+const activeTimerLabel = computed(() => {
+  if (phase.value === "recording") return hasFinalizedRecording.value ? "录音状态" : "录音时间";
+  if (phase.value === "processing" || phase.value === "done") return "评测状态";
+  return "准备时间";
+});
+const currentAiTip = computed(() => {
+  if (phase.value === "recording" && hasFinalizedRecording.value) return "录音完成后先试听，确认没有明显断句或空白，再提交评测。";
+  if (phase.value === "recording") return "录音中优先保持稳定节奏，遇到长句用短停顿切开，不要突然加速。";
+  if (phase.value === "processing" || phase.value === "done") return "本次录音已进入 AI 评分，结果页会展示发音、流利度和内容覆盖。";
+  return `这题是${difficultyLabel.value}难度，${readingRhythmHint.value}`;
+});
+const aiCoachMessages = computed(() => [
+  {
+    text: `准备时先默读一遍，重点找逗号、从句和专有名词。${wordCount.value >= 55 ? "这题偏长，建议前半句放慢。" : ""}`,
+    time: "实时建议"
+  },
+  {
+    text: difficultyLevelClass.value === "hard"
+      ? "困难题更看重稳定性，宁愿略慢，也不要因为抢时间而吞音。"
+      : "当前题目适合练清晰度，读准元音和句尾收音更重要。",
+    time: "实时建议"
+  }
+]);
+const historyBadgeLabel = computed(() => questionPerformance.value?.hasHistory ? questionPerformance.value.levelTag : "首练");
+const historyBadgeClass = computed(() => questionPerformance.value?.hasHistory ? "good" : "first");
+const historyStats = computed(() => {
+  if (!questionPerformance.value?.hasHistory) return [];
+  return [
+    { val: questionPerformance.value.bestScore, label: "最高分", tone: "brown" },
+    { val: questionPerformance.value.totalAttempts, label: "练习次数", tone: "dark" },
+    { val: lastScoreText.value, label: "最近一次", tone: "green" }
+  ];
+});
+const historyMiniRecords = computed(() => (
+  Array.isArray(questionHistoryRecords.value)
+    ? questionHistoryRecords.value.slice(0, 4)
+    : []
+));
 
 const recordingSeconds = ref(0);
 const prepareStartedAtMs = ref(0);
@@ -142,12 +263,6 @@ let questionPerformanceRequestSeq = 0;
 let questionHistoryRequestSeq = 0;
 
 const practiceRecommendation = computed(() => getPracticeRecommendationCopy(questionPerformance.value));
-const performanceLevelClass = computed(() => {
-  const levelTag = `${questionPerformance.value?.levelTag || ""}`;
-  if (levelTag === "优秀") return "bg-green-100 text-green-700";
-  if (levelTag === "良好") return "bg-orange/15 text-orange";
-  return "bg-slate-100 text-slate-600";
-});
 const lastScoreText = computed(() => {
   if (!questionPerformance.value?.hasHistory) return "暂无";
   return `${Number(questionPerformance.value?.lastScore || 0)} 分`;
@@ -305,6 +420,15 @@ function formatHistoryDateTime(value) {
   return date.toLocaleString();
 }
 
+function formatHistoryShortDate(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "-";
+  return date.toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit"
+  });
+}
+
 function getHistoryQuestionText(record) {
   const fromRecord = `${record?.questionContent || ""}`.trim();
   if (fromRecord) return fromRecord;
@@ -330,6 +454,9 @@ async function loadCurrentQuestionPerformance() {
     if (requestId !== questionPerformanceRequestSeq) return;
     if (`${question.value?.id || ""}`.trim() !== currentQuestionId) return;
     questionPerformance.value = normalizeQuestionPerformance(payload);
+    if (questionPerformance.value.hasHistory && !showQuestionHistoryPanel.value) {
+      void loadCurrentQuestionHistory();
+    }
   } catch (error) {
     if (requestId !== questionPerformanceRequestSeq) return;
     if (`${question.value?.id || ""}`.trim() !== currentQuestionId) return;
@@ -351,7 +478,7 @@ async function loadCurrentQuestionHistory() {
   if (!currentQuestionId) {
     if (requestId === questionHistoryRequestSeq) {
       questionHistoryRecords.value = [];
-      questionHistoryError.value = "Current question is not ready yet.";
+      questionHistoryError.value = "当前题目尚未准备好。";
       questionHistoryLoading.value = false;
     }
     return;
@@ -373,7 +500,7 @@ async function loadCurrentQuestionHistory() {
       questionId: currentQuestionId
     });
     questionHistoryRecords.value = [];
-    questionHistoryError.value = "Failed to load history. Please retry.";
+    questionHistoryError.value = "历史记录加载失败，请稍后重试。";
   } finally {
     if (requestId === questionHistoryRequestSeq) {
       questionHistoryLoading.value = false;
@@ -753,11 +880,100 @@ function syncQuestionToStore() {
   });
 }
 
-async function loadQuestion({ incrementIndex = false } = {}) {
+function stepClass(index) {
+  if (index < currentStep.value) return "done";
+  if (index === currentStep.value) return "act";
+  return "wait";
+}
+
+function goBackToRAHome() {
+  router.push("/ra");
+}
+
+function goAgent() {
+  router.push("/agent");
+}
+
+function goQuestionBank() {
+  router.push("/ra/list");
+}
+
+function showHistoryFromCard() {
+  if (showQuestionHistoryPanel.value) return;
+  void toggleQuestionHistoryPanel();
+}
+
+async function handlePrimaryAction() {
+  if (phase.value === "preparing") {
+    await startRecordingNow();
+    return;
+  }
+
+  if (phase.value === "recording") {
+    await handleSubmit();
+    return;
+  }
+
+  if (phase.value === "idle") {
+    startPreparing();
+  }
+}
+
+async function switchQuestionByOffset(offset) {
+  if (questionLoading.value || phase.value === "processing") return;
+
+  const list = await ensureQuestionList();
+  if (!Array.isArray(list) || !list.length) {
+    await skipQuestion();
+    return;
+  }
+
+  const currentIndex = getQuestionListIndex();
+  const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = (baseIndex + offset + list.length) % list.length;
+  await switchToQuestion(list[nextIndex] || null, nextIndex + 1);
+}
+
+async function randomQuestion() {
+  if (questionLoading.value || phase.value === "processing") return;
+  await ensureQuestionList();
+  const picked = await getRandomQuestion("RA");
+  const nextIndex = picked?.id
+    ? questionList.value.findIndex((item) => `${item?.id || ""}`.trim() === `${picked.id || ""}`.trim())
+    : -1;
+  await switchToQuestion(picked, nextIndex >= 0 ? nextIndex + 1 : questionIndex.value + 1);
+}
+
+async function switchToQuestion(nextQuestion, nextIndex = questionIndex.value + 1) {
+  if (!nextQuestion) {
+    await skipQuestion();
+    return;
+  }
+
+  timer.stop();
+  stopRecordingTicker();
+  if (recorder.isRecording.value || recorder.isStopping.value || recorder.isReady.value) {
+    const stopAttemptId = currentRecorderAttemptId.value;
+    await recorder.stopRecorderAndGetBlob({
+      reason: "switch_question",
+      attemptId: stopAttemptId
+    });
+  }
+  clearAttemptScopedUIState();
+
+  question.value = nextQuestion;
+  questionIndex.value = Math.max(1, Number(nextIndex || 1));
+  syncQuestionToStore();
+  startPreparing();
+}
+
+async function loadQuestion({ incrementIndex = false, respectRouteQuery = true } = {}) {
   questionLoading.value = true;
 
   try {
-    const picked = await getRandomQuestion("RA");
+    await ensureQuestionList();
+    const picked = (respectRouteQuery ? await resolveQuestionFromRouteQuery() : null)
+      || await getRandomQuestion("RA");
     question.value = picked || { ...defaultQuestion };
     syncQuestionToStore();
 
@@ -767,6 +983,59 @@ async function loadQuestion({ incrementIndex = false } = {}) {
   } finally {
     questionLoading.value = false;
   }
+}
+
+async function ensureQuestionList() {
+  if (questionList.value.length) return questionList.value;
+  const list = await fetchQuestions("RA");
+  questionList.value = Array.isArray(list) ? list : [];
+  return questionList.value;
+}
+
+function getQuestionListIndex() {
+  const currentId = `${question.value?.id || ""}`.trim();
+  const list = questionList.value;
+  if (!currentId || !Array.isArray(list) || !list.length) return -1;
+  return list.findIndex((item) => `${item?.id || ""}`.trim() === currentId);
+}
+
+async function resolveQuestionFromRouteQuery() {
+  const questionId = normalizeRouteQueryValue(route.query.questionId);
+  if (questionId) {
+    const picked = await getQuestionById("RA", questionId);
+    if (picked) return picked;
+  }
+
+  const difficulty = normalizeDifficultyQuery(route.query.difficulty);
+  if (!difficulty) return null;
+
+  const questions = await fetchQuestions("RA");
+  const pool = (Array.isArray(questions) ? questions : [])
+    .filter((item) => getQuestionDifficultyLevel(item) === difficulty);
+
+  if (!pool.length) return null;
+  return pool[Math.floor(Math.random() * pool.length)] || null;
+}
+
+function normalizeRouteQueryValue(value) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return `${raw || ""}`.trim();
+}
+
+function normalizeDifficultyQuery(value) {
+  const normalized = normalizeRouteQueryValue(value).toLowerCase();
+  if (normalized === "easy" || normalized === "1") return 1;
+  if (normalized === "medium" || normalized === "2") return 2;
+  if (normalized === "hard" || normalized === "3") return 3;
+  return 0;
+}
+
+function getQuestionDifficultyLevel(item) {
+  const level = Number(item?.difficulty || 2);
+  if (!Number.isFinite(level)) return 2;
+  if (level <= 1) return 1;
+  if (level >= 3) return 3;
+  return 2;
 }
 
 function startPreparing() {
@@ -1044,7 +1313,7 @@ async function skipQuestion() {
   }
   clearAttemptScopedUIState();
 
-  await loadQuestion({ incrementIndex: true });
+  await loadQuestion({ incrementIndex: true, respectRouteQuery: false });
   startPreparing();
 }
 
@@ -1182,112 +1451,152 @@ async function startRecordingNow() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-bg">
-    <NavBar title="朗读题" back-to="/home" />
-
-    <main class="mx-auto max-w-2xl px-4 py-6">
-      <p class="mb-4 text-sm text-muted">第 {{ questionIndex }} 题</p>
-
-      <div v-if="questionLoading" class="py-16 text-center">
-        <div class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-orange border-t-transparent" />
-        <p class="mt-3 text-sm text-muted">题目加载中...</p>
+  <div class="ra-practice-shell" data-testid="ra-practice-page">
+    <header class="ra-topbar">
+      <button class="tb-back" type="button" data-testid="ra-back" @click="goBackToRAHome">
+        <span class="tb-arr">‹</span>
+        <span>朗读题 · RA</span>
+      </button>
+      <div class="tb-title">RA 朗读练习</div>
+      <div class="tb-right">
+        <div class="vip-pill"><span class="vip-dot"></span> VIP · 无限练习</div>
+        <button class="exit-btn" type="button" @click="goBackToRAHome">退出</button>
       </div>
+    </header>
 
-      <template v-else>
-        <div v-if="phase === 'preparing'" class="space-y-4">
-          <section class="rounded-xl border bg-white p-6 shadow-card">
-            <p class="mb-2 text-center text-lg font-bold text-navy">请先准备，倒计时结束后将自动开始录音。</p>
-            <p class="text-center text-sm text-muted">请在准备时间内先完整阅读题目。</p>
-          </section>
-
-          <div class="flex items-start gap-3">
-            <div class="flex-1">
-              <TimerBar label="准备时间" :remaining="timer.remaining" :progress="timer.progress" :is-warning="timer.isWarning" />
-            </div>
-            <button type="button" class="pt-1 text-sm text-muted underline transition-colors hover:text-navy" @click="skipQuestion">
-              跳过这题 →
-            </button>
+    <div class="step-bar" data-testid="ra-stepper">
+      <div v-for="(step, i) in steps" :key="step.label" class="step-wrap">
+        <div class="step-item">
+          <div class="step-num" :class="stepClass(i)">
+            <span v-if="currentStep > i">✓</span>
+            <span v-else>{{ i + 1 }}</span>
           </div>
+          <span class="step-label" :class="stepClass(i)">{{ step.label }}</span>
+        </div>
+        <div v-if="i < steps.length - 1" class="step-sep"></div>
+      </div>
+      <div class="step-q-info">第 {{ currentQuestionNumber }} 题 / 共 {{ questionTotal }} 题</div>
+    </div>
 
-          <button
-            type="button"
-            class="w-full rounded-xl border-2 border-orange/40 bg-white py-3 text-sm font-semibold text-orange transition-all hover:border-orange hover:bg-orange/5"
-            @click="startRecordingNow"
-          >
-            立即开始录音
-          </button>
+    <div class="practice-body">
+      <aside class="left-col">
+        <section class="side-card">
+          <div class="card-hd"><span class="card-mark">◈</span> 题目信息</div>
+          <div class="card-body info-body">
+            <div class="info-row"><span>题号</span><strong>{{ question.id || "RA" }}</strong></div>
+            <div class="info-row">
+              <span>难度</span>
+              <span class="diff-badge" :class="difficultyLevelClass">{{ difficultyLabel }}</span>
+            </div>
+            <div class="info-row"><span>词数</span><strong>{{ wordCount }} 词</strong></div>
+            <div class="info-row"><span>预计用时</span><strong>约 {{ estimatedDurationSeconds }} 秒</strong></div>
+            <div class="info-row"><span>准备时间</span><strong>30 秒</strong></div>
+            <div class="info-row"><span>录音时长</span><strong>最长 40 秒</strong></div>
+            <div class="rhythm-note">📖 阅读节奏：{{ readingRhythmHint }}</div>
+          </div>
+        </section>
 
-          <section class="rounded-xl border bg-white p-6 shadow-card">
-            <p class="text-lg leading-relaxed text-text">{{ question.content }}</p>
-          </section>
+        <section class="side-card">
+          <div class="card-hd"><span class="card-mark">✦</span> 朗读提示</div>
+          <div class="card-body tip-list">
+            <div v-for="tip in tips" :key="tip" class="tip-item">
+              <span class="tip-dot"></span>
+              <span>{{ tip }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="side-card">
+          <div class="card-hd">
+            <span class="card-mark">◎</span> 我的战绩
+            <span class="hist-badge" :class="historyBadgeClass">{{ historyBadgeLabel }}</span>
+          </div>
+          <div class="card-body">
+            <div v-if="questionPerformanceLoading" class="mini-loading">战绩加载中...</div>
+            <template v-else-if="questionPerformance.hasHistory">
+              <div class="hist-stat-row">
+                <div v-for="item in historyStats" :key="item.label" class="hist-stat">
+                  <div class="hist-val" :class="`tone-${item.tone}`">{{ item.val }}</div>
+                  <div class="hist-label">{{ item.label }}</div>
+                </div>
+              </div>
+              <div class="hist-mini">
+                <div v-for="record in historyMiniRecords" :key="record.id" class="hist-mini-row">
+                  <span>{{ formatHistoryShortDate(record.createdAt) }}</span>
+                  <div class="hist-bar"><i :style="{ width: `${Math.max(8, Math.min(100, Number(record.overall || 0) / 90 * 100))}%` }"></i></div>
+                  <strong>{{ Number(record.overall || 0) }}</strong>
+                </div>
+              </div>
+              <button class="inline-history-btn" type="button" data-testid="ra-history-button" @click="showHistoryFromCard">查看本题历史</button>
+            </template>
+            <template v-else>
+              <div class="hist-empty">暂无历史战绩<br>首次练习，先打基准分。</div>
+              <div class="ai-rec-note">AI 建议：{{ practiceRecommendation }}</div>
+            </template>
+            <p v-if="questionPerformanceError" class="small-warning">{{ questionPerformanceError }}</p>
+          </div>
+        </section>
+      </aside>
+
+      <main class="main-col">
+        <div v-if="questionLoading" class="loading-card">
+          <div class="loading-dot"></div>
+          <p>题目加载中...</p>
         </div>
 
-        <div v-else-if="phase === 'recording'" class="space-y-4">
-          <div class="flex items-start gap-3">
-            <div class="flex-1">
-              <TimerBar label="录音时间" :remaining="timer.remaining" :progress="timer.progress" :is-warning="timer.isWarning" />
+        <template v-else>
+          <section class="status-banner" :class="`status-banner--${statusBanner.kind}`" data-testid="ra-status-banner">
+            <div class="sb-text">
+              <div class="sb-title">{{ statusBanner.title }}</div>
+              <div class="sb-sub">{{ statusBanner.subtitle }}</div>
             </div>
-            <button type="button" class="pt-1 text-sm text-muted underline transition-colors hover:text-navy" @click="skipQuestion">
-              跳过这题 →
+            <div class="countdown-wrap">
+              <div class="countdown-num">{{ statusBanner.seconds }}</div>
+              <div class="countdown-lbl">{{ statusBanner.kind === "done" ? "STATUS" : "SECONDS" }}</div>
+            </div>
+          </section>
+
+          <section class="timer-card">
+            <div class="timer-row">
+              <span class="timer-label">{{ activeTimerLabel }}</span>
+              <div class="timer-track">
+                <div class="timer-fill" :class="`timer-fill--${statusBanner.kind}`" :style="{ width: `${Math.max(0, Math.min(100, timerProgressValue))}%` }"></div>
+              </div>
+              <span class="timer-val">{{ phase === "recording" && hasFinalizedRecording ? "完成" : `${timerRemainingSeconds}s` }}</span>
+              <button class="timer-skip" type="button" data-testid="ra-skip" @click="skipQuestion">跳过这题 →</button>
+            </div>
+
+            <button
+              class="primary-action"
+              type="button"
+              data-testid="ra-primary-action"
+              :disabled="primaryActionDisabled"
+              @click="handlePrimaryAction"
+            >
+              🎙 {{ primaryActionLabel }}
             </button>
-          </div>
-
-          <section class="rounded-xl border bg-white p-4 text-center shadow-card">
-            <div v-if="hasFinalizedRecording && hasUsableStoppedAudio" class="flex items-center justify-center gap-2">
-              <div class="h-3 w-3 rounded-full bg-emerald-500" />
-              <p class="font-bold text-navy">录音已完成，可先试听再提交评测</p>
-            </div>
-            <div v-else-if="hasFinalizedRecording" class="flex items-center justify-center gap-2">
-              <div class="h-3 w-3 rounded-full bg-amber-500" />
-              <p class="font-bold text-amber-700">录音文件不可播放，请重新录音后再提交。</p>
-            </div>
-            <div v-else-if="!recorder.isReady" class="flex items-center justify-center gap-2">
-              <div class="h-4 w-4 animate-spin rounded-full border-2 border-orange border-t-transparent" />
-              <p class="text-sm text-muted">麦克风准备中...</p>
-            </div>
-            <div v-else class="flex items-center justify-center gap-2">
-              <div class="h-3 w-3 animate-pulse rounded-full bg-red-500" />
-              <p class="font-bold text-navy">请开始朗读</p>
-            </div>
           </section>
 
-          <section class="rounded-xl border bg-white p-6 shadow-card">
-            <p class="text-lg leading-relaxed text-text">{{ question.content }}</p>
-          </section>
-
-          <section class="rounded-xl border bg-white p-4 shadow-card">
+          <section v-if="phase === 'recording'" class="recording-card" data-testid="ra-recording-card">
+            <div class="record-state">
+              <span v-if="hasFinalizedRecording && hasUsableStoppedAudio" class="state-dot state-dot--done"></span>
+              <span v-else-if="hasFinalizedRecording" class="state-dot state-dot--warn"></span>
+              <span v-else class="state-dot state-dot--recording"></span>
+              <strong>{{ hasFinalizedRecording ? (hasUsableStoppedAudio ? "录音已完成" : "录音需要重试") : (recorder.isReady.value ? "请开始朗读" : "麦克风准备中...") }}</strong>
+            </div>
             <RecordingWave v-if="!hasFinalizedRecording" :is-recording="Boolean(recorder.isRecording.value)" />
-
-            <div v-if="showAudioPreview" class="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-left">
-              <p class="mb-2 text-sm font-semibold text-navy">试听录音</p>
-              <audio ref="previewAudioRef" class="w-full" :src="previewAudioUrl" controls preload="metadata" />
+            <div v-if="showAudioPreview" class="audio-preview">
+              <button class="play-preview" type="button" data-testid="ra-preview" @click="playPreviewAudio">▶</button>
+              <audio ref="previewAudioRef" :src="previewAudioUrl" controls preload="metadata" />
             </div>
-
-            <p v-if="showTranscriptWeakHint" class="mt-3 text-xs text-emerald-700">已检测到有效录音，将继续提交评测。</p>
-            <p v-if="hasFinalizedRecording && !hasUsableStoppedAudio" class="mt-3 text-xs text-amber-700">当前录音文件不可播放，请重试一次；如仍失败，请更换浏览器或设备。</p>
-
-            <div class="mt-4 flex flex-wrap gap-3">
+            <p v-if="showTranscriptWeakHint" class="rec-valid-note">已检测到有效录音，将继续提交评测。</p>
+            <p v-if="hasFinalizedRecording && !hasUsableStoppedAudio" class="small-warning">当前录音文件不可播放，请重试一次；如仍失败，请更换浏览器或设备。</p>
+            <div class="record-actions">
+              <button class="ghost-action" type="button" data-testid="ra-restart" @click="restartRecording">重新录音</button>
               <button
-                v-if="hasFinalizedRecording && showAudioPreview"
+                class="submit-action"
                 type="button"
-                class="rounded-xl border-2 border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800"
-                @click="playPreviewAudio"
-              >
-                试听录音
-              </button>
-
-              <button
-                type="button"
-                class="flex-1 rounded-xl border-2 border-gray-200 py-4 text-sm font-semibold text-muted transition-all hover:border-orange hover:text-orange"
-                @click="restartRecording"
-              >
-                重新录音
-              </button>
-
-              <button
-                type="button"
-                class="flex-1 rounded-xl py-4 text-lg font-bold transition-all"
-                :class="hasFinalizedRecording ? (canSubmitEvaluation ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400') : (canFinishRecording ? 'bg-orange text-white shadow-md hover:opacity-90 active:scale-95' : 'cursor-not-allowed bg-gray-200 text-gray-400')"
+                data-testid="ra-submit"
                 :disabled="hasFinalizedRecording ? !canSubmitEvaluation : !canFinishRecording"
                 @click="handleSubmit"
               >
@@ -1295,232 +1604,186 @@ async function startRecordingNow() {
               </button>
             </div>
           </section>
-        </div>
 
-        <section v-else-if="phase === 'processing' || phase === 'done'" class="py-10 text-center">
-          <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange/10">
-            <div class="h-8 w-8 animate-spin rounded-full border-4 border-orange border-t-transparent" />
-          </div>
-          <p class="text-xl font-bold text-navy">正在分析你的作答</p>
-          <p class="mt-2 text-sm text-muted">AI 正在生成反馈...</p>
-        </section>
+          <section v-else-if="phase === 'processing' || phase === 'done'" class="processing-card">
+            <div class="loading-dot"></div>
+            <p>{{ phase === "done" ? "评测完成，正在进入结果页..." : "正在提交 AI 评测，请稍候..." }}</p>
+          </section>
 
-        <section v-else class="rounded-xl border bg-white p-6 shadow-card">
-          <p class="text-sm text-muted">{{ idleFallbackText }}</p>
-          <div class="mt-4">
-            <OrangeButton @click="startPreparing">重新开始</OrangeButton>
-          </div>
-        </section>
+          <section class="article-card" data-testid="ra-question-card">
+            <div class="article-meta">
+              <span>READ ALOUD</span>
+              <span>{{ wordCount }} 词 · 约 {{ estimatedDurationSeconds }} 秒</span>
+            </div>
+            <p class="article-text">{{ question.content }}</p>
+          </section>
 
-        <section
-          v-if="(phase === 'preparing' || phase === 'recording') && speechOptionalNotice"
-          class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4"
-        >
-          <p class="text-sm text-amber-700">{{ speechOptionalNotice }}</p>
-        </section>
-
-        <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-4 rounded-xl border bg-white p-4 shadow-sm">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <p class="text-sm font-semibold text-navy">This Question History</p>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800"
-                @click="toggleQuestionHistoryPanel"
-              >
-                {{ showQuestionHistoryPanel ? "Hide History" : "Show History" }}
-              </button>
-              <button
-                v-if="showQuestionHistoryPanel"
-                type="button"
-                class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800"
-                @click="refreshQuestionHistory"
-              >
-                Refresh
+          <section class="history-card" :class="{ 'history-card--open': showQuestionHistoryPanel }">
+            <div class="history-head">
+              <div class="history-title">📋 本题历史练习记录</div>
+              <button class="history-toggle" type="button" data-testid="ra-history-toggle" @click="toggleQuestionHistoryPanel">
+                {{ showQuestionHistoryPanel ? "收起历史" : "查看历史" }}
               </button>
             </div>
+
+            <div v-if="showQuestionHistoryPanel" class="history-panel">
+              <div class="history-tools">
+                <span>最近最多 10 条真实 practice_logs</span>
+                <button type="button" @click="refreshQuestionHistory">刷新</button>
+              </div>
+              <p v-if="questionHistoryLoading" class="muted-line">历史记录加载中...</p>
+              <p v-else-if="questionHistoryError" class="small-warning">{{ questionHistoryError }}</p>
+              <p v-else-if="!questionHistoryRecords.length" class="muted-line">这道题暂无历史记录。</p>
+              <div v-else class="history-list">
+                <article v-for="record in questionHistoryRecords" :key="record.id" class="history-log">
+                  <div>
+                    <div class="history-log-top">
+                      <strong>{{ formatHistoryDateTime(record.createdAt) }}</strong>
+                      <span>Overall {{ Number(record.overall || 0) }}</span>
+                    </div>
+                    <p>{{ getHistoryQuestionText(record) || "暂无题目快照" }}</p>
+                    <div class="score-mini">
+                      <span>P {{ Number(record.scores?.pronunciation || 0) }}</span>
+                      <span>F {{ Number(record.scores?.fluency || 0) }}</span>
+                      <span>C {{ Number(record.scores?.content || 0) }}</span>
+                    </div>
+                    <audio v-if="getHistoryPlaybackState(record.id).url" :src="getHistoryPlaybackState(record.id).url" controls preload="metadata"></audio>
+                  </div>
+                  <button
+                    v-if="hasRAAudio(record)"
+                    type="button"
+                    :disabled="getHistoryPlaybackState(record.id).loading"
+                    @click="loadHistoryPlayback(record)"
+                  >
+                    {{ getHistoryPlaybackState(record.id).url ? "刷新录音" : "加载录音" }}
+                  </button>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="showFatalRecorderError" class="error-card">
+            {{ recorder.error }}
+          </section>
+
+          <section
+            v-if="showStartMetaDebug && phase !== 'processing' && phase !== 'done'"
+            class="debug-card"
+          >
+            <p>DEV: platformStrategy={{ startMeta?.platformStrategy || "none" }}</p>
+            <p>DEV: engine={{ startMeta?.recorderEngine || "none" }}, speechReason={{ startMeta?.speechReason || "none" }}</p>
+            <p>DEV: startErrorCode={{ startMeta?.startErrorCode || "none" }}, stopErrorCode={{ currentStopMeta?.stopErrorCode || "none" }}</p>
+            <p>DEV: stopBlobSize={{ Number(currentStopMeta?.blobSize || 0) }}, stopMimeType={{ currentStopMeta?.mimeType || "none" }}</p>
+          </section>
+        </template>
+      </main>
+
+      <aside class="right-col">
+        <section class="ai-card">
+          <div class="ai-hd">
+            <div class="ai-hd-title">✦ AI 私教实时指导</div>
+            <button class="ai-hd-link" type="button" data-testid="ra-agent" @click="goAgent">进入私教 →</button>
           </div>
-
-          <div v-if="showQuestionHistoryPanel" class="mt-3 space-y-3">
-            <p v-if="questionHistoryLoading" class="text-xs text-slate-500">Loading latest 10 records...</p>
-            <p v-else-if="questionHistoryError" class="text-xs text-red-600">{{ questionHistoryError }}</p>
-            <p v-else-if="!questionHistoryRecords.length" class="text-xs text-slate-500">No history records for this question yet.</p>
-
-            <article
-              v-for="record in questionHistoryRecords"
-              v-else
-              :key="record.id"
-              class="rounded-lg border border-slate-200 bg-slate-50 p-3"
-            >
-              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p class="text-xs text-slate-500">{{ formatHistoryDateTime(record.createdAt) }}</p>
-                <p class="text-sm font-semibold text-navy">Overall {{ Number(record.overall || 0) }}</p>
+          <div class="ai-suggest"><span>💡</span><span>{{ currentAiTip }}</span></div>
+          <div class="ai-msgs">
+            <div v-for="msg in aiCoachMessages" :key="msg.text" class="ai-msg">
+              <div class="ai-avatar">AI</div>
+              <div class="ai-bubble">
+                <p>{{ msg.text }}</p>
+                <span>{{ msg.time }}</span>
               </div>
-
-              <p class="mb-2 text-xs leading-relaxed text-slate-600 break-words">
-                {{ getHistoryQuestionText(record) || "(No question snapshot available.)" }}
-              </p>
-
-              <div class="mb-2 grid grid-cols-3 gap-2 text-xs text-slate-700">
-                <p>P {{ Number(record.scores?.pronunciation || 0) }}</p>
-                <p>F {{ Number(record.scores?.fluency || 0) }}</p>
-                <p>C {{ Number(record.scores?.content || 0) }}</p>
-              </div>
-
-              <p class="mb-2 text-xs leading-relaxed text-slate-700 break-words">
-                {{ record.feedback || "-" }}
-              </p>
-
-              <p class="mb-2 text-xs italic leading-relaxed text-slate-600 break-words">
-                "{{ record.transcript || "(No transcript available.)" }}"
-              </p>
-
-              <div v-if="hasRAAudio(record)" class="space-y-2">
-                <audio
-                  v-if="getHistoryPlaybackState(record.id).url"
-                  class="w-full"
-                  controls
-                  preload="none"
-                  :src="getHistoryPlaybackState(record.id).url"
-                />
-
-                <button
-                  type="button"
-                  class="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800"
-                  :disabled="getHistoryPlaybackState(record.id).loading"
-                  @click="loadHistoryPlayback(record)"
-                >
-                  {{ getHistoryPlaybackState(record.id).url ? "Refresh Recording Link" : "Load Recording" }}
-                </button>
-
-                <p v-if="getHistoryPlaybackState(record.id).loading" class="text-xs text-slate-500">Loading playback link...</p>
-                <p v-if="getHistoryPlaybackState(record.id).error" class="text-xs text-red-600">{{ getHistoryPlaybackState(record.id).error }}</p>
-              </div>
-              <p v-else class="text-xs text-slate-500">No recording available for this attempt.</p>
-            </article>
+            </div>
+          </div>
+          <div class="ai-actions">
+            <button type="button" @click="goAgent">🎯 帮我分析这题节奏</button>
+            <button type="button" @click="showHistoryFromCard">📊 查看我的 RA 趋势</button>
           </div>
         </section>
 
-        <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-4 rounded-xl border-l-4 border-orange bg-white p-4 shadow-sm">
-          <p class="mb-2 text-sm font-semibold text-navy">朗读提示</p>
-          <ul class="space-y-1 text-sm text-muted">
-            <li v-for="tip in tips" :key="tip">- {{ tip }}</li>
-          </ul>
+        <section class="side-card progress-card">
+          <div class="card-hd"><span class="card-mark">◈</span> 本次练习进度</div>
+          <div class="card-body">
+            <div class="progress-nums">
+              <div><strong>{{ currentQuestionNumber }}</strong><span>当前题</span></div>
+              <i></i>
+              <div><strong>{{ questionTotal }}</strong><span>总题数</span></div>
+              <i></i>
+              <div><strong>{{ completedQuestionCount }}</strong><span>已完成</span></div>
+            </div>
+            <div class="progress-track"><span :style="{ width: `${sessionProgressPercent}%` }"></span></div>
+            <div class="progress-copy">{{ sessionProgressPercent }}% 完成 · 当前步骤 {{ stepProgressPercent }}%</div>
+          </div>
         </section>
 
-        <section v-if="phase === 'preparing' || phase === 'recording'" class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.8fr]">
-          <article class="rounded-2xl border border-orange/20 bg-gradient-to-br from-orange/10 via-white to-white p-4 shadow-sm">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p class="text-xs font-semibold uppercase tracking-wide text-orange">题目情报</p>
-                <p class="mt-1 text-base font-semibold text-navy">先看清难度、词数和节奏</p>
-              </div>
-              <span class="rounded-full px-3 py-1 text-xs font-semibold" :class="difficultyPillClass">
-                {{ difficultyLabel }}
-              </span>
+        <section class="side-card quick-card">
+          <div class="card-hd"><span class="card-mark">◈</span> 快捷操作</div>
+          <div class="card-body quick-actions">
+            <div class="quick-row">
+              <button type="button" data-testid="ra-prev" @click="switchQuestionByOffset(-1)">← 上一题</button>
+              <button type="button" data-testid="ra-next" @click="switchQuestionByOffset(1)">下一题 →</button>
             </div>
-
-            <div class="mt-4 grid grid-cols-3 gap-2">
-              <div class="rounded-xl bg-white/90 p-3">
-                <p class="text-[11px] text-muted">难度</p>
-                <p class="mt-1 text-sm font-semibold text-navy">{{ difficultyLabel }}</p>
-              </div>
-              <div class="rounded-xl bg-white/90 p-3">
-                <p class="text-[11px] text-muted">词数</p>
-                <p class="mt-1 text-sm font-semibold text-navy">{{ wordCount }} 词</p>
-              </div>
-              <div class="rounded-xl bg-white/90 p-3">
-                <p class="text-[11px] text-muted">预计用时</p>
-                <p class="mt-1 text-sm font-semibold text-navy">约 {{ estimatedDurationSeconds }} 秒</p>
-              </div>
-            </div>
-
-            <p class="mt-3 rounded-xl bg-white/90 px-3 py-2 text-xs text-slate-600">
-              阅读节奏：{{ readingRhythmHint }}
-            </p>
-          </article>
-
-          <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">我的战绩</p>
-                <p class="mt-1 text-base font-semibold text-navy">这题值不值得继续刷</p>
-              </div>
-              <span
-                v-if="questionPerformance.hasHistory"
-                class="rounded-full px-2.5 py-1 text-xs font-semibold"
-                :class="performanceLevelClass"
-              >
-                {{ questionPerformance.levelTag }}
-              </span>
-              <span v-else class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">首练</span>
-            </div>
-
-            <div v-if="questionPerformanceLoading" class="mt-4 space-y-2">
-              <div class="h-8 w-24 animate-pulse rounded bg-slate-200" />
-              <div class="h-4 w-full animate-pulse rounded bg-slate-100" />
-              <div class="h-4 w-4/5 animate-pulse rounded bg-slate-100" />
-            </div>
-
-            <div v-else-if="questionPerformance.hasHistory" class="mt-3">
-              <p class="text-xs text-muted">最高分</p>
-              <p class="mt-1 text-3xl font-bold text-navy">
-                {{ questionPerformance.bestScore }} <span class="text-sm font-normal text-muted">分</span>
-              </p>
-
-              <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <div class="rounded-lg bg-slate-50 p-2">
-                  <p class="text-[11px] text-muted">最近一次</p>
-                  <p class="mt-0.5 font-semibold text-navy">{{ lastScoreText }}</p>
-                </div>
-                <div class="rounded-lg bg-slate-50 p-2 text-right">
-                  <p class="text-[11px] text-muted">练习次数</p>
-                  <p class="mt-0.5 font-semibold text-navy">{{ questionPerformance.totalAttempts }} 次</p>
-                </div>
-              </div>
-
-              <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                {{ practiceRecommendation }}
-              </p>
-            </div>
-
-            <div v-else class="mt-3 space-y-2">
-              <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
-                <p class="text-sm font-semibold text-navy">暂无历史战绩</p>
-                <p class="mt-1 text-xs text-slate-600">首次练习，先打基准分。</p>
-              </div>
-              <p class="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                {{ practiceRecommendation }}
-              </p>
-            </div>
-
-            <p v-if="questionPerformanceError" class="mt-2 text-xs text-amber-700">
-              {{ questionPerformanceError }}
-            </p>
-          </article>
+            <button class="random-btn" type="button" data-testid="ra-random" @click="randomQuestion">🔀 随机换题</button>
+            <button class="bank-btn" type="button" data-testid="ra-bank" @click="goQuestionBank">📚 回到题库</button>
+          </div>
         </section>
-
-        <section v-if="showFatalRecorderError" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p class="text-sm text-red-600">{{ recorder.error }}</p>
-        </section>
-
-        <section
-          v-if="showStartMetaDebug && phase !== 'processing' && phase !== 'done'"
-          class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
-        >
-          <p>DEV: platformStrategy={{ startMeta?.platformStrategy || "none" }}</p>
-          <p>DEV: engine={{ startMeta?.recorderEngine || "none" }}, speechReason={{ startMeta?.speechReason || "none" }}</p>
-          <p>DEV: isAndroidLike={{ Boolean(startMeta?.isAndroidLike) }}, isIOSSafari={{ Boolean(startMeta?.isIOSSafari) }}</p>
-          <p>DEV: webAudioFallbackTried={{ Boolean(startMeta?.webAudioFallbackTried) }}, webAudioFallbackOk={{ Boolean(startMeta?.webAudioFallbackOk) }}</p>
-          <p>DEV: startErrorCode={{ startMeta?.startErrorCode || "none" }}, stopErrorCode={{ currentStopMeta?.stopErrorCode || "none" }}</p>
-          <p>DEV: stopBlobSize={{ Number(currentStopMeta?.blobSize || 0) }}, stopMimeType={{ currentStopMeta?.mimeType || "none" }}</p>
-          <p>DEV: stopBlobIssue={{ currentStopMeta?.blobIssueCode || "none" }}, mimePlayable={{ Boolean(currentStopMeta?.mimeTypePlayable) }}</p>
-          <p>DEV: hasAudio={{ Boolean(currentStopMeta?.hasAudio) }}, hasUsableAudio={{ Boolean(currentStopMeta?.hasUsableAudio) }}</p>
-          <p>DEV: transcriptLength={{ Number((finalizedTranscript || recorder.transcript || "").length || 0) }}</p>
-          <p>DEV: mediaAttempts={{ Array.isArray(startMeta?.mediaRecorderAttempts) ? startMeta.mediaRecorderAttempts.length : 0 }} / startAttempts={{ Array.isArray(startMeta?.startAttempts) ? startMeta.startAttempts.length : 0 }}</p>
-        </section>
-
-      </template>
-    </main>
+      </aside>
+    </div>
   </div>
 </template>
+
+<style scoped>
+*,*::before,*::after{box-sizing:border-box;}
+.ra-practice-shell{--c0:#1e1208;--c1:#3a2510;--c2:#7c5c3e;--c3:#a07850;--bg1:#ede8dc;--bg2:#e4ddd0;--card:#faf6ef;--card2:#f2ebe0;--bdr:#d4c8b4;--bdr2:#c4b49c;--muted:#a89070;--green:#5a9e6a;--green2:#dff0e4;--green3:#a8d4b4;--orange:#c07840;--orange2:#f2e4d0;--orange3:#d4b090;--red:#b84040;--red2:#f5e0dc;--red3:#d4a8a0;width:100vw;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg1);color:var(--c0);font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;}
+.ra-topbar{height:52px;flex:0 0 52px;background:var(--c2);display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+.tb-back,.exit-btn,.ai-hd-link{border:0;background:transparent;font:inherit;cursor:pointer;}
+.tb-back{display:flex;align-items:center;gap:6px;color:rgba(250,246,239,.72);font-size:13px;}
+.tb-arr{font-size:18px;line-height:1;}
+.tb-title{position:absolute;left:50%;transform:translateX(-50%);font-size:15px;font-weight:800;color:#faf6ef;}
+.tb-right{display:flex;align-items:center;gap:10px;}
+.vip-pill{display:flex;align-items:center;gap:6px;background:#dff0e4;border:1px solid #a8d4b4;border-radius:999px;padding:4px 12px;font-size:11px;font-weight:700;color:#2d6a3a;}
+.vip-dot{width:5px;height:5px;border-radius:50%;background:#5a9e6a;}
+.exit-btn{font-size:12px;color:rgba(250,246,239,.66);}
+.step-bar{height:44px;flex:0 0 44px;background:var(--bg2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;padding:0 28px;}
+.step-wrap{display:flex;align-items:center;}
+.step-item{display:flex;align-items:center;gap:8px;padding:0 8px;}
+.step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;}
+.step-num.act{background:var(--c2);color:#faf6ef;}
+.step-num.done{background:var(--green);color:#fff;}
+.step-num.wait{background:var(--bdr);color:var(--muted);}
+.step-label{font-size:11.5px;font-weight:600;}
+.step-label.act{color:var(--c2);}.step-label.done{color:var(--green);}.step-label.wait{color:var(--muted);}
+.step-sep{width:22px;height:1px;background:var(--bdr);}
+.step-q-info{margin-left:auto;font-size:11px;color:var(--muted);}
+.practice-body{flex:1;min-height:0;display:grid;grid-template-columns:276px minmax(640px,1fr) 272px;overflow:hidden;}
+.left-col,.right-col{min-height:0;overflow-y:auto;background:var(--bg2);display:flex;flex-direction:column;gap:14px;scrollbar-width:thin;}
+.left-col{border-right:1px solid var(--bdr);padding:18px 14px;}
+.right-col{border-left:1px solid var(--bdr);padding:16px 13px;}
+.left-col::-webkit-scrollbar,.right-col::-webkit-scrollbar,.main-col::-webkit-scrollbar{width:4px;}.left-col::-webkit-scrollbar-thumb,.right-col::-webkit-scrollbar-thumb,.main-col::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:99px;}
+.side-card,.ai-card,.timer-card,.article-card,.history-card,.recording-card,.processing-card,.loading-card,.error-card,.debug-card{background:var(--card);border:1px solid var(--bdr);border-radius:13px;}
+.side-card,.ai-card{overflow:hidden;}
+.card-hd{min-height:44px;padding:11px 14px 10px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--c0);}
+.card-mark{color:var(--c2);font-size:12px;}.card-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px;}
+.info-body{gap:9px;}.info-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);}.info-row strong{font-size:11.5px;color:var(--c0);}
+.diff-badge{font-size:10px;font-weight:800;border-radius:5px;padding:2px 7px;}.diff-badge.easy{background:var(--green2);border:1px solid var(--green3);color:var(--green);}.diff-badge.medium{background:var(--orange2);border:1px solid var(--orange3);color:var(--orange);}.diff-badge.hard{background:var(--red2);border:1px solid var(--red3);color:var(--red);}
+.rhythm-note,.ai-rec-note{background:var(--card2);border:1px solid var(--bdr);border-radius:8px;padding:9px 11px;font-size:11px;color:var(--c1);line-height:1.65;}
+.tip-list{gap:8px;}.tip-item{display:flex;align-items:flex-start;gap:7px;font-size:11.5px;line-height:1.55;color:var(--c1);}.tip-dot{width:5px;height:5px;border-radius:50%;background:var(--c2);margin-top:6px;flex:0 0 auto;}
+.hist-badge{margin-left:auto;font-size:9.5px;padding:2px 7px;border-radius:5px;}.hist-badge.first{background:var(--bg1);border:1px solid var(--bdr2);color:var(--muted);}.hist-badge.good{background:var(--green2);border:1px solid var(--green3);color:var(--green);font-weight:800;}
+.hist-stat-row{display:flex;gap:6px;}.hist-stat{flex:1;text-align:center;background:var(--card2);border:1px solid var(--bdr);border-radius:8px;padding:8px 4px;}.hist-val{font-size:15px;font-weight:900;line-height:1.1;}.tone-brown{color:var(--c2);}.tone-dark{color:var(--c0);}.tone-green{color:var(--green);}.hist-label{margin-top:3px;font-size:9.5px;color:var(--muted);}
+.hist-mini{display:flex;flex-direction:column;gap:6px;}.hist-mini-row{display:flex;align-items:center;gap:7px;font-size:9.5px;color:var(--muted);}.hist-mini-row span{width:34px;}.hist-mini-row strong{width:24px;text-align:right;font-size:10.5px;color:var(--c2);}.hist-bar{flex:1;height:5px;background:var(--bdr);border-radius:99px;overflow:hidden;}.hist-bar i{display:block;height:100%;background:var(--c2);border-radius:99px;}
+.hist-empty{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.7;padding:4px 0;}.inline-history-btn{border:1px solid var(--bdr2);background:var(--card2);color:var(--c1);border-radius:8px;padding:7px 10px;font-size:11px;cursor:pointer;}.mini-loading,.muted-line{font-size:11.5px;color:var(--muted);}.small-warning{font-size:11px;color:#9f5d24;line-height:1.55;}
+.main-col{min-width:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;}
+.main-col > *{width:100%;max-width:1180px;margin-left:auto;margin-right:auto;}
+.status-banner{min-height:104px;border-radius:14px;padding:20px 26px;display:flex;align-items:center;justify-content:space-between;gap:20px;}.status-banner--prep{background:linear-gradient(135deg,var(--c2),var(--c3));}.status-banner--rec{background:linear-gradient(135deg,#b84040,#c06050);}.status-banner--done{background:linear-gradient(135deg,var(--green),#80b980);}
+.sb-title{font-size:17px;font-weight:900;color:#faf6ef;}.sb-sub{margin-top:5px;font-size:12px;color:rgba(250,246,239,.7);}.countdown-wrap{text-align:center;min-width:76px;}.countdown-num{font-size:48px;line-height:1;font-weight:900;color:#faf6ef;}.countdown-lbl{margin-top:3px;font-size:9px;font-weight:800;letter-spacing:.08em;color:rgba(250,246,239,.55);}
+.timer-card{padding:14px 18px;display:flex;flex-direction:column;gap:11px;}.timer-row{display:flex;align-items:center;gap:10px;}.timer-label{font-size:11px;color:var(--muted);white-space:nowrap;}.timer-track{flex:1;height:8px;border-radius:999px;background:var(--bdr);overflow:hidden;}.timer-fill{height:100%;border-radius:999px;transition:width .25s ease;}.timer-fill--prep{background:linear-gradient(90deg,var(--c2),var(--c3));}.timer-fill--rec{background:linear-gradient(90deg,var(--red),#e06040);}.timer-fill--done{background:linear-gradient(90deg,var(--green),#80c080);}.timer-val{width:42px;text-align:right;font-size:12px;font-weight:900;color:var(--c2);}.timer-skip{border:0;background:transparent;color:var(--muted);text-decoration:underline;text-underline-offset:2px;font-size:11.5px;white-space:nowrap;cursor:pointer;}
+.primary-action{width:100%;border:1.5px solid var(--c2);background:transparent;border-radius:10px;padding:11px;color:var(--c2);font:inherit;font-size:14px;font-weight:800;cursor:pointer;}.primary-action:hover:not(:disabled){background:var(--card2);}.primary-action:disabled{opacity:.55;cursor:not-allowed;}
+.recording-card{padding:15px 18px;display:flex;flex-direction:column;gap:11px;}.record-state{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--c0);}.state-dot{width:10px;height:10px;border-radius:50%;}.state-dot--recording{background:var(--red);animation:pulse 1s infinite;}.state-dot--done{background:var(--green);}.state-dot--warn{background:#d18b35;}@keyframes pulse{50%{opacity:.45;transform:scale(1.25);}}
+.audio-preview{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--bdr);border-radius:10px;padding:10px 12px;}.audio-preview audio{width:100%;height:34px;}.play-preview{width:30px;height:30px;border:0;border-radius:50%;background:var(--c2);color:#fff;cursor:pointer;}.record-actions{display:flex;gap:10px;}.ghost-action,.submit-action{flex:1;border-radius:10px;padding:11px;border:1px solid var(--bdr2);font:inherit;font-size:13px;font-weight:800;cursor:pointer;}.ghost-action{background:var(--card2);color:var(--c1);}.submit-action{border-color:var(--c2);background:var(--c2);color:#faf6ef;}.submit-action:disabled{background:#d8d1c5;border-color:#d8d1c5;color:#948674;cursor:not-allowed;}.rec-valid-note{font-size:11.5px;color:var(--green);}
+.article-card{padding:22px 26px;}.article-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.08em;}.article-text{font-family:'Noto Serif SC','Georgia',serif;font-size:16px;line-height:2;color:#463829;letter-spacing:0;}
+.history-card{padding:0;overflow:hidden;}.history-head{min-height:56px;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}.history-title{font-size:12.5px;font-weight:800;color:var(--c0);}.history-toggle{border:1px solid var(--bdr2);background:var(--card2);border-radius:8px;padding:7px 14px;font:inherit;font-size:11.5px;color:var(--c1);cursor:pointer;}.history-panel{border-top:1px solid var(--bdr);padding:12px 16px;display:flex;flex-direction:column;gap:10px;}.history-tools{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);}.history-tools button,.history-log button{border:1px solid var(--bdr2);background:var(--card2);border-radius:7px;padding:5px 9px;font:inherit;font-size:11px;color:var(--c1);cursor:pointer;}.history-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;padding-right:4px;}.history-log{border:1px solid var(--bdr);background:#fffaf3;border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;}.history-log-top{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--c0);}.history-log p{margin:5px 0 7px;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.score-mini{display:flex;gap:6px;font-size:10.5px;color:var(--c2);}.history-log audio{display:block;width:100%;height:30px;margin-top:8px;}
+.loading-card,.processing-card,.error-card,.debug-card{padding:18px;text-align:center;color:var(--muted);font-size:13px;}.loading-dot{width:26px;height:26px;margin:0 auto 8px;border:3px solid var(--orange);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;}@keyframes spin{to{transform:rotate(360deg);}}.error-card{border-color:#e3b0a8;background:#fff0ee;color:var(--red);}.debug-card{text-align:left;font-size:10px;line-height:1.5;}
+.ai-hd{padding:10px 13px 9px;background:var(--c2);display:flex;align-items:center;justify-content:space-between;gap:8px;}.ai-hd-title{font-size:12px;font-weight:900;color:#faf6ef;}.ai-hd-link{font-size:10.5px;color:rgba(250,246,239,.72);text-decoration:underline;text-underline-offset:2px;}.ai-suggest{padding:10px 12px;background:var(--orange2);border-bottom:1px solid var(--orange3);display:flex;gap:7px;font-size:11.5px;line-height:1.55;color:var(--orange);}.ai-msgs{padding:10px 12px;display:flex;flex-direction:column;gap:8px;}.ai-msg{display:flex;gap:8px;align-items:flex-start;}.ai-avatar{width:22px;height:22px;border-radius:50%;background:var(--c2);color:#fff;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;flex:0 0 auto;}.ai-bubble{background:var(--card2);border:1px solid var(--bdr);border-radius:0 8px 8px 8px;padding:8px 10px;}.ai-bubble p{margin:0 0 3px;font-size:11px;line-height:1.55;color:var(--c1);}.ai-bubble span{font-size:9px;color:var(--muted);}.ai-actions{padding:10px 12px 12px;border-top:1px solid var(--bdr);display:flex;flex-direction:column;gap:6px;}.ai-actions button{border:1px solid var(--bdr);background:var(--card2);border-radius:8px;padding:7px 10px;text-align:left;font:inherit;font-size:11px;color:var(--c1);cursor:pointer;}
+.progress-nums{display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;gap:8px;align-items:stretch;text-align:center;}.progress-nums i{background:var(--bdr);}.progress-nums strong{display:block;font-size:17px;color:var(--c0);}.progress-nums span{display:block;margin-top:2px;font-size:9.5px;color:var(--muted);}.progress-track{height:6px;background:var(--bdr);border-radius:999px;overflow:hidden;}.progress-track span{display:block;height:100%;background:var(--c2);border-radius:999px;}.progress-copy{text-align:right;font-size:10px;color:var(--muted);}.quick-actions{gap:8px;}.quick-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}.quick-actions button{border:1px solid var(--bdr);background:var(--card2);border-radius:8px;padding:8px 9px;font:inherit;font-size:11.5px;color:var(--c1);cursor:pointer;}.quick-actions .random-btn{width:100%;border-color:var(--orange3);background:var(--orange2);color:var(--orange);font-weight:800;}.quick-actions .bank-btn{width:100%;}
+@media (min-width:1600px){.practice-body{grid-template-columns:300px minmax(760px,1fr) 300px;}.main-col{padding:26px 30px;}.article-text{font-size:17px;}.status-banner{min-height:116px;}}
+@media (max-width:1320px){.practice-body{grid-template-columns:258px minmax(560px,1fr) 252px;}.main-col{padding:18px 20px;}.article-text{font-size:15px;line-height:1.9;}.ra-topbar{padding:0 24px;}.step-bar{padding:0 24px;}.step-sep{width:16px;}}
+</style>

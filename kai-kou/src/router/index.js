@@ -9,7 +9,8 @@ const routes = [
   { path: "/reset-password", name: "reset-password", component: () => import("@/views/ResetPasswordView.vue") },
   { path: "/home", name: "home", component: () => import("@/views/HomeView.vue"), meta: { requiresAuth: true } },
   { path: "/agent", name: "agent", component: () => import("@/views/AgentView.vue"), meta: { requiresAuth: true } },
-  { path: "/ra", name: "ra", component: () => import("@/views/RAView.vue"), meta: { requiresAuth: true } },
+  { path: "/ra", name: "ra", component: () => import("@/views/RAHomeView.vue"), meta: { requiresAuth: true } },
+  { path: "/ra/practice", name: "ra-practice", component: () => import("@/views/RAView.vue"), meta: { requiresAuth: true } },
   { path: "/ra/list", name: "ra-list", component: () => import("@/views/RAListView.vue"), meta: { requiresAuth: true } },
   { path: "/ra/result", name: "ra-result", component: () => import("@/views/RAResultView.vue"), meta: { requiresAuth: true } },
   { path: "/rs", name: "rs", component: () => import("@/views/RSView.vue"), meta: { requiresAuth: true } },
@@ -53,6 +54,20 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   await authStore.init();
+
+  if (to.path === "/ra") {
+    const hasPracticeQuery = ["questionId", "difficulty", "mode"].some((key) => {
+      const value = to.query?.[key];
+      return Array.isArray(value) ? value.some(Boolean) : Boolean(value);
+    });
+
+    if (hasPracticeQuery) {
+      return {
+        path: "/ra/practice",
+        query: to.query
+      };
+    }
+  }
 
   if (to.path.startsWith("/di") && !isDIEnabled()) {
     return "/home";

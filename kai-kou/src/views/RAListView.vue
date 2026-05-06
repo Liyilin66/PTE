@@ -1,17 +1,18 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import { fetchQuestions } from "@/lib/questions";
 import { usePracticeStore } from "@/stores/practice";
 
 const router = useRouter();
+const route = useRoute();
 const practiceStore = usePracticeStore();
 
 const allQuestions = ref([]);
 const loading = ref(true);
 const searchText = ref("");
-const selectedDifficulty = ref("all");
+const selectedDifficulty = ref(normalizeDifficultyQuery(route.query.difficulty));
 
 const difficultyOptions = [
   { value: "all", label: "全部" },
@@ -51,7 +52,15 @@ function difficultyLabel(level) {
 
 async function startPractice(question) {
   practiceStore.setSelectedQuestion(question);
-  router.push("/ra");
+  router.push("/ra/practice");
+}
+
+function normalizeDifficultyQuery(value) {
+  const normalized = `${value || ""}`.trim().toLowerCase();
+  if (normalized === "easy" || normalized === "1") return 1;
+  if (normalized === "medium" || normalized === "2") return 2;
+  if (normalized === "hard" || normalized === "3") return 3;
+  return "all";
 }
 
 onMounted(async () => {
