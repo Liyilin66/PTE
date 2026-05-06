@@ -1,9 +1,9 @@
 # Local agent/runtime state
+/.agents/
+/.claude/
+/.codex/
 /.claude/worktrees/
-/.omx/logs/
-/.omx/state/
-/.omx/team/
-/.omx/metrics.json
+/.omx/
 /.omc/
 
 # Root-level build and dependency output
@@ -13,6 +13,9 @@
 
 # Root-level local verification output
 /output/
+
+# Root-level generated data and media artifacts
+/wfd/
 
 # Local HTML design drafts generated outside the app
 /ra-project-aligned-design.html
