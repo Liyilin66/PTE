@@ -18,6 +18,9 @@ export class ProviderError extends Error {
     this.raw_error_type = details.raw_error_type || "";
     this.fallback_allowed = Boolean(details.fallback_allowed);
     this.error_stage = "provider_call";
+    this.model = `${details.model || ""}`.trim();
+    this.timeout_ms = Number.isFinite(Number(details.timeout_ms)) ? Math.round(Number(details.timeout_ms)) : undefined;
+    this.sanitized_error_body = details.sanitized_error_body || null;
     if (details.cause) this.cause = details.cause;
   }
 }
@@ -33,6 +36,9 @@ export function createProviderError(provider, details = {}) {
     status,
     raw_error_type: resolvedRawType,
     fallback_allowed: fallbackAllowed,
+    model: details.model,
+    timeout_ms: details.timeout_ms,
+    sanitized_error_body: details.sanitized_error_body,
     cause: details.cause
   });
 }

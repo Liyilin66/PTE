@@ -1277,8 +1277,14 @@ async function submitEvaluation() {
       submitTotalMs: getElapsedMs(submitStartedAt)
     });
 
+    if (scoreResult?.error) {
+      uiStore.showToast("评分服务暂时不可用，请稍后重试。", "warning");
+      practiceStore.setPhase("idle");
+      return;
+    }
+
     if (scoreErrorCode === "SCORE_API_TIMEOUT") {
-      uiStore.showToast("评分服务超时，已返回估算分数。", "warning");
+      uiStore.showToast("评分服务超时，请稍后重试。", "warning");
     }
 
     if (!unmounted && practiceStore.phase === "done" && scoreResult && !scoreResult.error) {

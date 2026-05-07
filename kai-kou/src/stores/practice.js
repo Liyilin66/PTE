@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 const RA_MIN_SCORE = 10;
 const RA_MAX_SCORE = 90;
 const SCORE_API_TIMEOUT_MS = 15000;
+const RA_SCORE_API_TIMEOUT_MS = 45000;
 const PRACTICE_AUDIO_BUCKET = "practice-audio";
 const WE_RAW_MAX = 26;
 const WE_REVIEW_LABEL = "AI评阅（估分）";
@@ -386,7 +387,8 @@ export const usePracticeStore = defineStore("practice", {
 
       const authStore = useAuthStore();
       const normalizedQuestionId = questionId || this.currentQuestion?.id || "unknown";
-      const clientRequestId = `${options?.requestId || createRequestId("we")}`.trim() || createRequestId("we");
+      const requestIdPrefix = normalizedTaskType ? normalizedTaskType.toLowerCase() : "req";
+      const clientRequestId = `${options?.requestId || createRequestId(requestIdPrefix)}`.trim() || createRequestId(requestIdPrefix);
       const submitSeq = Number(options?.submitSeq || 0);
       const submissionDebug = buildSubmissionDebugInfo(trimmedSubmittedTranscript);
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -447,7 +449,7 @@ export const usePracticeStore = defineStore("practice", {
           token,
           requestId: clientRequestId,
           payload: scoreApiRequestPayload,
-          timeoutMs: SCORE_API_TIMEOUT_MS
+          timeoutMs: resolveScoreApiTimeoutMs(normalizedTaskType)
         });
         const response = scoreApiAttempt.response;
         const usedScoreApiUrl = scoreApiAttempt.usedUrl || scoreApiUrl;
@@ -515,6 +517,27 @@ export const usePracticeStore = defineStore("practice", {
 
         let normalizedResult = null;
         if (!response.ok) {
+          if (normalizedTaskType === "RA") {
+            const responseError = new Error(`Score API failed with status ${response.status}`);
+            responseError.code = getScoreApiErrorCode({
+              status: response.status,
+              isHtml: responsePayload.isHtml
+            });
+            responseError.diagnostics = {
+              ...responseDiagnostics,
+              score_error_code: responseError.code,
+              failure_type: "http_error",
+              provider_used: data && Object.prototype.hasOwnProperty.call(data, "provider_used") ? data.provider_used : null,
+              last_provider_attempted: data?.last_provider_attempted || null,
+              fallback_reason: data?.fallback_reason || null,
+              fallback_error_type: data?.fallback_error_type || null,
+              raw_error_type: data?.raw_error_type || null,
+              error_stage: data?.error_stage || null,
+              provider_attempts: Array.isArray(data?.provider_attempts) ? data.provider_attempts : [],
+              is_fallback: Boolean(data?.is_fallback)
+            };
+            throw responseError;
+          }
           if (data && typeof data === "object" && (data.scores || data.traits || typeof data.status === "string")) {
             normalizedResult = normalizeScoreData(data, taskType);
           } else {
@@ -703,6 +726,17 @@ export const usePracticeStore = defineStore("practice", {
           return this.result;
         }
 
+        if (normalizedTaskType === "RA") {
+          this.result = buildRASubmitErrorResult({
+            scoreErrorCode,
+            diagnostics,
+            scoreApiMs,
+            requestId: diagnostics.request_id || clientRequestId
+          });
+          this.phase = "idle";
+          return this.result;
+        }
+
         this.result = {
           ...buildFallbackResult(taskType),
           meta: {
@@ -736,7 +770,7 @@ function normalizeScoreData(data, taskType) {
     ? data.feedback.trim()
     : "这次练习已完成，继续保持。";
 
-  return {
+  const result = {
     scores: {
       pronunciation,
       fluency,
@@ -746,6 +780,16 @@ function normalizeScoreData(data, taskType) {
     feedback,
     overall
   };
+
+  if (normalizedTaskType === "RA") {
+    result.provider_used = `${data?.provider_used || ""}`.trim() || null;
+    result.fallback_reason = data?.fallback_reason ?? null;
+    result.raw_error_type = `${data?.raw_error_type || ""}`.trim() || "";
+    result.provider_attempts = Array.isArray(data?.provider_attempts) ? data.provider_attempts : [];
+    result.last_provider_attempted = `${data?.last_provider_attempted || ""}`.trim() || null;
+  }
+
+  return result;
 }
 
 function normalizeWEScoreData(data) {
@@ -822,6 +866,10 @@ function normalizeWEScoreData(data) {
 function normalizeTaskType(taskType) {
   if (typeof taskType !== "string") return "";
   return taskType.trim().toUpperCase();
+}
+
+function resolveScoreApiTimeoutMs(taskType) {
+  return normalizeTaskType(taskType) === "RA" ? RA_SCORE_API_TIMEOUT_MS : SCORE_API_TIMEOUT_MS;
 }
 
 function normalizeWEStatus(rawStatus, { gateTriggered = false, reasonCodes = [] } = {}) {
@@ -1016,6 +1064,12 @@ function buildPracticeLogScoreJson({
     },
     analytics: analytics ? buildPracticeAnalytics(analytics) : undefined,
     audio: audioMeta || null,
+    provider_used: `${result?.provider_used || ""}`.trim() || null,
+    fallback_reason: result?.fallback_reason ?? null,
+    raw_error_type: `${result?.raw_error_type || ""}`.trim() || "",
+    provider_attempts: Array.isArray(result?.provider_attempts) ? result.provider_attempts : [],
+    last_provider_attempted: `${result?.last_provider_attempted || ""}`.trim() || null,
+    request_id: `${result?.meta?.request_id || ""}`.trim() || "",
     questionSnapshot: {
       id: `${questionId || "unknown"}`.trim() || "unknown",
       content: snapshotContent,
@@ -1301,6 +1355,53 @@ function buildWESubmitErrorResult({
   };
 }
 
+function buildRASubmitErrorResult({
+  scoreErrorCode = "",
+  diagnostics = {},
+  scoreApiMs = 0,
+  requestId = ""
+} = {}) {
+  const normalizedDiagnostics = normalizeScoreApiDiagnostics(diagnostics, {
+    requestId,
+    scoreErrorCode
+  });
+
+  return {
+    error: "score_request_failed",
+    taskType: "RA",
+    message: "AI scoring is temporarily unavailable. Please retry.",
+    is_fallback: true,
+    provider_used: normalizedDiagnostics.provider_used,
+    last_provider_attempted: normalizedDiagnostics.last_provider_attempted,
+    fallback_reason: normalizedDiagnostics.fallback_reason,
+    fallback_error_type: normalizedDiagnostics.fallback_error_type,
+    raw_error_type: normalizedDiagnostics.raw_error_type,
+    error_stage: normalizedDiagnostics.error_stage,
+    provider_attempts: normalizedDiagnostics.provider_attempts,
+    reviewed_at: new Date().toISOString(),
+    meta: {
+      scoreApiMs: Math.max(0, Math.round(Number(scoreApiMs || 0))),
+      scoreErrorCode: `${scoreErrorCode || normalizedDiagnostics.score_error_code || ""}`.trim(),
+      status: normalizedDiagnostics.status,
+      statusText: normalizedDiagnostics.statusText,
+      contentType: normalizedDiagnostics.contentType,
+      request_id: normalizedDiagnostics.request_id,
+      failure_type: normalizedDiagnostics.failure_type,
+      is_http_error: normalizedDiagnostics.is_http_error,
+      is_fetch_failed: normalizedDiagnostics.is_fetch_failed,
+      backend_error: normalizedDiagnostics.backend_error,
+      backend_code: normalizedDiagnostics.backend_code,
+      provider_used: normalizedDiagnostics.provider_used,
+      last_provider_attempted: normalizedDiagnostics.last_provider_attempted,
+      fallback_reason: normalizedDiagnostics.fallback_reason,
+      fallback_error_type: normalizedDiagnostics.fallback_error_type,
+      raw_error_type: normalizedDiagnostics.raw_error_type,
+      error_stage: normalizedDiagnostics.error_stage,
+      provider_attempts: normalizedDiagnostics.provider_attempts
+    }
+  };
+}
+
 function buildWEClientDegradedResult({
   scoreErrorCode = "",
   diagnostics = {},
@@ -1535,6 +1636,16 @@ function buildScoreApiDiagnostics({
       backend_error: normalizeOptionalText(responseData?.error),
       backend_code: normalizeOptionalText(responseData?.code ?? responseData?.error_code),
       backend_meta: isPlainObject(responseData?.meta) ? responseData.meta : null,
+      provider_used: responseData && Object.prototype.hasOwnProperty.call(responseData, "provider_used")
+        ? responseData.provider_used
+        : null,
+      last_provider_attempted: responseData?.last_provider_attempted || null,
+      fallback_reason: responseData?.fallback_reason || null,
+      fallback_error_type: responseData?.fallback_error_type || null,
+      raw_error_type: responseData?.raw_error_type || null,
+      error_stage: responseData?.error_stage || null,
+      provider_attempts: Array.isArray(responseData?.provider_attempts) ? responseData.provider_attempts : [],
+      is_fallback: Boolean(responseData?.is_fallback),
       response_body_snippet: `${responsePayload?.rawText || ""}`.trim(),
       is_html: Boolean(responsePayload?.isHtml)
     },
@@ -1561,6 +1672,7 @@ function normalizeScoreApiDiagnostics(diagnostics, fallback = {}) {
   const backendError = normalizeOptionalText(safe.backend_error);
   const backendCode = normalizeOptionalText(safe.backend_code);
   const backendMeta = isPlainObject(safe.backend_meta) ? safe.backend_meta : null;
+  const providerAttempts = Array.isArray(safe.provider_attempts) ? safe.provider_attempts : [];
   const responseBodySnippet = `${safe.response_body_snippet || ""}`.trim().slice(0, 240);
   const isHttpError = status >= 400 || failureType === "http_error" || failureType === "auth_error";
   const isFetchFailed = failureType === "fetch_failed" || failureType === "timeout";
@@ -1577,6 +1689,14 @@ function normalizeScoreApiDiagnostics(diagnostics, fallback = {}) {
     backend_error: backendError,
     backend_code: backendCode,
     backend_meta: backendMeta,
+    provider_used: Object.prototype.hasOwnProperty.call(safe, "provider_used") ? safe.provider_used || null : null,
+    last_provider_attempted: normalizeOptionalText(safe.last_provider_attempted),
+    fallback_reason: normalizeOptionalText(safe.fallback_reason),
+    fallback_error_type: normalizeOptionalText(safe.fallback_error_type),
+    raw_error_type: normalizeOptionalText(safe.raw_error_type),
+    error_stage: normalizeOptionalText(safe.error_stage),
+    provider_attempts: providerAttempts,
+    is_fallback: Boolean(safe.is_fallback),
     response_body_snippet: responseBodySnippet,
     is_html: Boolean(safe.is_html)
   };

@@ -7,6 +7,7 @@ import {
 } from "../backend/di/normalize-di-score.js";
 import { generateScoreTextWithFallback } from "../backend/llm/score-llm-service.js";
 import { getGroqApiKeyFromEnv } from "../backend/llm/providers/groq.js";
+import { getScoringOpenAICompatibleApiKeyFromEnv } from "../backend/llm/providers/openai-compatible.js";
 import { buildRTSPrompt, buildRTSResponseJsonSchema } from "../backend/rts/rts-prompt.js";
 import { analyzeWEEssayForm } from "../backend/we/form-gate-rules.js";
 import {
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  const requestId = createRequestId(req);
+  let requestId = createRequestId(req);
   if (req.method !== "POST") {
     return res.status(405).json({
       error: "Method not allowed",
@@ -78,6 +79,7 @@ export default async function handler(req, res) {
 
   const { taskType, transcript, questionContent } = req.body || {};
   const normalizedTaskType = normalizeTaskType(taskType);
+  requestId = resolveTaskRequestId(req, normalizedTaskType, requestId);
   const safeTranscript = typeof transcript === "string" ? transcript : "";
   const safeQuestionContent = typeof questionContent === "string" ? questionContent : "";
   const trimmedTranscript = safeTranscript.trim();
@@ -240,8 +242,12 @@ export default async function handler(req, res) {
     }
 
     const hasGeminiApiKey = hasConfiguredGeminiApiKey();
+    const hasScoringOpenAIApiKey = hasConfiguredScoringOpenAIApiKey();
     const hasGroqApiKey = hasConfiguredGroqApiKey();
-    if (!hasGeminiApiKey && !hasGroqApiKey) {
+    const hasConfiguredScoringProvider = normalizedTaskType === "RA"
+      ? hasScoringOpenAIApiKey || hasGroqApiKey
+      : hasGeminiApiKey || hasGroqApiKey;
+    if (!hasConfiguredScoringProvider) {
       if (normalizedTaskType === "RTS") {
         return res.status(200).json(
           {
@@ -295,6 +301,21 @@ export default async function handler(req, res) {
         );
       }
 
+      if (normalizedTaskType === "RA") {
+        return res.status(500).json({
+          error: "missing_api_key",
+          message: "AI scoring is temporarily unavailable. Please retry.",
+          is_fallback: true,
+          error_stage: "precheck_missing_all_keys",
+          raw_error_type: "llm_api_keys_missing",
+          provider_used: null,
+          last_provider_attempted: null,
+          fallback_reason: "llm_api_keys_missing",
+          provider_attempts: [],
+          request_id: requestId
+        });
+      }
+
       return res.status(500).json({
         error: "missing_api_key",
         scores: { pronunciation: 60, fluency: 60, content: 60 },
@@ -329,7 +350,8 @@ export default async function handler(req, res) {
       parsedPayload = parseModelJson(llmResult?.raw_text, { taskType: normalizedTaskType });
     } catch (error) {
       error.error_stage = "response_parse";
-      error.provider_used = llmResult?.provider_used || "gemini";
+      error.provider_used = llmResult?.provider_used || null;
+      error.last_provider_attempted = llmResult?.last_provider_attempted || llmResult?.provider_used || null;
       error.fallback_reason = llmResult?.fallback_reason ?? null;
       error.raw_error_type = error?.raw_error_type || "model_json_parse_failed";
       error.provider_attempts = providerAttempts;
@@ -348,12 +370,13 @@ export default async function handler(req, res) {
         diAudioSignals,
         rtsQuestionMeta,
         rtsAudioSignals,
-        providerUsed: llmResult?.provider_used || "gemini",
+        providerUsed: resolveSuccessfulProviderUsed(normalizedTaskType, llmResult),
         fallbackReason: llmResult?.fallback_reason ?? null
       });
     } catch (error) {
       error.error_stage = "response_normalize";
-      error.provider_used = llmResult?.provider_used || "gemini";
+      error.provider_used = llmResult?.provider_used || null;
+      error.last_provider_attempted = llmResult?.last_provider_attempted || llmResult?.provider_used || null;
       error.fallback_reason = llmResult?.fallback_reason ?? null;
       error.raw_error_type = error?.raw_error_type || "score_normalize_failed";
       error.provider_attempts = providerAttempts;
@@ -385,7 +408,7 @@ export default async function handler(req, res) {
     return res.json(responsePayload);
   } catch (error) {
     const latency = normalizeLatency(error?.latency);
-    const providerUsed = `${error?.provider_used || error?.provider || "gemini"}`;
+    const providerUsed = resolveFailedProviderUsed(error);
     const rawErrorType = error?.raw_error_type || "ai_error_unknown";
     const fallbackReason = normalizeFallbackReason(
       error?.fallback_reason,
@@ -394,12 +417,16 @@ export default async function handler(req, res) {
     );
     const errorStage = error?.error_stage || "provider_call";
     const providerAttempts = normalizeProviderAttempts(error?.provider_attempts);
+    const lastProviderAttempted = resolveLastProviderAttempted(error, providerAttempts);
+    const fallbackErrorType = `${error?.fallback_error_type || ""}`.trim() || null;
 
     logScoreEvent("score_failed", {
       request_id: requestId,
       task_type: normalizedTaskType,
       provider_used: providerUsed,
+      last_provider_attempted: lastProviderAttempted,
       fallback_reason: fallbackReason,
+      fallback_error_type: fallbackErrorType,
       raw_error_type: rawErrorType,
       error_stage: errorStage,
       response_status: (normalizedTaskType === "WE" || normalizedTaskType === "RTS" || normalizedTaskType === "DI") ? 200 : 500,
@@ -464,11 +491,15 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       error: "ai_error",
-      scores: { pronunciation: 60, fluency: 60, content: 60 },
-      feedback: "AI analysis is temporarily unavailable. This is an estimated fallback score.",
-      overall: 60,
+      message: "AI scoring is temporarily unavailable. Please retry.",
+      is_fallback: true,
+      error_stage: errorStage,
+      raw_error_type: rawErrorType,
       provider_used: providerUsed,
+      last_provider_attempted: lastProviderAttempted,
       fallback_reason: fallbackReason,
+      fallback_error_type: fallbackErrorType,
+      provider_attempts: providerAttempts,
       request_id: requestId
     });
   }
@@ -486,6 +517,25 @@ function createRequestId(req) {
   const existingId = `${req.headers?.["x-request-id"] || ""}`.trim();
   if (existingId) return existingId;
   return `score_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function resolveTaskRequestId(req, taskType, fallbackId) {
+  const existingHeader = `${req.headers?.["x-request-id"] || ""}`.trim();
+  if (existingHeader) return normalizeRequestIdForTask(existingHeader, taskType);
+  const existingBody = `${req.body?.request_id || ""}`.trim();
+  if (existingBody) return normalizeRequestIdForTask(existingBody, taskType);
+  const prefix = normalizeTaskType(taskType).toLowerCase() || "score";
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeRequestIdForTask(requestId, taskType) {
+  const normalized = `${requestId || ""}`.trim();
+  if (!normalized) return normalized;
+  const taskPrefix = normalizeTaskType(taskType).toLowerCase();
+  if (!taskPrefix) return normalized;
+  const knownTaskPrefix = /^(ra|we|rts|di)_/i;
+  if (!knownTaskPrefix.test(normalized)) return normalized;
+  return normalized.replace(knownTaskPrefix, `${taskPrefix}_`);
 }
 
 function normalizeLatency(latency) {
@@ -506,6 +556,28 @@ function logScoreEvent(event, payload) {
     return;
   }
   console.info("[score:llm]", entry);
+}
+
+function resolveFailedProviderUsed(error) {
+  if (Object.prototype.hasOwnProperty.call(error || {}, "provider_used")) {
+    return error.provider_used || null;
+  }
+  return `${error?.provider || ""}`.trim() || null;
+}
+
+function resolveSuccessfulProviderUsed(taskType, llmResult) {
+  const providerUsed = `${llmResult?.provider_used || ""}`.trim();
+  if (providerUsed) return providerUsed;
+  return taskType === "RA" ? null : "gemini";
+}
+
+function resolveLastProviderAttempted(error, providerAttempts = []) {
+  const explicit = `${error?.last_provider_attempted || ""}`.trim();
+  if (explicit) return explicit;
+  const lastAttempt = Array.isArray(providerAttempts) && providerAttempts.length
+    ? providerAttempts[providerAttempts.length - 1]
+    : null;
+  return `${lastAttempt?.provider || error?.provider || ""}`.trim() || null;
 }
 
 function normalizeTaskType(taskType) {
@@ -719,6 +791,10 @@ function hasConfiguredGeminiApiKey() {
   return Boolean(apiKey && apiKey !== "YOUR_GEMINI_API_KEY");
 }
 
+function hasConfiguredScoringOpenAIApiKey() {
+  return Boolean(getScoringOpenAICompatibleApiKeyFromEnv());
+}
+
 function hasConfiguredGroqApiKey() {
   return Boolean(getGroqApiKeyFromEnv());
 }
@@ -745,7 +821,12 @@ function normalizeProviderAttempts(attempts) {
       duration_ms: Math.max(0, Math.round(Number(item?.duration_ms || 0))),
       timeout_ms: Number.isFinite(Number(item?.timeout_ms)) ? Math.round(Number(item.timeout_ms)) : undefined,
       status: `${item?.status || ""}`.trim(),
-      raw_error_type: `${item?.raw_error_type || ""}`.trim()
+      raw_error_type: `${item?.raw_error_type || ""}`.trim(),
+      http_status: Number.isFinite(Number(item?.http_status ?? item?.status_code))
+        ? Math.round(Number(item?.http_status ?? item?.status_code))
+        : undefined,
+      model: `${item?.model || ""}`.trim() || undefined,
+      sanitized_error_body: item?.sanitized_error_body || undefined
     }))
     .filter((item) => item.provider);
 }

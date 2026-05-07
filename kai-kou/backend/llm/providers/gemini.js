@@ -13,17 +13,20 @@ export async function callGemini({
   generationConfig = null
 } = {}) {
   const resolvedApiKey = `${apiKey || ""}`.trim();
+  const resolvedModel = `${model || process.env.LLM_GEMINI_MODEL || DEFAULT_GEMINI_MODEL}`.trim() || DEFAULT_GEMINI_MODEL;
+  const resolvedTimeoutMs = toPositiveInt(timeoutMs, process.env.LLM_PRIMARY_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+
   if (!resolvedApiKey || resolvedApiKey === "YOUR_GEMINI_API_KEY") {
     throw createProviderError("gemini", {
       message: "Gemini API key is missing",
       status: 500,
       raw_error_type: "gemini_api_key_missing",
-      fallback_allowed: false
+      fallback_allowed: false,
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
     });
   }
 
-  const resolvedModel = `${model || process.env.LLM_GEMINI_MODEL || DEFAULT_GEMINI_MODEL}`.trim() || DEFAULT_GEMINI_MODEL;
-  const resolvedTimeoutMs = toPositiveInt(timeoutMs, process.env.LLM_PRIMARY_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
   const startedAt = nowMs();
   const simulatedFailure = disablePrimaryFailSimulation ? "" : getPrimaryFailSimulationMode();
 
@@ -51,7 +54,9 @@ export async function callGemini({
     if (!response.ok) {
       throw createProviderError("gemini", {
         message: extractGeminiErrorMessage(data) || `Gemini request failed with status ${response.status}`,
-        status: response.status
+        status: response.status,
+        model: resolvedModel,
+        timeout_ms: resolvedTimeoutMs
       });
     }
 
@@ -61,18 +66,26 @@ export async function callGemini({
         message: "Gemini returned empty content",
         status: 502,
         raw_error_type: "gemini_empty_content",
-        fallback_allowed: false
+        fallback_allowed: false,
+        model: resolvedModel,
+        timeout_ms: resolvedTimeoutMs
       });
     }
 
     return {
       raw_text: rawText,
       provider_used: "gemini",
-      latency_ms: elapsedMs(startedAt)
+      latency_ms: elapsedMs(startedAt),
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
     };
   } catch (error) {
     const normalized = toProviderError("gemini", error);
     normalized.latency_ms = elapsedMs(startedAt);
+    normalized.model = normalized.model || resolvedModel;
+    normalized.timeout_ms = Number.isFinite(Number(normalized.timeout_ms))
+      ? normalized.timeout_ms
+      : resolvedTimeoutMs;
     throw normalized;
   }
 }

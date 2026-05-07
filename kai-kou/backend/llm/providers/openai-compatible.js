@@ -1,9 +1,14 @@
 import { createProviderError, toProviderError } from "../provider-error.js";
 
 const PROVIDER_NAME = "openai_compatible";
+const SCORING_PROVIDER_NAME = "openai";
 const DEFAULT_TIMEOUT_MS = 15000;
+const SCORING_DEFAULT_TIMEOUT_MS = 20000;
+const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-5.4";
+const SCORING_DEFAULT_MODEL = "gpt-5.4-mini";
 const DEFAULT_MAX_TOKENS = 900;
+const SAFE_ERROR_BODY_KEYS = new Set(["error", "message", "type", "code", "param", "status", "status_code", "statusCode"]);
 
 export function getOpenAICompatibleConfig() {
   return {
@@ -12,6 +17,37 @@ export function getOpenAICompatibleConfig() {
     model: normalizeText(process.env.AGENT_OPENAI_MODEL) || DEFAULT_MODEL,
     timeoutMs: toPositiveInt(process.env.AGENT_REQUEST_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
     maxTokens: toPositiveInt(process.env.AGENT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_TOKENS)
+  };
+}
+
+export function getScoringOpenAICompatibleApiKeyFromEnv() {
+  return normalizeText(process.env.SCORING_OPENAI_API_KEY) || normalizeText(process.env.AGENT_OPENAI_API_KEY);
+}
+
+export function getScoringOpenAICompatibleModelFromEnv() {
+  return normalizeText(process.env.SCORING_OPENAI_MODEL) || normalizeText(process.env.AGENT_OPENAI_MODEL) || SCORING_DEFAULT_MODEL;
+}
+
+export function getScoringOpenAICompatibleConfig() {
+  return {
+    baseUrl: normalizeBaseUrl(
+      process.env.SCORING_OPENAI_BASE_URL
+        || process.env.AGENT_OPENAI_BASE_URL
+        || process.env.OPENAI_BASE_URL
+        || DEFAULT_BASE_URL
+    ),
+    apiKey: getScoringOpenAICompatibleApiKeyFromEnv(),
+    model: getScoringOpenAICompatibleModelFromEnv(),
+    timeoutMs: toPositiveInt(
+      process.env.SCORING_OPENAI_TIMEOUT_MS,
+      process.env.AGENT_REQUEST_TIMEOUT_MS,
+      SCORING_DEFAULT_TIMEOUT_MS
+    ),
+    maxTokens: toPositiveInt(
+      process.env.SCORING_OPENAI_MAX_OUTPUT_TOKENS,
+      process.env.AGENT_MAX_OUTPUT_TOKENS,
+      DEFAULT_MAX_TOKENS
+    )
   };
 }
 
@@ -148,6 +184,119 @@ export async function callOpenAICompatibleChat({
   }
 }
 
+export async function callScoringOpenAICompatible({
+  prompt,
+  apiKey,
+  baseUrl,
+  model,
+  timeoutMs,
+  maxTokens,
+  temperature = 0.2
+} = {}) {
+  const configFromEnv = getScoringOpenAICompatibleConfig();
+  const resolvedApiKey = normalizeText(apiKey || configFromEnv.apiKey);
+  const resolvedBaseUrl = normalizeBaseUrl(baseUrl || configFromEnv.baseUrl);
+  const resolvedModel = normalizeText(model || configFromEnv.model);
+  const resolvedTimeoutMs = toPositiveInt(timeoutMs, configFromEnv.timeoutMs, SCORING_DEFAULT_TIMEOUT_MS);
+  const resolvedMaxTokens = toPositiveInt(maxTokens, configFromEnv.maxTokens, DEFAULT_MAX_TOKENS);
+  const startedAt = nowMs();
+
+  if (!resolvedApiKey) {
+    throw createProviderError(SCORING_PROVIDER_NAME, {
+      message: "OpenAI-compatible API key is missing",
+      status: 500,
+      raw_error_type: `${SCORING_PROVIDER_NAME}_api_key_missing`,
+      fallback_allowed: true,
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
+    });
+  }
+
+  if (!resolvedBaseUrl) {
+    throw createProviderError(SCORING_PROVIDER_NAME, {
+      message: "OpenAI-compatible base URL is missing",
+      status: 500,
+      raw_error_type: `${SCORING_PROVIDER_NAME}_base_url_missing`,
+      fallback_allowed: true,
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
+    });
+  }
+
+  if (!resolvedModel) {
+    throw createProviderError(SCORING_PROVIDER_NAME, {
+      message: "OpenAI-compatible model is missing",
+      status: 500,
+      raw_error_type: `${SCORING_PROVIDER_NAME}_model_missing`,
+      fallback_allowed: true,
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
+    });
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      `${resolvedBaseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resolvedApiKey}`
+        },
+        body: JSON.stringify({
+          model: resolvedModel,
+          messages: [{ role: "user", content: `${prompt || ""}` }],
+          temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : 0.2,
+          max_tokens: resolvedMaxTokens,
+          response_format: { type: "json_object" }
+        })
+      },
+      resolvedTimeoutMs
+    );
+
+    const { data, sanitizedBody } = await safeReadProviderBody(response);
+    if (!response.ok) {
+      throw createProviderError(SCORING_PROVIDER_NAME, {
+        message: extractProviderErrorMessage(data) || `OpenAI-compatible request failed with status ${response.status}`,
+        status: response.status,
+        fallback_allowed: true,
+        model: resolvedModel,
+        timeout_ms: resolvedTimeoutMs,
+        sanitized_error_body: sanitizedBody
+      });
+    }
+
+    const rawText = extractAssistantText(data);
+    if (!rawText) {
+      throw createProviderError(SCORING_PROVIDER_NAME, {
+        message: "OpenAI-compatible provider returned empty content",
+        status: 502,
+        raw_error_type: `${SCORING_PROVIDER_NAME}_empty_content`,
+        fallback_allowed: true,
+        model: resolvedModel,
+        timeout_ms: resolvedTimeoutMs
+      });
+    }
+
+    return {
+      raw_text: rawText,
+      provider_used: SCORING_PROVIDER_NAME,
+      latency_ms: elapsedMs(startedAt),
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs,
+      usage: data?.usage || null
+    };
+  } catch (error) {
+    const normalized = toProviderError(SCORING_PROVIDER_NAME, error);
+    normalized.latency_ms = elapsedMs(startedAt);
+    normalized.model = normalized.model || resolvedModel;
+    normalized.timeout_ms = Number.isFinite(Number(normalized.timeout_ms))
+      ? normalized.timeout_ms
+      : resolvedTimeoutMs;
+    throw normalized;
+  }
+}
+
 async function fetchWithTimeout(url, init, timeoutMs) {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutId = controller
@@ -173,6 +322,32 @@ function isAbortError(error) {
 async function safeReadJson(response) {
   try {
     return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function safeReadProviderBody(response) {
+  try {
+    const text = await response.text();
+    const data = tryParseJson(text);
+    return {
+      data,
+      sanitizedBody: sanitizeProviderErrorBody(data || text)
+    };
+  } catch {
+    return {
+      data: null,
+      sanitizedBody: null
+    };
+  }
+}
+
+function tryParseJson(text) {
+  const normalized = `${text || ""}`.trim();
+  if (!normalized) return null;
+  try {
+    return JSON.parse(normalized);
   } catch {
     return null;
   }
@@ -237,6 +412,50 @@ function normalizeRole(value) {
 
 function normalizeBaseUrl(value) {
   return normalizeText(value).replace(/\/+$/, "");
+}
+
+function sanitizeProviderErrorBody(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    return "[text body omitted]";
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((item) => sanitizeProviderErrorBody(item));
+  }
+  if (typeof value !== "object") return value;
+
+  const output = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const normalizedKey = `${key || ""}`.trim();
+    if (shouldRedactProviderBodyKey(normalizedKey)) {
+      output[key] = "[redacted]";
+      continue;
+    }
+
+    if (!SAFE_ERROR_BODY_KEYS.has(normalizedKey)) {
+      continue;
+    }
+
+    output[key] = typeof raw === "string"
+      ? redactSensitiveText(raw).slice(0, 500)
+      : sanitizeProviderErrorBody(raw);
+  }
+  return output;
+}
+
+function shouldRedactProviderBodyKey(key) {
+  return (
+    /(api[_-]?key|token|authorization|secret|password|credential)/i.test(key)
+    || /^(prompt|messages|content|parts|text|input|inputs|question|transcript|request|body|payload|data)$/i.test(key)
+  );
+}
+
+function redactSensitiveText(value) {
+  return `${value || ""}`
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "sk-[redacted]")
+    .replace(/gsk_[A-Za-z0-9_-]+/g, "gsk_[redacted]")
+    .replace(/AIza[0-9A-Za-z_-]+/g, "AIza[redacted]");
 }
 
 function normalizeText(value) {

@@ -1,25 +1,124 @@
 import { isFallbackEligible } from "./provider-error.js";
 import { callGemini } from "./providers/gemini.js";
 import { callGroq, getGroqApiKeyFromEnv } from "./providers/groq.js";
+import {
+  callScoringOpenAICompatible,
+  getScoringOpenAICompatibleApiKeyFromEnv
+} from "./providers/openai-compatible.js";
 
 const WE_DEFAULT_PRIMARY_PROVIDER = "groq";
 const WE_DEFAULT_PRIMARY_TIMEOUT_MS = 3500;
 const WE_DEFAULT_FALLBACK_TIMEOUT_MS = 3500;
 const GEMINI_PLACEHOLDER_KEY = "YOUR_GEMINI_API_KEY";
+const RA_DEFAULT_PRIMARY_TIMEOUT_MS = 20000;
+const RA_DEFAULT_FALLBACK_TIMEOUT_MS = 20000;
 
 export async function generateScoreTextWithFallback({ prompt, taskType, structuredOutput = null } = {}) {
   const normalizedTaskType = normalizeTaskType(taskType);
   if (normalizedTaskType === "WE") {
     return generateWEScoreTextWithFallback({ prompt });
   }
-  return generateDefaultScoreTextWithFallback({ prompt, structuredOutput });
+  if (normalizedTaskType === "RA") {
+    return generateRAScoreTextWithFallback({ prompt });
+  }
+  return generateDefaultScoreTextWithFallback({ prompt, taskType: normalizedTaskType, structuredOutput });
 }
 
-async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput = null } = {}) {
+async function generateRAScoreTextWithFallback({ prompt } = {}) {
+  const startedAt = nowMs();
+  const openaiApiKey = getScoringOpenAICompatibleApiKeyFromEnv();
+  const fallbackApiKey = getGroqApiKeyFromEnv();
+  const providerAttempts = [];
+  const primaryTimeoutMs = resolveDefaultProviderTimeoutMs("RA", "primary");
+  const fallbackTimeoutMs = resolveDefaultProviderTimeoutMs("RA", "fallback");
+
+  let primaryLatencyMs = 0;
+  try {
+    const primary = await callProviderWithAttempt({
+      provider: "openai",
+      stage: "primary",
+      prompt,
+      apiKey: openaiApiKey,
+      timeoutMs: primaryTimeoutMs,
+      providerAttempts
+    });
+    primaryLatencyMs = primary.duration_ms;
+    return {
+      raw_text: primary.result.raw_text,
+      provider_used: "openai",
+      fallback_reason: null,
+      raw_error_type: null,
+      provider_attempts: providerAttempts,
+      latency: {
+        total_ms: elapsedMs(startedAt),
+        primary_ms: primaryLatencyMs,
+        fallback_ms: 0
+      }
+    };
+  } catch (primaryError) {
+    primaryLatencyMs = Number(primaryError?.attempt_duration_ms || 0);
+    const primaryRawErrorType = primaryError?.raw_error_type || "openai_provider_error";
+
+    if (!fallbackApiKey) {
+      primaryError.provider_used = null;
+      primaryError.last_provider_attempted = "openai";
+      primaryError.fallback_reason = primaryRawErrorType;
+      primaryError.fallback_error_type = "groq_api_key_missing";
+      primaryError.provider_attempts = providerAttempts;
+      primaryError.latency = {
+        total_ms: elapsedMs(startedAt),
+        primary_ms: primaryLatencyMs,
+        fallback_ms: 0
+      };
+      throw primaryError;
+    }
+
+    try {
+      const fallback = await callProviderWithAttempt({
+        provider: "groq",
+        stage: "fallback",
+        prompt,
+        apiKey: fallbackApiKey,
+        timeoutMs: fallbackTimeoutMs,
+        providerAttempts
+      });
+      return {
+        raw_text: fallback.result.raw_text,
+        provider_used: "groq",
+        fallback_reason: primaryRawErrorType,
+        raw_error_type: primaryRawErrorType,
+        provider_attempts: providerAttempts,
+        latency: {
+          total_ms: elapsedMs(startedAt),
+          primary_ms: primaryLatencyMs,
+          fallback_ms: fallback.duration_ms
+        }
+      };
+    } catch (fallbackError) {
+      fallbackError.provider_used = null;
+      fallbackError.last_provider_attempted = "groq";
+      fallbackError.fallback_reason = primaryRawErrorType;
+      fallbackError.fallback_error_type = fallbackError.raw_error_type || "groq_provider_error";
+      fallbackError.primary_raw_error_type = primaryRawErrorType;
+      fallbackError.provider_attempts = providerAttempts;
+      fallbackError.latency = {
+        total_ms: elapsedMs(startedAt),
+        primary_ms: primaryLatencyMs,
+        fallback_ms: Number(fallbackError?.attempt_duration_ms || 0)
+      };
+      throw fallbackError;
+    }
+  }
+}
+
+async function generateDefaultScoreTextWithFallback({ prompt, taskType, structuredOutput = null } = {}) {
+  const normalizedTaskType = normalizeTaskType(taskType);
   const startedAt = nowMs();
   const geminiApiKey = `${process.env.GEMINI_API_KEY || ""}`.trim();
   const fallbackApiKey = getGroqApiKeyFromEnv();
   const providerAttempts = [];
+  const primaryTimeoutMs = resolveDefaultProviderTimeoutMs(normalizedTaskType, "primary");
+  const fallbackTimeoutMs = resolveDefaultProviderTimeoutMs(normalizedTaskType, "fallback");
 
   if (!geminiApiKey && fallbackApiKey) {
     try {
@@ -28,6 +127,7 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
         stage: "primary",
         prompt,
         apiKey: fallbackApiKey,
+        timeoutMs: fallbackTimeoutMs,
         providerAttempts,
         structuredOutput
       });
@@ -44,8 +144,10 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
         }
       };
     } catch (fallbackError) {
-      fallbackError.provider_used = "groq";
+      fallbackError.provider_used = resolveFailureProviderUsed(normalizedTaskType, "groq");
+      fallbackError.last_provider_attempted = "groq";
       fallbackError.fallback_reason = "gemini_api_key_missing";
+      fallbackError.fallback_error_type = fallbackError.raw_error_type || "groq_provider_error";
       fallbackError.primary_raw_error_type = "gemini_api_key_missing";
       fallbackError.provider_attempts = providerAttempts;
       fallbackError.latency = {
@@ -64,6 +166,7 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
       stage: "primary",
       prompt,
       apiKey: geminiApiKey,
+      timeoutMs: primaryTimeoutMs,
       providerAttempts,
       structuredOutput
     });
@@ -83,7 +186,8 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
   } catch (primaryError) {
     primaryLatencyMs = Number(primaryError?.attempt_duration_ms || 0);
     if (!isFallbackEligible(primaryError)) {
-      primaryError.provider_used = "gemini";
+      primaryError.provider_used = resolveFailureProviderUsed(normalizedTaskType, "gemini");
+      primaryError.last_provider_attempted = "gemini";
       primaryError.fallback_reason = null;
       primaryError.provider_attempts = providerAttempts;
       primaryError.latency = {
@@ -95,9 +199,10 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
     }
 
     if (!fallbackApiKey) {
-      primaryError.provider_used = "gemini";
+      primaryError.provider_used = resolveFailureProviderUsed(normalizedTaskType, "gemini");
+      primaryError.last_provider_attempted = "gemini";
       primaryError.fallback_reason = primaryError.raw_error_type || "gemini_provider_error";
-      primaryError.raw_error_type = "groq_api_key_missing";
+      primaryError.fallback_error_type = "groq_api_key_missing";
       primaryError.provider_attempts = providerAttempts;
       primaryError.latency = {
         total_ms: elapsedMs(startedAt),
@@ -113,6 +218,7 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
         stage: "fallback",
         prompt,
         apiKey: fallbackApiKey,
+        timeoutMs: fallbackTimeoutMs,
         providerAttempts,
         structuredOutput
       });
@@ -129,8 +235,10 @@ async function generateDefaultScoreTextWithFallback({ prompt, structuredOutput =
         }
       };
     } catch (fallbackError) {
-      fallbackError.provider_used = "groq";
+      fallbackError.provider_used = resolveFailureProviderUsed(normalizedTaskType, "groq");
+      fallbackError.last_provider_attempted = "groq";
       fallbackError.fallback_reason = primaryError.raw_error_type || "gemini_provider_error";
+      fallbackError.fallback_error_type = fallbackError.raw_error_type || "groq_provider_error";
       fallbackError.primary_raw_error_type = primaryError.raw_error_type || "gemini_provider_error";
       fallbackError.provider_attempts = providerAttempts;
       fallbackError.latency = {
@@ -271,14 +379,19 @@ async function callProviderWithAttempt({
   };
 
   try {
-    const result = provider === "groq"
-      ? await callGroq({ prompt, apiKey, timeoutMs })
-      : await callGemini({
+    let result;
+    if (provider === "groq") {
+      result = await callGroq({ prompt, apiKey, timeoutMs });
+    } else if (provider === "openai") {
+      result = await callScoringOpenAICompatible({ prompt, apiKey, timeoutMs });
+    } else {
+      result = await callGemini({
         prompt,
         apiKey,
         timeoutMs,
         generationConfig: structuredOutput
       });
+    }
     const endTs = Date.now();
     const durationMs = Math.max(0, endTs - startTs);
     providerAttempts.push({
@@ -286,7 +399,8 @@ async function callProviderWithAttempt({
       ended_at: new Date(endTs).toISOString(),
       duration_ms: durationMs,
       status: "success",
-      raw_error_type: ""
+      raw_error_type: "",
+      model: `${result?.model || ""}`.trim() || undefined
     });
     return {
       result,
@@ -301,7 +415,11 @@ async function callProviderWithAttempt({
       duration_ms: durationMs,
       status: "failed",
       raw_error_type: `${error?.raw_error_type || ""}`.trim(),
-      fallback_allowed: Boolean(error?.fallback_allowed)
+      fallback_allowed: Boolean(error?.fallback_allowed),
+      status_code: Number.isFinite(Number(error?.status)) ? Math.round(Number(error.status)) : undefined,
+      http_status: Number.isFinite(Number(error?.status)) ? Math.round(Number(error.status)) : undefined,
+      model: `${error?.model || ""}`.trim() || undefined,
+      sanitized_error_body: error?.sanitized_error_body || undefined
     });
     error.attempt_duration_ms = durationMs;
     throw error;
@@ -310,6 +428,21 @@ async function callProviderWithAttempt({
 
 function normalizeTaskType(taskType) {
   return `${taskType || ""}`.trim().toUpperCase();
+}
+
+function resolveDefaultProviderTimeoutMs(taskType, stage) {
+  if (taskType !== "RA") return undefined;
+  const specificEnv = stage === "fallback" ? process.env.LLM_RA_FALLBACK_TIMEOUT_MS : process.env.LLM_RA_PRIMARY_TIMEOUT_MS;
+  const defaultTimeoutMs = stage === "fallback" ? RA_DEFAULT_FALLBACK_TIMEOUT_MS : RA_DEFAULT_PRIMARY_TIMEOUT_MS;
+  return toPositiveInt(
+    specificEnv,
+    process.env.LLM_RA_TIMEOUT_MS,
+    defaultTimeoutMs
+  );
+}
+
+function resolveFailureProviderUsed(taskType, attemptedProvider) {
+  return taskType === "RA" ? null : attemptedProvider;
 }
 
 function resolveWEPrimaryProvider({ geminiConfigured, groqConfigured } = {}) {
@@ -334,6 +467,7 @@ function getProviderApiKey(provider, { geminiApiKey, groqApiKey } = {}) {
 
 function normalizeProviderName(provider) {
   const normalized = `${provider || ""}`.trim().toLowerCase();
+  if (normalized === "openai") return "openai";
   if (normalized === "groq") return "groq";
   return "gemini";
 }

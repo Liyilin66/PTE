@@ -2,25 +2,27 @@ import { createProviderError, toProviderError } from "../provider-error.js";
 
 const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 const DEFAULT_TIMEOUT_MS = 8000;
+const SAFE_ERROR_BODY_KEYS = new Set(["error", "message", "type", "code", "param", "status", "status_code", "statusCode"]);
 
 let hasWarnedLegacyGroqKey = false;
-let hasLoggedGroqKeySuffix = false;
 
 export async function callGroq({ prompt, apiKey, model, timeoutMs } = {}) {
   const resolvedApiKey = `${apiKey || getGroqApiKeyFromEnv() || ""}`.trim();
+  const resolvedModel = `${model || process.env.LLM_GROQ_MODEL || DEFAULT_GROQ_MODEL}`.trim() || DEFAULT_GROQ_MODEL;
+  const resolvedTimeoutMs = toPositiveInt(timeoutMs, process.env.LLM_FALLBACK_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+
   if (!resolvedApiKey) {
     throw createProviderError("groq", {
       message: "Groq API key is missing",
       status: 500,
       raw_error_type: "groq_api_key_missing",
-      fallback_allowed: false
+      fallback_allowed: false,
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
     });
   }
 
-  const resolvedModel = `${model || process.env.LLM_GROQ_MODEL || DEFAULT_GROQ_MODEL}`.trim() || DEFAULT_GROQ_MODEL;
-  const resolvedTimeoutMs = toPositiveInt(timeoutMs, process.env.LLM_FALLBACK_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
   const startedAt = nowMs();
-  maybeLogGroqKeySuffix(resolvedApiKey, resolveGroqKeySource(apiKey));
 
   try {
     const response = await fetchWithTimeout(
@@ -40,12 +42,15 @@ export async function callGroq({ prompt, apiKey, model, timeoutMs } = {}) {
       resolvedTimeoutMs
     );
 
-    const data = await safeReadJson(response);
+    const { data, sanitizedBody } = await safeReadProviderBody(response);
     if (!response.ok) {
       const message = extractGroqErrorMessage(data) || `Groq request failed with status ${response.status}`;
       throw createProviderError("groq", {
         message,
-        status: response.status
+        status: response.status,
+        model: resolvedModel,
+        timeout_ms: resolvedTimeoutMs,
+        sanitized_error_body: sanitizedBody
       });
     }
 
@@ -55,18 +60,26 @@ export async function callGroq({ prompt, apiKey, model, timeoutMs } = {}) {
         message: "Groq returned empty content",
         status: 502,
         raw_error_type: "groq_empty_content",
-        fallback_allowed: false
+        fallback_allowed: false,
+        model: resolvedModel,
+        timeout_ms: resolvedTimeoutMs
       });
     }
 
     return {
       raw_text: rawText,
       provider_used: "groq",
-      latency_ms: elapsedMs(startedAt)
+      latency_ms: elapsedMs(startedAt),
+      model: resolvedModel,
+      timeout_ms: resolvedTimeoutMs
     };
   } catch (error) {
     const normalized = toProviderError("groq", error);
     normalized.latency_ms = elapsedMs(startedAt);
+    normalized.model = normalized.model || resolvedModel;
+    normalized.timeout_ms = Number.isFinite(Number(normalized.timeout_ms))
+      ? normalized.timeout_ms
+      : resolvedTimeoutMs;
     throw normalized;
   }
 }
@@ -105,9 +118,27 @@ async function fetchWithTimeout(url, init, timeoutMs) {
   }
 }
 
-async function safeReadJson(response) {
+async function safeReadProviderBody(response) {
   try {
-    return await response.json();
+    const text = await response.text();
+    const data = tryParseJson(text);
+    return {
+      data,
+      sanitizedBody: sanitizeProviderErrorBody(data || text)
+    };
+  } catch {
+    return {
+      data: null,
+      sanitizedBody: null
+    };
+  }
+}
+
+function tryParseJson(text) {
+  const normalized = `${text || ""}`.trim();
+  if (!normalized) return null;
+  try {
+    return JSON.parse(normalized);
   } catch {
     return null;
   }
@@ -118,6 +149,49 @@ function extractGroqErrorMessage(data) {
     return data.error.message.trim();
   }
   return "";
+}
+
+function sanitizeProviderErrorBody(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    return "[text body omitted]";
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 5).map((item) => sanitizeProviderErrorBody(item));
+  }
+  if (typeof value !== "object") return value;
+
+  const output = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const normalizedKey = `${key || ""}`.trim();
+    if (shouldRedactProviderBodyKey(normalizedKey)) {
+      output[key] = "[redacted]";
+      continue;
+    }
+
+    if (!SAFE_ERROR_BODY_KEYS.has(normalizedKey)) {
+      continue;
+    }
+
+    output[key] = typeof raw === "string"
+      ? redactSensitiveText(raw).slice(0, 500)
+      : sanitizeProviderErrorBody(raw);
+  }
+  return output;
+}
+
+function shouldRedactProviderBodyKey(key) {
+  return (
+    /(api[_-]?key|token|authorization|secret|password|credential)/i.test(key)
+    || /^(prompt|messages|content|parts|text|input|inputs|question|transcript|request|body|payload|data)$/i.test(key)
+  );
+}
+
+function redactSensitiveText(value) {
+  return `${value || ""}`
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/gsk_[A-Za-z0-9_-]+/g, "gsk_[redacted]")
+    .replace(/AIza[0-9A-Za-z_-]+/g, "AIza[redacted]");
 }
 
 function nowMs() {
@@ -137,37 +211,4 @@ function toPositiveInt(...values) {
     if (Number.isFinite(num) && num > 0) return Math.floor(num);
   }
   return DEFAULT_TIMEOUT_MS;
-}
-
-function maybeLogGroqKeySuffix(apiKey, source) {
-  if (hasLoggedGroqKeySuffix) return;
-  if (!isDevRuntime()) return;
-  const suffix = resolveKeySuffix(apiKey);
-  if (!suffix) return;
-
-  hasLoggedGroqKeySuffix = true;
-  console.info(`[llm] groq key in use (source=${source}, suffix=${suffix})`);
-}
-
-function resolveGroqKeySource(apiKeyArgument) {
-  const fromArg = `${apiKeyArgument || ""}`.trim();
-  if (fromArg) return "call_arg";
-  if (`${process.env.GROQ_API_KEY || ""}`.trim()) return "GROQ_API_KEY";
-  if (`${process.env.GROP_API_KEY || ""}`.trim()) return "GROP_API_KEY";
-  return "unknown";
-}
-
-function resolveKeySuffix(apiKey) {
-  const normalized = `${apiKey || ""}`.trim();
-  if (!normalized) return "";
-  const suffixLength = Math.min(6, Math.max(4, normalized.length));
-  return normalized.slice(-suffixLength);
-}
-
-function isDevRuntime() {
-  const vercelEnv = `${process.env.VERCEL_ENV || ""}`.trim().toLowerCase();
-  if (vercelEnv) return vercelEnv !== "production";
-  const nodeEnv = `${process.env.NODE_ENV || ""}`.trim().toLowerCase();
-  if (!nodeEnv) return true;
-  return nodeEnv !== "production";
 }
