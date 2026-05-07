@@ -1,0 +1,1104 @@
+﻿{
+    "version":  "phase1",
+    "taskType":  "DI",
+    "styleGuide":  {
+                       "targetLevel":  "pte_oral_practice",
+                       "sentenceStyle":  "template_driven",
+                       "tone":  "stable_and_easy_to_speak"
+                   },
+    "categories":  [
+                       {
+                           "categoryKey":  "data_graphs",
+                           "categoryLabel":  "Data Graphs",
+                           "applicableImageTypes":  [
+                                                        "bar",
+                                                        "line",
+                                                        "pie",
+                                                        "table",
+                                                        "mixed"
+                                                    ],
+                           "applicableNote":  "柱状图、折线图、饼图、表格。",
+                           "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                           "templates":  [
+                                             {
+                                                 "id":  "DI_TPL_DG_01",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "颜色补充版",
+                                                 "shortLabel":  "颜色补充版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  1,
+                                                 "sentence":  "The provided picture gives us detailed information about `[标题]`. From the picture, I can clearly see that the maximum value is `[最大值]`. On the other hand, I can also see that the minimum value is `[最小值]`. In addition, the picture uses different colors, such as `[图中的一个颜色]` and `[图中的另一个颜色]`. In conclusion, this picture is very informative and helps me understand the data better.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图中的一个颜色",
+                                                               "图中的另一个颜色"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  101,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_02",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "数字列举版",
+                                                 "shortLabel":  "数字列举版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  2,
+                                                 "sentence":  "This interesting graph mainly talks about the topic of `[标题]`. According to the data given in the graph, `[最大值]` takes the largest part. At the same time, `[最小值]` takes the smallest part. We can also notice some specific numbers on the screen, for example, `[图中任意数字]`. Overall, the graph is very useful for our daily study and research.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图中任意数字"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  102,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_03",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "差异对比版",
+                                                 "shortLabel":  "差异对比版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  3,
+                                                 "sentence":  "Here we have a visual chart which is mainly about `[标题]`. The highest figure in this chart completely belongs to `[最大值]`. However, the lowest figure in this chart naturally belongs to `[最小值]`. Furthermore, there is a clear difference between `[图中任意一项]` and `[图中另一项]`. To sum up, the data shown here is very important for us to remember.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图中任意一项",
+                                                               "图中另一项"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  103,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_04",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "文字描述版",
+                                                 "shortLabel":  "文字描述版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  4,
+                                                 "sentence":  "The image in front of us describes the information of `[标题]`. Looking at the details, we can find that `[最大值]` has the biggest number. But `[最小值]` only has the smallest number. I can also see some simple English words, like `[图中的任意单词]`. In general, we can learn a lot of useful knowledge from this image.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图中的任意单词"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  104,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_05",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "顶部底部版",
+                                                 "shortLabel":  "顶部底部版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  5,
+                                                 "sentence":  "This is a very clear and beautiful picture of `[标题]`. Looking closely at the chart, `[最大值]` is placed at the top of the list. However, `[最小值]` is placed at the bottom of the list. The background of this picture is mostly `[图表背景颜色, 如white/black]`. Finally, the picture shows a very clear and interesting trend.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图表背景颜色, 如white/black"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  105,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_06",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "高低趋势版",
+                                                 "shortLabel":  "高低趋势版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  6,
+                                                 "sentence":  "The given chart describes the development of `[标题]` for us. We can easily find that the number of `[最大值]` is the highest. And the number of `[最小值]` is obviously the lowest. The numbers change from `[图表上的起点数字/年份]` to `[终点数字/年份]`. In short, the chart is easy to read and understand.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图表上的起点数字/年份",
+                                                               "终点数字/年份"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  106,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_07",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "金额/比例版",
+                                                 "shortLabel":  "金额/比例版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  7,
+                                                 "sentence":  "Let\u0027s look at this colorful picture about the subject of `[标题]`. The largest amount clearly belongs to the item of `[最大值]`. The smallest amount clearly belongs to the item of `[最小值]`. All these items are measured in `[图中的单位，如百分比percent/美元dollars]`. To conclude, the picture gives us a very nice summary.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图中的单位，如百分比percent/美元dollars"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  107,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_08",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "明显特征版",
+                                                 "shortLabel":  "明显特征版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  8,
+                                                 "sentence":  "The visual information provided here is about `[标题]`. It is very obvious that `[最大值]` represents the maximum number. Besides, `[最小值]` represents the minimum number. I can also catch some clear lines and shapes in the picture. Overall, it gives us a clear picture of the whole situation.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  108,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_09",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "折线变化版",
+                                                 "shortLabel":  "折线变化版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  9,
+                                                 "sentence":  "This is an interesting graph which shows the changes in `[标题]`. The highest point of the line can be seen at `[最高点]`. The lowest point of the line can be seen at `[最低点]`. The line goes up and down smoothly over the period. In conclusion, the graph shows important changes that we should notice.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最高点",
+                                                               "最低点"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  109,
+                                                 "isActive":  true,
+                                                 "notes":  "最适合折线图",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_DG_10",
+                                                 "categoryKey":  "data_graphs",
+                                                 "categoryLabel":  "Data Graphs",
+                                                 "title":  "信息总结版",
+                                                 "shortLabel":  "信息总结版",
+                                                 "applicableImageTypes":  [
+                                                                              "bar",
+                                                                              "line",
+                                                                              "pie",
+                                                                              "table",
+                                                                              "mixed"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "bar",
+                                                                    "line",
+                                                                    "pie",
+                                                                    "table",
+                                                                    "mixed"
+                                                                ],
+                                                 "templateIndex":  10,
+                                                 "sentence":  "The picture given by the computer shows the topic of `[标题]`. As we can see from the screen, `[最大值]` is definitely the biggest number. At the exact same time, `[最小值]` is the smallest number. The picture also contains some useful features like `[图中任意内容]`. Finally, the picture is very clear and highly informative.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "最大值",
+                                                               "最小值",
+                                                               "图中任意内容"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  110,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "在图表里随便找一个最显眼的颜色 `[颜色]`，或者随便读一个你肯定不会读错的数字 `[任意数字]`。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             }
+                                         ]
+                       },
+                       {
+                           "categoryKey":  "flowcharts_life_cycles",
+                           "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                           "applicableImageTypes":  [
+                                                        "process"
+                                                    ],
+                           "applicableNote":  "动植物生命周期、生产流程。",
+                           "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                           "templates":  [
+                                             {
+                                                 "id":  "DI_TPL_FL_01",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "基础步骤版",
+                                                 "shortLabel":  "基础步骤版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  1,
+                                                 "sentence":  "The picture shows the whole process and development of `[标题]`. The very first step of this process is `[步骤一]`. After some time, the next important step is `[步骤二]`. We can also see some arrows pointing from one step to another. In conclusion, it is a very interesting and natural process to watch.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "步骤二"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  201,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_02",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "开始结束版",
+                                                 "shortLabel":  "开始结束版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  2,
+                                                 "sentence":  "This useful flowchart gives us detailed information about `[标题]`. It clearly starts with the beginning stage of `[步骤一]`. And it finally ends with the last stage of `[最后一步]`. There are altogether `[图中步骤的总数]` steps in this picture. Overall, the process is very clear and logically organized.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "最后一步",
+                                                               "图中步骤的总数"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  202,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_03",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "时间顺序版",
+                                                 "shortLabel":  "时间顺序版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  3,
+                                                 "sentence":  "Here we have a nice picture of a process about `[标题]`. In the very beginning, we can clearly see `[步骤一]` on the screen. After that happens, we can see `[步骤二]` following it. The whole process probably takes a lot of time to finish. To sum up, there are many important steps in it.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "步骤二"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  203,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_04",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "运作方式版",
+                                                 "shortLabel":  "运作方式版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  4,
+                                                 "sentence":  "The image perfectly describes how the system of `[标题]` works in real life. First of all, the action of `[步骤一]` happens at the start. Then, the action of `[步骤二]` happens right after it. Everything in the picture happens in a very strict order. In general, it is a very useful process to know.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "步骤二"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  204,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_05",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "生命周期版",
+                                                 "shortLabel":  "生命周期版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  5,
+                                                 "sentence":  "This is a clear and beautiful picture showing the life cycle of `[标题]`. The beginning of life is called `[步骤一]`. The next period of life is called `[步骤二]`. The cycle goes round and round without stopping at all. Finally, the cycle starts again from the very beginning.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "步骤二"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  205,
+                                                 "isActive":  true,
+                                                 "notes":  "最适合动植物",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_06",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "连接描述版",
+                                                 "shortLabel":  "连接描述版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  6,
+                                                 "sentence":  "Let\u0027s look at the chart carefully which is about `[标题]`. The whole process begins smoothly with `[步骤一]`. The whole process finishes completely with `[最后一步]`. There are some straight lines connecting the English words together. In short, the picture is very easy for students to understand.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "最后一步"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  206,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_07",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "顺序指导版",
+                                                 "shortLabel":  "顺序指导版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  7,
+                                                 "sentence":  "The visual information is mainly about the detailed steps of `[标题]`. Firstly, we have to notice `[步骤一]` at the very top. Secondly, we have to notice `[步骤二]` right below it. We must follow all these steps carefully to get the result. To conclude, it takes some time to finish everything perfectly.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "步骤二"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  207,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_08",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "阶段转换版",
+                                                 "shortLabel":  "阶段转换版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  8,
+                                                 "sentence":  "This is a very interesting and colorful flowchart about `[标题]`. The first stage shown here is definitely `[步骤一]`. The final stage shown here is definitely `[最后一步]`. The picture changes from `[图中某个颜色]` to `[图中另一个颜色]`. Overall, the steps are connected very well with each other.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "最后一步",
+                                                               "图中某个颜色",
+                                                               "图中另一个颜色"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  208,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_09",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "自然移动版",
+                                                 "shortLabel":  "自然移动版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  9,
+                                                 "sentence":  "The given picture successfully shows a process named `[标题]`. It naturally moves from the step of `[步骤一]` to the step of `[步骤二]`. We can also notice some basic shapes like `[图中形状，如circles/squares]`. In conclusion, it is a great and natural process for us to learn.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "步骤二",
+                                                               "图中形状，如circles/squares"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  209,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_FL_10",
+                                                 "categoryKey":  "flowcharts_life_cycles",
+                                                 "categoryLabel":  "Flowcharts \u0026 Life Cycles",
+                                                 "title":  "部分组成版",
+                                                 "shortLabel":  "部分组成版",
+                                                 "applicableImageTypes":  [
+                                                                              "process"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "process"
+                                                                ],
+                                                 "templateIndex":  10,
+                                                 "sentence":  "The diagram provided on the screen mainly talks about `[标题]`. As we can see, the first part is represented by `[步骤一]`. The last part is represented by `[最后一步]`. The middle part perfectly connects the beginning and the end. Finally, the diagram is very clear and nicely drawn.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "步骤一",
+                                                               "最后一步"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  210,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便读图里的两个步骤或箭头所指的单词。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             }
+                                         ]
+                       },
+                       {
+                           "categoryKey":  "maps_floor_plans",
+                           "categoryLabel":  "Maps \u0026 Floor Plans",
+                           "applicableImageTypes":  [
+                                                        "map"
+                                                    ],
+                           "applicableNote":  "世界地图、国家地图、建筑平面图。",
+                           "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                           "templates":  [
+                                             {
+                                                 "id":  "DI_TPL_MP_01",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "左右色彩版",
+                                                 "shortLabel":  "左右色彩版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  1,
+                                                 "sentence":  "The picture shows a detailed and clear map of `[标题]`. On the left side of the map, I can easily find `[左边特征/地名]`. On the right side of the map, I can clearly see `[右边特征/地名]`. The map also uses different colors like `[图中颜色]` and `[图中颜色]` to show areas. In conclusion, the map is very clear and helps us a lot.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "左边特征/地名",
+                                                               "右边特征/地名",
+                                                               "图中颜色"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  301,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_02",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "南北地貌版",
+                                                 "shortLabel":  "南北地貌版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  2,
+                                                 "sentence":  "This beautiful map gives us important information about `[标题]`. In the north part, there is a place called `[北方特征/地名]`. In the south part, there is a place called `[南方特征/地名]`. I can also see a lot of land and some water areas. Overall, the map is very useful for traveling around.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "北方特征/地名",
+                                                               "南方特征/地名"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  302,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_03",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "上下区域版",
+                                                 "shortLabel":  "上下区域版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  3,
+                                                 "sentence":  "Here we have a nice picture of a map named `[标题]`. At the top of the map, we can easily find the area of `[上方特征/地名]`. At the bottom of the map, we can easily find the area of `[下方特征/地名]`. The total area in the middle looks very large. To sum up, the map shows many famous and interesting places.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "上方特征/地名",
+                                                               "下方特征/地名"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  303,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_04",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "中心四周版",
+                                                 "shortLabel":  "中心四周版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  4,
+                                                 "sentence":  "The image in front of me mainly talks about the map of `[标题]`. In the center of the picture, there is a place named `[中心特征/地名]`. Around this center place, there is another area called `[周围特征/地名]`. The map helps us find our way very easily. In general, the picture is simple and easy to follow.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "中心特征/地名",
+                                                               "周围特征/地名"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  304,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_05",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "东西方向版",
+                                                 "shortLabel":  "东西方向版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  5,
+                                                 "sentence":  "This is a very clear and colorful map showing the area of `[标题]`. On the east side, I can easily see the location of `[东方特征/地名]`. On the west side, I can easily see the location of `[西方特征/地名]`. It looks like a very big and beautiful place to visit. Finally, the map is very colorful and nice to look at.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "东方特征/地名",
+                                                               "西方特征/地名"
+                                                           ],
+                                                 "difficulty":  1,
+                                                 "sortOrder":  305,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_06",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "部分组合版",
+                                                 "shortLabel":  "部分组合版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  6,
+                                                 "sentence":  "Let\u0027s look at this interesting map about the subject of `[标题]`. In the upper part of the map, we have `[上方特征/地名]`. In the lower part of the map, we have `[下方特征/地名]`. There are also some small English letters written on it. In short, it is a very good map for us to use daily.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "上方特征/地名",
+                                                               "下方特征/地名"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  306,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_07",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "远近对比版",
+                                                 "shortLabel":  "远近对比版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  7,
+                                                 "sentence":  "The visual information provided to us is a map of `[标题]`. Near the center point, there is a location called `[中心特征/地名]`. Far away from the center, there is a location called `[边缘特征/地名]`. I can see many different lines, borders, and shapes here. To conclude, the map gives us a lot of important details.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "中心特征/地名",
+                                                               "边缘特征/地名"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  307,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_08",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "两侧对比版",
+                                                 "shortLabel":  "两侧对比版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  8,
+                                                 "sentence":  "This is a very interesting map showing the geography of `[标题]`. On one side of the area, there is `[一侧特征/地名]`. On the other side of the area, there is `[另一侧特征/地名]`. They are clearly separated by a long line or border. Overall, the layout of the map is very clear and clean.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "一侧特征/地名",
+                                                               "另一侧特征/地名"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  308,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_09",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "角落描述版",
+                                                 "shortLabel":  "角落描述版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  9,
+                                                 "sentence":  "The given picture successfully shows the detailed layout of `[标题]`. In the top left corner, I can clearly see `[左上特征/地名]`. In the bottom right corner, I can clearly see `[右下特征/地名]`. The distances between these places are quite far. In conclusion, the map is very informative and accurate.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "左上特征/地名",
+                                                               "右下特征/地名"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  309,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "DI_TPL_MP_10",
+                                                 "categoryKey":  "maps_floor_plans",
+                                                 "categoryLabel":  "Maps \u0026 Floor Plans",
+                                                 "title":  "中间旁边版",
+                                                 "shortLabel":  "中间旁边版",
+                                                 "applicableImageTypes":  [
+                                                                              "map"
+                                                                          ],
+                                                 "imageTypes":  [
+                                                                    "map"
+                                                                ],
+                                                 "templateIndex":  10,
+                                                 "sentence":  "The diagram mainly describes a famous map named `[标题]`. Looking at the map carefully, `[中心特征/地名]` is exactly in the middle. And `[旁边特征/地名]` is placed right next to it. Everything on the map is placed in a very neat way. Finally, the picture shows clear directions for everyone.",
+                                                 "slots":  [
+                                                               "标题",
+                                                               "中心特征/地名",
+                                                               "旁边特征/地名"
+                                                           ],
+                                                 "difficulty":  2,
+                                                 "sortOrder":  310,
+                                                 "isActive":  true,
+                                                 "notes":  "",
+                                                 "fillTips":  "随便找图里的地名、颜色，或者读一下图例（Legend/Key）里的字。",
+                                                 "source":  "di_template_asset",
+                                                 "hintLevel":  "",
+                                                 "functionType":  "",
+                                                 "skeleton":  "",
+                                                 "keywords":  [
+
+                                                              ]
+                                             }
+                                         ]
+                       }
+                   ]
+}

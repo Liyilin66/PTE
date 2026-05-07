@@ -1,0 +1,34 @@
+﻿{
+  "version": "phase1",
+  "taskType": "DI",
+  "imageTypes": [
+    { "id": "line", "label": "Line Chart", "description": "Time-series trend lines" },
+    { "id": "bar", "label": "Bar Chart", "description": "Category comparison bars" },
+    { "id": "pie", "label": "Pie Chart", "description": "Proportion and share" },
+    { "id": "table", "label": "Table", "description": "Tabular numeric values" },
+    { "id": "process", "label": "Process", "description": "Step-by-step workflow" },
+    { "id": "map", "label": "Map", "description": "Geographic distribution" },
+    { "id": "mixed", "label": "Mixed", "description": "Combined chart forms" }
+  ],
+  "functionTypes": [
+    { "id": "opening", "label": "Opening" },
+    { "id": "overview", "label": "Overview" },
+    { "id": "detail", "label": "Detail" },
+    { "id": "trend", "label": "Trend" },
+    { "id": "comparison", "label": "Comparison" },
+    { "id": "extreme", "label": "Extreme" },
+    { "id": "closing", "label": "Closing" },
+    { "id": "rescue", "label": "Rescue" }
+  ],
+  "difficultyScale": [
+    { "value": 1, "label": "Easy", "description": "Simple visual pattern" },
+    { "value": 2, "label": "Medium", "description": "Standard DI complexity" },
+    { "value": 3, "label": "Hard", "description": "Dense or mixed visuals" }
+  ],
+  "hintLevels": ["strong", "medium", "light"],
+  "editorialRules": [
+    "Keep phrases short and speakable.",
+    "No AI score-like field in DI result UX.",
+    "Prefer stable structure over complex wording."
+  ]
+}

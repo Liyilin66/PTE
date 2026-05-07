@@ -1,0 +1,3660 @@
+{
+  "version": "phase1",
+  "taskType": "DI",
+  "questions": [
+    {
+      "id": "DI_Q001",
+      "sourceNumberLabel": "#DI-001",
+      "displayTitle": "DI Image 001",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-001.png",
+      "imageAlt": "DI practice image 001",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "male",
+          "partOfSpeech": "noun",
+          "chinese": "male",
+          "note": "key term related to this image",
+          "example": "This image highlights male."
+        },
+        {
+          "word": "female",
+          "partOfSpeech": "noun",
+          "chinese": "female",
+          "note": "key term related to this image",
+          "example": "This image highlights female."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q002",
+      "sourceNumberLabel": "#DI-002",
+      "displayTitle": "DI Image 002",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-002.png",
+      "imageAlt": "DI practice image 002",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "water wheel",
+          "partOfSpeech": "noun",
+          "chinese": "water wheel",
+          "note": "key term related to this image",
+          "example": "This image highlights water wheel."
+        },
+        {
+          "word": "water flow",
+          "partOfSpeech": "noun",
+          "chinese": "water flow",
+          "note": "key term related to this image",
+          "example": "This image highlights water flow."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q003",
+      "sourceNumberLabel": "#DI-003",
+      "displayTitle": "DI Image 003",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-003.png",
+      "imageAlt": "DI practice image 003",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "population",
+          "partOfSpeech": "noun",
+          "chinese": "population",
+          "note": "key term related to this image",
+          "example": "This image highlights population."
+        },
+        {
+          "word": "town",
+          "partOfSpeech": "noun",
+          "chinese": "town",
+          "note": "key term related to this image",
+          "example": "This image highlights town."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q004",
+      "sourceNumberLabel": "#DI-004",
+      "displayTitle": "DI Image 004",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-004.png",
+      "imageAlt": "DI practice image 004",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "arrests",
+          "partOfSpeech": "noun",
+          "chinese": "arrests",
+          "note": "key term related to this image",
+          "example": "This image highlights arrests."
+        },
+        {
+          "word": "illegal drugs",
+          "partOfSpeech": "noun",
+          "chinese": "illegal drugs",
+          "note": "key term related to this image",
+          "example": "This image highlights illegal drugs."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q005",
+      "sourceNumberLabel": "#DI-005",
+      "displayTitle": "DI Image 005",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-005.png",
+      "imageAlt": "DI practice image 005",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "consumer confidence",
+          "partOfSpeech": "noun",
+          "chinese": "consumer confidence",
+          "note": "key term related to this image",
+          "example": "This image highlights consumer confidence."
+        },
+        {
+          "word": "index",
+          "partOfSpeech": "noun",
+          "chinese": "index",
+          "note": "key term related to this image",
+          "example": "This image highlights index."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q006",
+      "sourceNumberLabel": "#DI-006",
+      "displayTitle": "DI Image 006",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-006.png",
+      "imageAlt": "DI practice image 006",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "laws",
+          "partOfSpeech": "noun",
+          "chinese": "laws",
+          "note": "key term related to this image",
+          "example": "This image highlights laws."
+        },
+        {
+          "word": "Brazil",
+          "partOfSpeech": "noun",
+          "chinese": "Brazil",
+          "note": "key term related to this image",
+          "example": "This image highlights Brazil."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q007",
+      "sourceNumberLabel": "#DI-007",
+      "displayTitle": "DI Image 007",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-007.png",
+      "imageAlt": "DI practice image 007",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "stock price",
+          "partOfSpeech": "noun",
+          "chinese": "stock price",
+          "note": "key term related to this image",
+          "example": "This image highlights stock price."
+        },
+        {
+          "word": "market",
+          "partOfSpeech": "noun",
+          "chinese": "market",
+          "note": "key term related to this image",
+          "example": "This image highlights market."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q008",
+      "sourceNumberLabel": "#DI-008",
+      "displayTitle": "DI Image 008",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-008.png",
+      "imageAlt": "DI practice image 008",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "employment",
+          "partOfSpeech": "noun",
+          "chinese": "employment",
+          "note": "key term related to this image",
+          "example": "This image highlights employment."
+        },
+        {
+          "word": "exchange rate",
+          "partOfSpeech": "noun",
+          "chinese": "exchange rate",
+          "note": "key term related to this image",
+          "example": "This image highlights exchange rate."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q009",
+      "sourceNumberLabel": "#DI-009",
+      "displayTitle": "DI Image 009",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-009.png",
+      "imageAlt": "DI practice image 009",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "vegetables",
+          "partOfSpeech": "noun",
+          "chinese": "vegetables",
+          "note": "key term related to this image",
+          "example": "This image highlights vegetables."
+        },
+        {
+          "word": "fruit",
+          "partOfSpeech": "noun",
+          "chinese": "fruit",
+          "note": "key term related to this image",
+          "example": "This image highlights fruit."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q010",
+      "sourceNumberLabel": "#DI-010",
+      "displayTitle": "DI Image 010",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-010.png",
+      "imageAlt": "DI practice image 010",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "life expectancy",
+          "partOfSpeech": "noun",
+          "chinese": "life expectancy",
+          "note": "key term related to this image",
+          "example": "This image highlights life expectancy."
+        },
+        {
+          "word": "years",
+          "partOfSpeech": "noun",
+          "chinese": "years",
+          "note": "key term related to this image",
+          "example": "This image highlights years."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q011",
+      "sourceNumberLabel": "#DI-011",
+      "displayTitle": "DI Image 011",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-011.png",
+      "imageAlt": "DI practice image 011",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "population growth",
+          "partOfSpeech": "noun",
+          "chinese": "population growth",
+          "note": "key term related to this image",
+          "example": "This image highlights population growth."
+        },
+        {
+          "word": "birth rate",
+          "partOfSpeech": "noun",
+          "chinese": "birth rate",
+          "note": "key term related to this image",
+          "example": "This image highlights birth rate."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q012",
+      "sourceNumberLabel": "#DI-012",
+      "displayTitle": "DI Image 012",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-012.png",
+      "imageAlt": "DI practice image 012",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "electricity",
+          "partOfSpeech": "noun",
+          "chinese": "electricity",
+          "note": "key term related to this image",
+          "example": "This image highlights electricity."
+        },
+        {
+          "word": "hydroelectric",
+          "partOfSpeech": "noun",
+          "chinese": "hydroelectric",
+          "note": "key term related to this image",
+          "example": "This image highlights hydroelectric."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q013",
+      "sourceNumberLabel": "#DI-013",
+      "displayTitle": "DI Image 013",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-013.png",
+      "imageAlt": "DI practice image 013",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "part-time students",
+          "partOfSpeech": "noun",
+          "chinese": "part-time students",
+          "note": "key term related to this image",
+          "example": "This image highlights part-time students."
+        },
+        {
+          "word": "full-time students",
+          "partOfSpeech": "noun",
+          "chinese": "full-time students",
+          "note": "key term related to this image",
+          "example": "This image highlights full-time students."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q014",
+      "sourceNumberLabel": "#DI-014",
+      "displayTitle": "DI Image 014",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-014.png",
+      "imageAlt": "DI practice image 014",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "carbon dioxide",
+          "partOfSpeech": "noun",
+          "chinese": "carbon dioxide",
+          "note": "key term related to this image",
+          "example": "This image highlights carbon dioxide."
+        },
+        {
+          "word": "temperature",
+          "partOfSpeech": "noun",
+          "chinese": "temperature",
+          "note": "key term related to this image",
+          "example": "This image highlights temperature."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q015",
+      "sourceNumberLabel": "#DI-015",
+      "displayTitle": "DI Image 015",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-015.png",
+      "imageAlt": "DI practice image 015",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "oil price",
+          "partOfSpeech": "noun",
+          "chinese": "oil price",
+          "note": "key term related to this image",
+          "example": "This image highlights oil price."
+        },
+        {
+          "word": "food price",
+          "partOfSpeech": "noun",
+          "chinese": "food price",
+          "note": "key term related to this image",
+          "example": "This image highlights food price."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q016",
+      "sourceNumberLabel": "#DI-016",
+      "displayTitle": "DI Image 016",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-016.png",
+      "imageAlt": "DI practice image 016",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "projected population",
+          "partOfSpeech": "noun",
+          "chinese": "projected population",
+          "note": "key term related to this image",
+          "example": "This image highlights projected population."
+        },
+        {
+          "word": "Australia",
+          "partOfSpeech": "noun",
+          "chinese": "Australia",
+          "note": "key term related to this image",
+          "example": "This image highlights Australia."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q017",
+      "sourceNumberLabel": "#DI-017",
+      "displayTitle": "DI Image 017",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-017.png",
+      "imageAlt": "DI practice image 017",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "energy consumption",
+          "partOfSpeech": "noun",
+          "chinese": "energy consumption",
+          "note": "key term related to this image",
+          "example": "This image highlights energy consumption."
+        },
+        {
+          "word": "fuel",
+          "partOfSpeech": "noun",
+          "chinese": "fuel",
+          "note": "key term related to this image",
+          "example": "This image highlights fuel."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q018",
+      "sourceNumberLabel": "#DI-018",
+      "displayTitle": "DI Image 018",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-018.png",
+      "imageAlt": "DI practice image 018",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "internet users",
+          "partOfSpeech": "noun",
+          "chinese": "internet users",
+          "note": "key term related to this image",
+          "example": "This image highlights internet users."
+        },
+        {
+          "word": "country",
+          "partOfSpeech": "noun",
+          "chinese": "country",
+          "note": "key term related to this image",
+          "example": "This image highlights country."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q019",
+      "sourceNumberLabel": "#DI-019",
+      "displayTitle": "DI Image 019",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-019.png",
+      "imageAlt": "DI practice image 019",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "taxation",
+          "partOfSpeech": "noun",
+          "chinese": "taxation",
+          "note": "key term related to this image",
+          "example": "This image highlights taxation."
+        },
+        {
+          "word": "contribution",
+          "partOfSpeech": "noun",
+          "chinese": "contribution",
+          "note": "key term related to this image",
+          "example": "This image highlights contribution."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q020",
+      "sourceNumberLabel": "#DI-020",
+      "displayTitle": "DI Image 020",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-020.png",
+      "imageAlt": "DI practice image 020",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "unemployment rate",
+          "partOfSpeech": "noun",
+          "chinese": "unemployment rate",
+          "note": "key term related to this image",
+          "example": "This image highlights unemployment rate."
+        },
+        {
+          "word": "ethnic group",
+          "partOfSpeech": "noun",
+          "chinese": "ethnic group",
+          "note": "key term related to this image",
+          "example": "This image highlights ethnic group."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q021",
+      "sourceNumberLabel": "#DI-021",
+      "displayTitle": "DI Image 021",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-021.png",
+      "imageAlt": "DI practice image 021",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": true,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "earnings",
+          "partOfSpeech": "noun",
+          "chinese": "earnings",
+          "note": "key term related to this image",
+          "example": "This image highlights earnings."
+        },
+        {
+          "word": "education",
+          "partOfSpeech": "noun",
+          "chinese": "education",
+          "note": "key term related to this image",
+          "example": "This image highlights education."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q022",
+      "sourceNumberLabel": "#DI-022",
+      "displayTitle": "DI Image 022",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-022.png",
+      "imageAlt": "DI practice image 022",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "drinking habits",
+          "partOfSpeech": "noun",
+          "chinese": "drinking habits",
+          "note": "key term related to this image",
+          "example": "This image highlights drinking habits."
+        },
+        {
+          "word": "age",
+          "partOfSpeech": "noun",
+          "chinese": "age",
+          "note": "key term related to this image",
+          "example": "This image highlights age."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q023",
+      "sourceNumberLabel": "#DI-023",
+      "displayTitle": "DI Image 023",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-023.png",
+      "imageAlt": "DI practice image 023",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "wheat export",
+          "partOfSpeech": "noun",
+          "chinese": "wheat export",
+          "note": "key term related to this image",
+          "example": "This image highlights wheat export."
+        },
+        {
+          "word": "tonnes",
+          "partOfSpeech": "noun",
+          "chinese": "tonnes",
+          "note": "key term related to this image",
+          "example": "This image highlights tonnes."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q024",
+      "sourceNumberLabel": "#DI-024",
+      "displayTitle": "DI Image 024",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-024.png",
+      "imageAlt": "DI practice image 024",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "nitrogen",
+          "partOfSpeech": "noun",
+          "chinese": "nitrogen",
+          "note": "key term related to this image",
+          "example": "This image highlights nitrogen."
+        },
+        {
+          "word": "oxygen",
+          "partOfSpeech": "noun",
+          "chinese": "oxygen",
+          "note": "key term related to this image",
+          "example": "This image highlights oxygen."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q025",
+      "sourceNumberLabel": "#DI-025",
+      "displayTitle": "DI Image 025",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-025.png",
+      "imageAlt": "DI practice image 025",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "deforestation",
+          "partOfSpeech": "noun",
+          "chinese": "deforestation",
+          "note": "key term related to this image",
+          "example": "This image highlights deforestation."
+        },
+        {
+          "word": "Amazon",
+          "partOfSpeech": "noun",
+          "chinese": "Amazon",
+          "note": "key term related to this image",
+          "example": "This image highlights Amazon."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q026",
+      "sourceNumberLabel": "#DI-026",
+      "displayTitle": "DI Image 026",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-026.png",
+      "imageAlt": "DI practice image 026",
+      "imageType": "pie",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "EU population",
+          "partOfSpeech": "noun",
+          "chinese": "EU population",
+          "note": "key term related to this image",
+          "example": "This image highlights EU population."
+        },
+        {
+          "word": "country share",
+          "partOfSpeech": "noun",
+          "chinese": "country share",
+          "note": "key term related to this image",
+          "example": "This image highlights country share."
+        },
+        {
+          "word": "proportion",
+          "partOfSpeech": "noun",
+          "chinese": "proportion",
+          "note": "a part out of the whole",
+          "example": "One segment takes the largest proportion."
+        },
+        {
+          "word": "share",
+          "partOfSpeech": "noun",
+          "chinese": "share",
+          "note": "the amount held by one group",
+          "example": "This category has a small share."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q027",
+      "sourceNumberLabel": "#DI-027",
+      "displayTitle": "DI Image 027",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-027.png",
+      "imageAlt": "DI practice image 027",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "planet",
+          "partOfSpeech": "noun",
+          "chinese": "planet",
+          "note": "key term related to this image",
+          "example": "This image highlights planet."
+        },
+        {
+          "word": "orbit",
+          "partOfSpeech": "noun",
+          "chinese": "orbit",
+          "note": "key term related to this image",
+          "example": "This image highlights orbit."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q028",
+      "sourceNumberLabel": "#DI-028",
+      "displayTitle": "DI Image 028",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-028.png",
+      "imageAlt": "DI practice image 028",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "right",
+          "partOfSpeech": "noun",
+          "chinese": "right",
+          "note": "key term related to this image",
+          "example": "This image highlights right."
+        },
+        {
+          "word": "wrong",
+          "partOfSpeech": "noun",
+          "chinese": "wrong",
+          "note": "key term related to this image",
+          "example": "This image highlights wrong."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q029",
+      "sourceNumberLabel": "#DI-029",
+      "displayTitle": "DI Image 029",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-029.png",
+      "imageAlt": "DI practice image 029",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "BMI",
+          "partOfSpeech": "noun",
+          "chinese": "BMI",
+          "note": "key term related to this image",
+          "example": "This image highlights BMI."
+        },
+        {
+          "word": "height",
+          "partOfSpeech": "noun",
+          "chinese": "height",
+          "note": "key term related to this image",
+          "example": "This image highlights height."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q030",
+      "sourceNumberLabel": "#DI-030",
+      "displayTitle": "DI Image 030",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-030.png",
+      "imageAlt": "DI practice image 030",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "solar panel",
+          "partOfSpeech": "noun",
+          "chinese": "solar panel",
+          "note": "key term related to this image",
+          "example": "This image highlights solar panel."
+        },
+        {
+          "word": "battery",
+          "partOfSpeech": "noun",
+          "chinese": "battery",
+          "note": "key term related to this image",
+          "example": "This image highlights battery."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q031",
+      "sourceNumberLabel": "#DI-031",
+      "displayTitle": "DI Image 031",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-031.png",
+      "imageAlt": "DI practice image 031",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "food pyramid",
+          "partOfSpeech": "noun",
+          "chinese": "food pyramid",
+          "note": "key term related to this image",
+          "example": "This image highlights food pyramid."
+        },
+        {
+          "word": "nutrition",
+          "partOfSpeech": "noun",
+          "chinese": "nutrition",
+          "note": "key term related to this image",
+          "example": "This image highlights nutrition."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q032",
+      "sourceNumberLabel": "#DI-032",
+      "displayTitle": "DI Image 032",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-032.png",
+      "imageAlt": "DI practice image 032",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "education fund",
+          "partOfSpeech": "noun",
+          "chinese": "education fund",
+          "note": "key term related to this image",
+          "example": "This image highlights education fund."
+        },
+        {
+          "word": "government expenditure",
+          "partOfSpeech": "noun",
+          "chinese": "government expenditure",
+          "note": "key term related to this image",
+          "example": "This image highlights government expenditure."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q033",
+      "sourceNumberLabel": "#DI-033",
+      "displayTitle": "DI Image 033",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-033.png",
+      "imageAlt": "DI practice image 033",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "library",
+          "partOfSpeech": "noun",
+          "chinese": "library",
+          "note": "key term related to this image",
+          "example": "This image highlights library."
+        },
+        {
+          "word": "floor plan",
+          "partOfSpeech": "noun",
+          "chinese": "floor plan",
+          "note": "key term related to this image",
+          "example": "This image highlights floor plan."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q034",
+      "sourceNumberLabel": "#DI-034",
+      "displayTitle": "DI Image 034",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-034.png",
+      "imageAlt": "DI practice image 034",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "river",
+          "partOfSpeech": "noun",
+          "chinese": "river",
+          "note": "key term related to this image",
+          "example": "This image highlights river."
+        },
+        {
+          "word": "meander",
+          "partOfSpeech": "noun",
+          "chinese": "meander",
+          "note": "key term related to this image",
+          "example": "This image highlights meander."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q035",
+      "sourceNumberLabel": "#DI-035",
+      "displayTitle": "DI Image 035",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-035.png",
+      "imageAlt": "DI practice image 035",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "freshwater",
+          "partOfSpeech": "noun",
+          "chinese": "freshwater",
+          "note": "key term related to this image",
+          "example": "This image highlights freshwater."
+        },
+        {
+          "word": "saltwater",
+          "partOfSpeech": "noun",
+          "chinese": "saltwater",
+          "note": "key term related to this image",
+          "example": "This image highlights saltwater."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q036",
+      "sourceNumberLabel": "#DI-036",
+      "displayTitle": "DI Image 036",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-036.png",
+      "imageAlt": "DI practice image 036",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "lunar cycle",
+          "partOfSpeech": "noun",
+          "chinese": "lunar cycle",
+          "note": "key term related to this image",
+          "example": "This image highlights lunar cycle."
+        },
+        {
+          "word": "fish catch",
+          "partOfSpeech": "noun",
+          "chinese": "fish catch",
+          "note": "key term related to this image",
+          "example": "This image highlights fish catch."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q037",
+      "sourceNumberLabel": "#DI-037",
+      "displayTitle": "DI Image 037",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-037.png",
+      "imageAlt": "DI practice image 037",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "computer",
+          "partOfSpeech": "noun",
+          "chinese": "computer",
+          "note": "key term related to this image",
+          "example": "This image highlights computer."
+        },
+        {
+          "word": "then and now",
+          "partOfSpeech": "noun",
+          "chinese": "then and now",
+          "note": "key term related to this image",
+          "example": "This image highlights then and now."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q038",
+      "sourceNumberLabel": "#DI-038",
+      "displayTitle": "DI Image 038",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-038.png",
+      "imageAlt": "DI practice image 038",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "tree height",
+          "partOfSpeech": "noun",
+          "chinese": "tree height",
+          "note": "key term related to this image",
+          "example": "This image highlights tree height."
+        },
+        {
+          "word": "species",
+          "partOfSpeech": "noun",
+          "chinese": "species",
+          "note": "key term related to this image",
+          "example": "This image highlights species."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q039",
+      "sourceNumberLabel": "#DI-039",
+      "displayTitle": "DI Image 039",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-039.png",
+      "imageAlt": "DI practice image 039",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "wing",
+          "partOfSpeech": "noun",
+          "chinese": "wing",
+          "note": "key term related to this image",
+          "example": "This image highlights wing."
+        },
+        {
+          "word": "structure",
+          "partOfSpeech": "noun",
+          "chinese": "structure",
+          "note": "key term related to this image",
+          "example": "This image highlights structure."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q040",
+      "sourceNumberLabel": "#DI-040",
+      "displayTitle": "DI Image 040",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-040.png",
+      "imageAlt": "DI practice image 040",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "inner core",
+          "partOfSpeech": "noun",
+          "chinese": "inner core",
+          "note": "key term related to this image",
+          "example": "This image highlights inner core."
+        },
+        {
+          "word": "mantle",
+          "partOfSpeech": "noun",
+          "chinese": "mantle",
+          "note": "key term related to this image",
+          "example": "This image highlights mantle."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q041",
+      "sourceNumberLabel": "#DI-041",
+      "displayTitle": "DI Image 041",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-041.png",
+      "imageAlt": "DI practice image 041",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "bird feeder",
+          "partOfSpeech": "noun",
+          "chinese": "bird feeder",
+          "note": "key term related to this image",
+          "example": "This image highlights bird feeder."
+        },
+        {
+          "word": "recycled bottle",
+          "partOfSpeech": "noun",
+          "chinese": "recycled bottle",
+          "note": "key term related to this image",
+          "example": "This image highlights recycled bottle."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q042",
+      "sourceNumberLabel": "#DI-042",
+      "displayTitle": "DI Image 042",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-042.png",
+      "imageAlt": "DI practice image 042",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "root",
+          "partOfSpeech": "noun",
+          "chinese": "root",
+          "note": "key term related to this image",
+          "example": "This image highlights root."
+        },
+        {
+          "word": "branch",
+          "partOfSpeech": "noun",
+          "chinese": "branch",
+          "note": "key term related to this image",
+          "example": "This image highlights branch."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q043",
+      "sourceNumberLabel": "#DI-043",
+      "displayTitle": "DI Image 043",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-043.png",
+      "imageAlt": "DI practice image 043",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "global warming",
+          "partOfSpeech": "noun",
+          "chinese": "global warming",
+          "note": "key term related to this image",
+          "example": "This image highlights global warming."
+        },
+        {
+          "word": "temperature increase",
+          "partOfSpeech": "noun",
+          "chinese": "temperature increase",
+          "note": "key term related to this image",
+          "example": "This image highlights temperature increase."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q044",
+      "sourceNumberLabel": "#DI-044",
+      "displayTitle": "DI Image 044",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-044.png",
+      "imageAlt": "DI practice image 044",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "germination",
+          "partOfSpeech": "noun",
+          "chinese": "germination",
+          "note": "key term related to this image",
+          "example": "This image highlights germination."
+        },
+        {
+          "word": "bean plant",
+          "partOfSpeech": "noun",
+          "chinese": "bean plant",
+          "note": "key term related to this image",
+          "example": "This image highlights bean plant."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q045",
+      "sourceNumberLabel": "#DI-045",
+      "displayTitle": "DI Image 045",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-045.png",
+      "imageAlt": "DI practice image 045",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "evaporation",
+          "partOfSpeech": "noun",
+          "chinese": "evaporation",
+          "note": "key term related to this image",
+          "example": "This image highlights evaporation."
+        },
+        {
+          "word": "precipitation",
+          "partOfSpeech": "noun",
+          "chinese": "precipitation",
+          "note": "key term related to this image",
+          "example": "This image highlights precipitation."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q046",
+      "sourceNumberLabel": "#DI-046",
+      "displayTitle": "DI Image 046",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-046.png",
+      "imageAlt": "DI practice image 046",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "download",
+          "partOfSpeech": "noun",
+          "chinese": "download",
+          "note": "key term related to this image",
+          "example": "This image highlights download."
+        },
+        {
+          "word": "purchase",
+          "partOfSpeech": "noun",
+          "chinese": "purchase",
+          "note": "key term related to this image",
+          "example": "This image highlights purchase."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q047",
+      "sourceNumberLabel": "#DI-047",
+      "displayTitle": "DI Image 047",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-047.png",
+      "imageAlt": "DI practice image 047",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "egg",
+          "partOfSpeech": "noun",
+          "chinese": "egg",
+          "note": "key term related to this image",
+          "example": "This image highlights egg."
+        },
+        {
+          "word": "larva",
+          "partOfSpeech": "noun",
+          "chinese": "larva",
+          "note": "key term related to this image",
+          "example": "This image highlights larva."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q048",
+      "sourceNumberLabel": "#DI-048",
+      "displayTitle": "DI Image 048",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-048.png",
+      "imageAlt": "DI practice image 048",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "acid rain",
+          "partOfSpeech": "noun",
+          "chinese": "acid rain",
+          "note": "key term related to this image",
+          "example": "This image highlights acid rain."
+        },
+        {
+          "word": "emissions",
+          "partOfSpeech": "noun",
+          "chinese": "emissions",
+          "note": "key term related to this image",
+          "example": "This image highlights emissions."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q049",
+      "sourceNumberLabel": "#DI-049",
+      "displayTitle": "DI Image 049",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-049.png",
+      "imageAlt": "DI practice image 049",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "doubling time",
+          "partOfSpeech": "noun",
+          "chinese": "doubling time",
+          "note": "key term related to this image",
+          "example": "This image highlights doubling time."
+        },
+        {
+          "word": "population",
+          "partOfSpeech": "noun",
+          "chinese": "population",
+          "note": "key term related to this image",
+          "example": "This image highlights population."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q050",
+      "sourceNumberLabel": "#DI-050",
+      "displayTitle": "DI Image 050",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-050.png",
+      "imageAlt": "DI practice image 050",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "gold sales",
+          "partOfSpeech": "noun",
+          "chinese": "gold sales",
+          "note": "key term related to this image",
+          "example": "This image highlights gold sales."
+        },
+        {
+          "word": "Dubai",
+          "partOfSpeech": "noun",
+          "chinese": "Dubai",
+          "note": "key term related to this image",
+          "example": "This image highlights Dubai."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q051",
+      "sourceNumberLabel": "#DI-051",
+      "displayTitle": "DI Image 051",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-051.png",
+      "imageAlt": "DI practice image 051",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "eclipse",
+          "partOfSpeech": "noun",
+          "chinese": "eclipse",
+          "note": "key term related to this image",
+          "example": "This image highlights eclipse."
+        },
+        {
+          "word": "sun",
+          "partOfSpeech": "noun",
+          "chinese": "sun",
+          "note": "key term related to this image",
+          "example": "This image highlights sun."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q052",
+      "sourceNumberLabel": "#DI-052",
+      "displayTitle": "DI Image 052",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-052.png",
+      "imageAlt": "DI practice image 052",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "recycling",
+          "partOfSpeech": "noun",
+          "chinese": "recycling",
+          "note": "key term related to this image",
+          "example": "This image highlights recycling."
+        },
+        {
+          "word": "closed-loop",
+          "partOfSpeech": "noun",
+          "chinese": "closed-loop",
+          "note": "key term related to this image",
+          "example": "This image highlights closed-loop."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q053",
+      "sourceNumberLabel": "#DI-053",
+      "displayTitle": "DI Image 053",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-053.jpg",
+      "imageAlt": "DI practice image 053",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "honey production",
+          "partOfSpeech": "noun",
+          "chinese": "honey production",
+          "note": "key term related to this image",
+          "example": "This image highlights honey production."
+        },
+        {
+          "word": "state",
+          "partOfSpeech": "noun",
+          "chinese": "state",
+          "note": "key term related to this image",
+          "example": "This image highlights state."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q054",
+      "sourceNumberLabel": "#DI-054",
+      "displayTitle": "DI Image 054",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-054.jpg",
+      "imageAlt": "DI practice image 054",
+      "imageType": "mixed",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "day",
+          "partOfSpeech": "noun",
+          "chinese": "day",
+          "note": "key term related to this image",
+          "example": "This image highlights day."
+        },
+        {
+          "word": "night",
+          "partOfSpeech": "noun",
+          "chinese": "night",
+          "note": "key term related to this image",
+          "example": "This image highlights night."
+        },
+        {
+          "word": "feature",
+          "partOfSpeech": "noun",
+          "chinese": "feature",
+          "note": "an important visible element",
+          "example": "A key feature appears in the top section."
+        },
+        {
+          "word": "pattern",
+          "partOfSpeech": "noun",
+          "chinese": "pattern",
+          "note": "a repeated or recognizable form",
+          "example": "A clear pattern can be observed."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q055",
+      "sourceNumberLabel": "#DI-055",
+      "displayTitle": "DI Image 055",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-055.png",
+      "imageAlt": "DI practice image 055",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "population density",
+          "partOfSpeech": "noun",
+          "chinese": "population density",
+          "note": "key term related to this image",
+          "example": "This image highlights population density."
+        },
+        {
+          "word": "Australia",
+          "partOfSpeech": "noun",
+          "chinese": "Australia",
+          "note": "key term related to this image",
+          "example": "This image highlights Australia."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q056",
+      "sourceNumberLabel": "#DI-056",
+      "displayTitle": "DI Image 056",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-056.png",
+      "imageAlt": "DI practice image 056",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "fruit",
+          "partOfSpeech": "noun",
+          "chinese": "fruit",
+          "note": "key term related to this image",
+          "example": "This image highlights fruit."
+        },
+        {
+          "word": "supply chain",
+          "partOfSpeech": "noun",
+          "chinese": "supply chain",
+          "note": "key term related to this image",
+          "example": "This image highlights supply chain."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q057",
+      "sourceNumberLabel": "#DI-057",
+      "displayTitle": "DI Image 057",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-057.png",
+      "imageAlt": "DI practice image 057",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "household spending",
+          "partOfSpeech": "noun",
+          "chinese": "household spending",
+          "note": "key term related to this image",
+          "example": "This image highlights household spending."
+        },
+        {
+          "word": "goods and services",
+          "partOfSpeech": "noun",
+          "chinese": "goods and services",
+          "note": "key term related to this image",
+          "example": "This image highlights goods and services."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q058",
+      "sourceNumberLabel": "#DI-058",
+      "displayTitle": "DI Image 058",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-058.jpg",
+      "imageAlt": "DI practice image 058",
+      "imageType": "process",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_FL_01",
+        "DI_TPL_FL_02",
+        "DI_TPL_FL_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "electricity",
+          "partOfSpeech": "noun",
+          "chinese": "electricity",
+          "note": "key term related to this image",
+          "example": "This image highlights electricity."
+        },
+        {
+          "word": "wind turbine",
+          "partOfSpeech": "noun",
+          "chinese": "wind turbine",
+          "note": "key term related to this image",
+          "example": "This image highlights wind turbine."
+        },
+        {
+          "word": "stage",
+          "partOfSpeech": "noun",
+          "chinese": "stage",
+          "note": "a step within a process",
+          "example": "The first stage handles raw input."
+        },
+        {
+          "word": "sequence",
+          "partOfSpeech": "noun",
+          "chinese": "sequence",
+          "note": "the order of steps",
+          "example": "The sequence runs from left to right."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q059",
+      "sourceNumberLabel": "#DI-059",
+      "displayTitle": "DI Image 059",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-059.jpg",
+      "imageAlt": "DI practice image 059",
+      "imageType": "line",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "natural increase",
+          "partOfSpeech": "noun",
+          "chinese": "natural increase",
+          "note": "key term related to this image",
+          "example": "This image highlights natural increase."
+        },
+        {
+          "word": "net migration",
+          "partOfSpeech": "noun",
+          "chinese": "net migration",
+          "note": "key term related to this image",
+          "example": "This image highlights net migration."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q060",
+      "sourceNumberLabel": "#DI-060",
+      "displayTitle": "DI Image 060",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-060.png",
+      "imageAlt": "DI practice image 060",
+      "imageType": "bar",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_DG_01",
+        "DI_TPL_DG_02",
+        "DI_TPL_DG_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "e-waste",
+          "partOfSpeech": "noun",
+          "chinese": "e-waste",
+          "note": "key term related to this image",
+          "example": "This image highlights e-waste."
+        },
+        {
+          "word": "electronics",
+          "partOfSpeech": "noun",
+          "chinese": "electronics",
+          "note": "key term related to this image",
+          "example": "This image highlights electronics."
+        },
+        {
+          "word": "trend",
+          "partOfSpeech": "noun",
+          "chinese": "trend",
+          "note": "the overall direction of change",
+          "example": "The trend is upward in the later period."
+        },
+        {
+          "word": "comparison",
+          "partOfSpeech": "noun",
+          "chinese": "comparison",
+          "note": "examining two or more groups",
+          "example": "The comparison shows a clear gap."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q061",
+      "sourceNumberLabel": "#DI-061",
+      "displayTitle": "DI Image 061",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-061.jpg",
+      "imageAlt": "DI practice image 061",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "climate zone",
+          "partOfSpeech": "noun",
+          "chinese": "climate zone",
+          "note": "key term related to this image",
+          "example": "This image highlights climate zone."
+        },
+        {
+          "word": "equator",
+          "partOfSpeech": "noun",
+          "chinese": "equator",
+          "note": "key term related to this image",
+          "example": "This image highlights equator."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q062",
+      "sourceNumberLabel": "#DI-062",
+      "displayTitle": "DI Image 062",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-062.jpg",
+      "imageAlt": "DI practice image 062",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "apartment layout",
+          "partOfSpeech": "noun",
+          "chinese": "apartment layout",
+          "note": "key term related to this image",
+          "example": "This image highlights apartment layout."
+        },
+        {
+          "word": "dimensions",
+          "partOfSpeech": "noun",
+          "chinese": "dimensions",
+          "note": "key term related to this image",
+          "example": "This image highlights dimensions."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    },
+    {
+      "id": "DI_Q063",
+      "sourceNumberLabel": "#DI-063",
+      "displayTitle": "DI Image 063",
+      "promptText": "Describe the image in detail.",
+      "imageUrl": "/di-images/di-063.png",
+      "imageAlt": "DI practice image 063",
+      "imageType": "map",
+      "difficulty": 2,
+      "tags": [
+        "mixed",
+        "local-import",
+        "phase1"
+      ],
+      "isHighFrequency": false,
+      "isActive": true,
+      "recommendedTemplateIds": [
+        "DI_TPL_MP_01",
+        "DI_TPL_MP_02",
+        "DI_TPL_MP_10"
+      ],
+      "visualFeatures": {
+        "hasTrend": true,
+        "hasComparison": true,
+        "hasExtreme": true,
+        "hasNumbers": true
+      },
+      "highFrequencyWords": [
+        {
+          "word": "South America",
+          "partOfSpeech": "noun",
+          "chinese": "South America",
+          "note": "key term related to this image",
+          "example": "This image highlights South America."
+        },
+        {
+          "word": "landform",
+          "partOfSpeech": "noun",
+          "chinese": "landform",
+          "note": "key term related to this image",
+          "example": "This image highlights landform."
+        },
+        {
+          "word": "location",
+          "partOfSpeech": "noun",
+          "chinese": "location",
+          "note": "where a feature is positioned",
+          "example": "The location is marked in the center."
+        },
+        {
+          "word": "layout",
+          "partOfSpeech": "noun",
+          "chinese": "layout",
+          "note": "the arrangement of parts",
+          "example": "The layout separates each functional zone."
+        }
+      ]
+    }
+  ]
+}

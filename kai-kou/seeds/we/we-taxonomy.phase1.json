@@ -1,0 +1,106 @@
+{
+  "version": "phase1",
+  "taskType": "WE",
+  "primaryTopics": [
+    {
+      "id": "education_learning",
+      "label": "Education and Learning",
+      "description": "School, university, study methods, assessment and language learning."
+    },
+    {
+      "id": "technology_media",
+      "label": "Technology and Media",
+      "description": "Mass media, information technology, inventions and communication impact."
+    },
+    {
+      "id": "work_business_economy",
+      "label": "Work, Business and Economy",
+      "description": "Workplace policy, marketing, jobs, wages and economic tradeoffs."
+    },
+    {
+      "id": "society_law_policy",
+      "label": "Society, Law and Policy",
+      "description": "Legal rules, social responsibility, rights and behavior change."
+    },
+    {
+      "id": "environment_global_issues",
+      "label": "Environment and Global Issues",
+      "description": "Climate change and broad global challenges."
+    },
+    {
+      "id": "city_infrastructure_housing",
+      "label": "City, Infrastructure and Housing",
+      "description": "Urban development, transport, buildings and living choices."
+    }
+  ],
+  "promptTypes": [
+    {
+      "id": "agree_disagree",
+      "label": "Agree or Disagree",
+      "description": "Take a clear position and support it with reasons and examples."
+    },
+    {
+      "id": "discuss_both_views_opinion",
+      "label": "Discuss Both Views and Opinion",
+      "description": "Present both sides, then give your own position."
+    },
+    {
+      "id": "advantages_disadvantages_opinion",
+      "label": "Advantages and Disadvantages",
+      "description": "Discuss pros and cons and provide your judgment."
+    },
+    {
+      "id": "cause_problem_solution",
+      "label": "Cause, Problem and Solution",
+      "description": "Explain causes or key problems and suggest practical solutions."
+    },
+    {
+      "id": "responsibility_allocation",
+      "label": "Responsibility Allocation",
+      "description": "Decide who should take the main responsibility and explain why."
+    },
+    {
+      "id": "policy_rule_with_example",
+      "label": "Policy Rule with Example",
+      "description": "Comment on a rule/policy and provide concrete examples or alternatives."
+    },
+    {
+      "id": "choice_preference_with_reasons",
+      "label": "Choice Preference with Reasons",
+      "description": "Choose one side or option and justify your choice."
+    },
+    {
+      "id": "describe_and_evaluate",
+      "label": "Describe and Evaluate",
+      "description": "Describe a case/item and evaluate its impact."
+    },
+    {
+      "id": "issue_analysis_opinion",
+      "label": "Issue Analysis and Opinion",
+      "description": "Analyze an issue from key angles and provide a clear opinion."
+    }
+  ],
+  "difficultyScale": [
+    {
+      "value": 1,
+      "label": "Easy",
+      "description": "Direct wording and simple argument structure."
+    },
+    {
+      "value": 2,
+      "label": "Medium",
+      "description": "Standard complexity with 2-3 clear points."
+    },
+    {
+      "value": 3,
+      "label": "Hard",
+      "description": "Multi-part prompt or abstract reasoning needed."
+    }
+  ],
+  "editorialRules": [
+    "Use promptText as the canonical question text in all matching and history features.",
+    "Use displayTitle/sourceNumberLabel as compact display metadata only.",
+    "Prefer simple high-school level words in templates and sentence banks.",
+    "Keep primary topic taxonomy stable; do not add sparse top-level topics in phase1."
+  ]
+}

@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.local
+db/*.db
+db/*.db-*
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +26,32 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.agents/
+.codex/
+.omx/
+.playwright-cli/
+.tmp-opinion/
+.playwright-cli/*.png
+.playwright-cli/*.yml
+output/*.tmp
+output/*.json
+output/*.jsonl
+output/*.txt
+output/*.js
+output/*.ps1
+output/dev-server/
+output/playwright/results/*.json
+output/playwright/*.log
+output/playwright/*.err.log
+output/playwright/*.png
+output/playwright/*.js
+output/playwright/*.json
+
+# Generated script reports
+scripts/reports/*.json
+
+# Generated scrape outputs; keep data/ available for deliberate source data.
+data/firefly-rs-predictions.csv
+data/firefly-rs-predictions.json
+data/firefly-rs-predictions.report.md

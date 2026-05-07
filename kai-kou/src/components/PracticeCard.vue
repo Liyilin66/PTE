@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 defineProps({
   task: {
     type: Object,
@@ -33,6 +33,11 @@ defineProps({
           <path d="M15 3v5h5" />
           <path d="M10 12h6M10 16h6" />
         </svg>
+        <svg v-else-if="task.icon === 'rts'" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 5h14v9H9l-4 4z" />
+          <path d="M12 9h4" />
+          <path d="M8 12h8" />
+        </svg>
         <svg v-else viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 13v-2a8 8 0 1 1 16 0v2" />
           <path d="M4 13v4a2 2 0 0 0 2 2h2v-6H6a2 2 0 0 0-2 2z" />
@@ -45,8 +50,7 @@ defineProps({
         <p class="text-sm font-medium text-orange">{{ task.subtitle }}</p>
         <p class="mt-1 text-sm text-[#6B7280]">{{ task.description }}</p>
 
-        <div class="mt-3 flex items-center justify-between">
-          <span class="text-xs text-[#6B7280]">今日: {{ task.todayCount }} 题</span>
+        <div class="mt-3 flex justify-end">
           <span class="flex items-center gap-1 text-sm font-medium text-orange transition-all group-hover:gap-2">
             开始练习
             <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.4">
