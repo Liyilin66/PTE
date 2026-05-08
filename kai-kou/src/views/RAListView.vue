@@ -21,28 +21,12 @@ const searchQ = ref("");
 const selectedDiff = ref(normalizeDifficultyQuery(route.query.difficulty));
 const selectedStatus = ref("all");
 const practiceMode = ref("rand");
-const prepTime = ref(30);
 const raLogs = ref([]);
 const favoriteIds = ref(new Set());
 const favoriteBusyIds = ref(new Set());
 
 const RECENT_LOG_LIMIT = 600;
 const SCORE_WEAK_THRESHOLD = 60;
-
-const diffTabs = [
-  { val: "all", label: "全部" },
-  { val: "easy", label: "⭐ 简单" },
-  { val: "medium", label: "⭐⭐ 中等" },
-  { val: "hard", label: "⭐⭐⭐ 困难" }
-];
-
-const statusOpts = computed(() => [
-  { val: "all", label: "全部", icon: "📋" },
-  { val: "new", label: "未练习", icon: "🔵" },
-  { val: "done", label: "已练习", icon: "✅" },
-  { val: "weak", label: "需加强", icon: "⚠️" },
-  { val: "favorite", label: "已收藏", icon: "★" }
-]);
 
 const questionHistoryById = computed(() => {
   const grouped = new Map();
@@ -108,13 +92,43 @@ const diffCounts = computed(() => {
 });
 
 const diffOpts = computed(() => [
-  { val: "all", label: "全部", icon: "📚", count: diffCounts.value.all },
+  { val: "all", label: "全部难度", icon: "📚", count: diffCounts.value.all },
   { val: "easy", label: "简单", icon: "⭐", count: diffCounts.value.easy },
   { val: "medium", label: "中等", icon: "⭐⭐", count: diffCounts.value.medium },
   { val: "hard", label: "困难", icon: "⭐⭐⭐", count: diffCounts.value.hard }
 ]);
 
-const diffLabel = computed(() => diffOpts.value.find((item) => item.val === selectedDiff.value)?.label || "全部");
+const statusCounts = computed(() => {
+  let done = 0;
+  let weak = 0;
+  let favorite = 0;
+
+  for (const question of questionCards.value) {
+    if (question.hasHistory) done += 1;
+    if (question.isWeak) weak += 1;
+    if (question.isFavorite) favorite += 1;
+  }
+
+  const total = questionCards.value.length;
+  return {
+    all: total,
+    new: Math.max(0, total - done),
+    done,
+    weak,
+    favorite
+  };
+});
+
+const statusOpts = computed(() => [
+  { val: "all", label: "所有状态", icon: "📋", count: statusCounts.value.all },
+  { val: "new", label: "未练习", icon: "🔵", count: statusCounts.value.new },
+  { val: "done", label: "已练习", icon: "✅", count: statusCounts.value.done },
+  { val: "weak", label: "需加强", icon: "⚠️", count: statusCounts.value.weak },
+  { val: "favorite", label: "已收藏", icon: "★", count: statusCounts.value.favorite }
+]);
+
+const diffLabel = computed(() => diffOpts.value.find((item) => item.val === selectedDiff.value)?.label || "全部难度");
+const statusLabel = computed(() => statusOpts.value.find((item) => item.val === selectedStatus.value)?.label || "所有状态");
 
 const filteredList = computed(() => {
   let list = questionCards.value;
@@ -516,26 +530,7 @@ function normalizeText(value) {
     <div class="page-body">
       <aside class="filter-col">
         <div class="fc-section">
-          <div class="fc-title">难度筛选</div>
-          <div class="fc-opts">
-            <button
-              v-for="d in diffOpts"
-              :key="d.val"
-              class="fc-opt"
-              :class="{ active: selectedDiff === d.val }"
-              type="button"
-              :data-testid="`ra-diff-${d.val}`"
-              @click="selectedDiff = d.val"
-            >
-              <span class="fo-icon">{{ d.icon }}</span>
-              <span class="fo-label">{{ d.label }}</span>
-              <span class="fo-count">{{ d.count }}</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="fc-section">
-          <div class="fc-title">我的状态</div>
+          <div class="fc-title">练习状态</div>
           <div class="fc-opts">
             <button
               v-for="s in statusOpts"
@@ -548,6 +543,7 @@ function normalizeText(value) {
             >
               <span class="fo-icon">{{ s.icon }}</span>
               <span class="fo-label">{{ s.label }}</span>
+              <span class="fo-count">{{ s.count }}</span>
             </button>
           </div>
         </div>
@@ -601,19 +597,23 @@ function normalizeText(value) {
           <div class="sb-stats">
             共 <b data-testid="ra-result-count">{{ filteredList.length }}</b> 道题
             <span v-if="selectedDiff !== 'all'">· {{ diffLabel }}</span>
+            <span v-if="selectedStatus !== 'all'">· {{ statusLabel }}</span>
           </div>
         </div>
 
-        <div class="diff-tabs">
+        <div class="diff-tabs" aria-label="难度筛选">
           <button
-            v-for="d in diffTabs"
+            v-for="d in diffOpts"
             :key="d.val"
             class="dt-item"
             :class="{ active: selectedDiff === d.val }"
             type="button"
+            :data-testid="`ra-diff-${d.val}`"
             @click="selectedDiff = d.val"
           >
-            {{ d.label }}
+            <span class="dt-icon">{{ d.icon }}</span>
+            <span class="dt-label">{{ d.label }}</span>
+            <span class="dt-count">{{ d.count }}</span>
           </button>
         </div>
 
@@ -722,10 +722,7 @@ function normalizeText(value) {
             </div>
             <div class="setting-row">
               <span class="sr-label">准备时间</span>
-              <div class="sr-opts">
-                <button class="sr-opt" :class="{ act: prepTime === 30 }" type="button" @click="prepTime = 30">30s</button>
-                <button class="sr-opt" :class="{ act: prepTime === 40 }" type="button" @click="prepTime = 40">40s</button>
-              </div>
+              <span class="sr-fixed">40 秒准备</span>
             </div>
             <button class="start-all-btn" type="button" data-testid="ra-random-practice" @click="startFilteredPractice">
               🎙 开始练习全部筛选题
@@ -810,9 +807,12 @@ button:disabled{cursor:not-allowed;opacity:.58;}
 .sb-clear{color:var(--mute);font-size:12px;}
 .sb-stats{font-size:12px;color:var(--mute);white-space:nowrap;}
 .sb-stats b{color:var(--c0);}
-.diff-tabs{display:flex;gap:7px;}
-.dt-item{padding:6px 14px;border-radius:99px;font-size:12.5px;color:var(--mute);background:var(--card2);border:1px solid var(--bdr);transition:background .12s,color .12s;}
+.diff-tabs{display:flex;gap:7px;flex-wrap:wrap;}
+.dt-item{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:5px 10px;border-radius:99px;font-size:12.5px;color:var(--mute);background:var(--card2);border:1px solid var(--bdr);transition:background .12s,color .12s,border-color .12s;}
 .dt-item.active{background:var(--c2);color:#FAF6EF;border-color:var(--c2);font-weight:600;}
+.dt-icon{font-size:11.5px;line-height:1;}
+.dt-count{min-width:20px;height:18px;padding:0 6px;border-radius:99px;background:rgba(126,94,58,.12);color:var(--c1);font-size:10.5px;font-weight:700;line-height:18px;text-align:center;}
+.dt-item.active .dt-count{background:rgba(250,246,239,.18);color:#FAF6EF;}
 .q-list{display:flex;flex-direction:column;gap:10px;}
 .q-card{background:var(--card);border:1px solid var(--bdr);border-radius:13px;padding:14px 16px;transition:box-shadow .13s;}
 .q-card:hover{box-shadow:0 3px 12px rgba(44,21,8,.07);}
@@ -855,6 +855,7 @@ button:disabled{cursor:not-allowed;opacity:.58;}
 .sr-opts{display:flex;gap:4px;}
 .sr-opt{font-size:11px;padding:3px 10px;border-radius:6px;background:var(--card2);border:1px solid var(--bdr);color:var(--mute);}
 .sr-opt.act{background:var(--c2);color:#FAF6EF;border-color:var(--c2);}
+.sr-fixed{font-size:11px;font-weight:600;color:var(--c2);background:var(--card2);border:1px solid var(--bdr);border-radius:6px;padding:3px 10px;white-space:nowrap;}
 .start-all-btn{width:100%;background:var(--c2);color:#FAF6EF;border:none;border-radius:9px;padding:10px 0;font-size:12.5px;font-weight:600;font-family:inherit;margin-top:4px;}
 .dd-row{display:flex;align-items:center;gap:7px;}
 .dd-lbl{font-size:10.5px;font-weight:600;width:26px;flex-shrink:0;}

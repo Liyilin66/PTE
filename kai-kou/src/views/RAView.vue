@@ -29,6 +29,9 @@ const uiStore = useUIStore();
 const recorder = useRecorder();
 const timer = useTimer();
 
+const RA_PREP_SECONDS = 40;
+const RA_RECORDING_MAX_SECONDS = 40;
+
 const questionIndex = ref(1);
 const phase = computed(() => practiceStore.phase);
 const questionLoading = ref(true);
@@ -1043,7 +1046,7 @@ function startPreparing() {
   clearAttemptScopedUIState();
   prepareStartedAtMs.value = getNowMs();
   practiceStore.setPhase("preparing");
-  timer.start(30, startRecording);
+  timer.start(RA_PREP_SECONDS, startRecording);
 }
 
 async function startRecording() {
@@ -1055,7 +1058,7 @@ async function startRecording() {
       const elapsedPrepareMs = prepareStartedAtMs.value
         ? Math.max(0, getNowMs() - Number(prepareStartedAtMs.value || 0))
         : 0;
-      prepareElapsedSec.value = Math.min(30, Math.max(0, Math.round(elapsedPrepareMs / 1000)));
+      prepareElapsedSec.value = Math.min(RA_PREP_SECONDS, Math.max(0, Math.round(elapsedPrepareMs / 1000)));
     }
     if (phase.value === "preparing") {
       timer.stop();
@@ -1132,7 +1135,7 @@ async function startRecording() {
     finalizedTranscript.value = "";
     submitCallCount = 0;
     startRecordingTicker();
-    timer.start(40, handleSubmit);
+    timer.start(RA_RECORDING_MAX_SECONDS, handleSubmit);
   } catch (err) {
     const fallbackMessage = ERROR_TEXT.GENERIC_START_FAILED;
     resetToRetryableState(fallbackMessage);
@@ -1496,8 +1499,8 @@ async function startRecordingNow() {
             </div>
             <div class="info-row"><span>词数</span><strong>{{ wordCount }} 词</strong></div>
             <div class="info-row"><span>预计用时</span><strong>约 {{ estimatedDurationSeconds }} 秒</strong></div>
-            <div class="info-row"><span>准备时间</span><strong>30 秒</strong></div>
-            <div class="info-row"><span>录音时长</span><strong>最长 40 秒</strong></div>
+            <div class="info-row"><span>准备时间</span><strong>{{ RA_PREP_SECONDS }} 秒</strong></div>
+            <div class="info-row"><span>录音时长</span><strong>最长 {{ RA_RECORDING_MAX_SECONDS }} 秒</strong></div>
             <div class="rhythm-note">📖 阅读节奏：{{ readingRhythmHint }}</div>
           </div>
         </section>
