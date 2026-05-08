@@ -1,454 +1,416 @@
-﻿<script setup>
+<script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { useUIStore } from "@/stores/ui";
+import { BILLING_PAUSED, BILLING_PAUSED_MESSAGE } from "@/lib/billing";
 import {
   createEmptyHomeAnalytics,
   formatInteger,
-  formatScore,
   loadHomeAnalyticsSnapshotForAuth
 } from "@/lib/home-analytics";
-import {
-  createEmptyProfilePortrait,
-  loadProfilePortraitSnapshotForAuth
-} from "@/lib/profile-portrait";
 import {
   createEmptyProfileProgress,
   loadProfileProgressSnapshotForAuth
 } from "@/lib/profile-progress";
+import { supabase } from "@/lib/supabase";
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const uiStore = useUIStore();
 
 const selectedPlanKey = ref("month");
 const homeAnalytics = ref(createEmptyHomeAnalytics());
-const profilePortrait = ref(createEmptyProfilePortrait());
 const profileProgress = ref(createEmptyProfileProgress());
+const favoritesSnapshot = ref(createEmptyFavoritesSnapshot());
+const planSnapshot = ref(createEmptyPlanSnapshot());
+const avatarInputRef = ref(null);
+const avatarUploading = ref(false);
+const avatarUploadError = ref("");
 let profileRefreshPromise = null;
-const STREAK_MILESTONES = [
-  { days: 1, reward: "✅" },
-  { days: 3, reward: "⚡" },
-  { days: 7, reward: "🏆" },
-  { days: 14, reward: "🎯" },
-  { days: 30, reward: "🎁" }
+
+const navIconMap = {
+  home: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>',
+  list: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2"/><path d="M7 4v3.5l2 1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  spark: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1.5C4.24 1.5 2 3.74 2 6.5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" stroke="currentColor" stroke-width="1.2"/><path d="M5 6.5h4M7 4.5v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  square: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 5h5M4.5 8h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  report: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M1.5 11l3-4 3 2.5 3-5 2 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  box: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M1.5 3h11M1.5 7h7M1.5 11h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  circle: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>'
+};
+
+const navItems = [
+  { key: "home", label: "首页", icon: "home", to: "/home" },
+  { key: "practice", label: "练习中心", icon: "list", to: "/home#quick" },
+  { key: "agent", label: "AI 私教", icon: "spark", to: "/agent" },
+  { key: "plan", label: "学习计划", icon: "square", to: "/home#goal" },
+  { key: "report", label: "学习报告", icon: "report", to: "/home#report" },
+  { key: "library", label: "题库", icon: "box", to: "/home#quick" },
+  { key: "profile", label: "个人中心", icon: "circle", to: "/profile" }
 ];
-const WEEKDAY_SHORT_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 const plans = [
   {
     key: "week",
     name: "周卡",
     price: "6.9",
-    unit: "7 天无限",
-    per: "无试用期",
-    featured: false,
-    badge: ""
+    duration: "7 天",
+    tags: ["无限练习", "AI 私教", "专属分析"]
   },
   {
     key: "month",
     name: "月卡",
     price: "19.9",
-    unit: "30 天无限",
-    per: "含 每天 ¥0.66",
-    featured: true,
-    badge: "🔥 最划算"
+    duration: "30 天",
+    badge: "推荐",
+    recommended: true,
+    tags: ["无限练习", "AI 私教", "专属分析"]
   },
   {
     key: "lifetime",
     name: "永久卡",
     price: "49.9",
-    unit: "永久无限",
-    per: "一次购罄",
-    featured: false,
-    badge: ""
+    duration: "永久",
+    badge: "超值",
+    value: true,
+    tags: ["无限练习", "AI 私教", "专属分析"]
   }
 ];
 
-const heroStats = computed(() => [
-  {
-    key: "total",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.totalCount),
-    label: "累计题数"
-  },
-  {
-    key: "days",
-    value: homeAnalytics.value.loading ? "--" : formatInteger(homeAnalytics.value.activeDaysCount),
-    label: "累计天数"
-  },
-  {
-    key: "streak",
-    value: homeAnalytics.value.loading ? "--" : `🔥 ${formatInteger(homeAnalytics.value.currentStreak)}`,
-    label: "连续天数"
-  },
-  {
-    key: "score",
-    value: homeAnalytics.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore),
-    label: "平均评分"
-  }
-]);
-
-const heroStatIcons = ["", "", "🔥", ""];
-
-function formatHeroStatValue(value) {
-  const text = `${value ?? ""}`.trim();
-  if (!text) return "--";
-  if (/^[^\d-]/.test(text) && /\d/.test(text)) {
-    return text.replace(/^[^\d-]+\s*/, "");
-  }
-  return text;
-}
-const progressItemMeta = [
-  {
-    taskType: "RA",
-    icon: "🎙",
-    iconBg: "#EEF3FD",
-    name: "RA · 朗读",
-    fill: "#2563EB"
-  },
-  {
-    taskType: "WFD",
-    icon: "🎧",
-    iconBg: "#ECFDF3",
-    name: "WFD · 听写句子",
-    fill: "#059669"
-  },
-  {
-    taskType: "RTS",
-    icon: "💬",
-    iconBg: "#F4F3FF",
-    name: "RTS · 情景回应",
-    fill: "#6941C6"
-  },
-  {
-    taskType: "DI",
-    icon: "🖼",
-    iconBg: "var(--og-bg)",
-    name: "DI · 图片描述",
-    fill: "var(--orange)"
-  },
-  {
-    taskType: "RS",
-    icon: "🔊",
-    iconBg: "#EEF3FD",
-    name: "RS · 复述句子",
-    fill: "#4F7BEE"
-  },
-  {
-    taskType: "WE",
-    icon: "✍️",
-    iconBg: "#FFF2EA",
-    name: "WE · 写作",
-    fill: "#E36F35"
-  }
-];
-
-const liveProgressItems = computed(() =>
-  progressItemMeta.map((item) => {
-    const completedCountRaw = Number(profileProgress.value.completedCounts?.[item.taskType] || 0);
-    const totalCount = Number(profileProgress.value.totalCounts?.[item.taskType] || 0);
-    const completedCount = totalCount > 0
-      ? Math.min(completedCountRaw, totalCount)
-      : completedCountRaw;
-    const hasStarted = completedCount > 0;
-    const percent = totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0;
-
-    let pct = "同步中...";
-    let pctColor = "";
-    if (!profileProgress.value.loading) {
-      if (totalCount <= 0) {
-        pct = hasStarted ? "已练习" : "题库待同步";
-        pctColor = "var(--hi)";
-      } else if (hasStarted) {
-        pct = `${percent}%`;
-      } else {
-        pct = "未开始";
-        pctColor = "var(--hi)";
-      }
-    }
-
-    return {
-      ...item,
-      width: profileProgress.value.loading || !totalCount || !hasStarted
-        ? "0%"
-        : `${Math.max(percent, 4)}%`,
-      count: profileProgress.value.loading
-        ? "--/--"
-        : `${formatInteger(completedCount)}/${totalCount > 0 ? formatInteger(totalCount) : "--"}`,
-      pct,
-      pctColor
-    };
-  })
+const displayNavItems = computed(() =>
+  navItems.map((item) => ({
+    ...item,
+    icon: navIconMap[item.icon] || navIconMap.circle
+  }))
 );
 
-const settingsItems = [
-  {
-    icon: "🔔",
-    iconBg: "#EEF3FD",
-    label: "练习提醒",
-    sub: "每天 20:00",
-    value: "已开启",
-    badge: ""
-  },
-  {
-    icon: "🎯",
-    iconBg: "#ECFDF3",
-    label: "目标分数",
-    sub: "当前设定目标",
-    value: "58 分",
-    badge: ""
-  },
-  {
-    icon: "💬",
-    iconBg: "var(--og-bg)",
-    label: "意见反馈",
-    sub: "告诉开发者你的想法",
-    value: "",
-    badge: "有礼品"
-  },
-  {
-    icon: "🔐",
-    iconBg: "#F0EEFE",
-    label: "修改密码",
-    sub: "",
-    value: "",
-    badge: ""
-  },
-  {
-    icon: "ℹ️",
-    iconBg: "var(--bg)",
-    label: "关于开口",
-    sub: "v1.0.0 · 由开发者用爱发电",
-    value: "",
-    badge: ""
-  }
-];
-
+const profile = computed(() => authStore.profile || {});
 const userDisplayName = computed(() => authStore.displayName || "同学");
-
 const userInitial = computed(() => {
   const first = `${userDisplayName.value || ""}`.trim().charAt(0);
   return first ? first.toUpperCase() : "K";
 });
-
-const userEmail = computed(() => {
-  return `${authStore.user?.email || authStore.profile?.email || ""}`.trim();
-});
-
-const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
-const avatarInputRef = ref(null);
-const avatarUploading = ref(false);
-const avatarUploadError = ref("");
-
-const trialPillText = computed(() => {
-  if (!authStore.loaded) return "状态同步中";
-  if (authStore.isPremium) return "VIP · 已开通";
-  if (authStore.isInTrial) return `试用中 · 剩余 ${authStore.trialDaysLeft} 天`;
-  if (authStore.accessStatus === "trial_expired") return "试用已结束";
-  return "当前暂无练习权限";
-});
-
-const selectedPlan = computed(
-  () => plans.find((plan) => plan.key === selectedPlanKey.value) || plans[1]
+const userEmail = computed(() =>
+  normalizeText(authStore.user?.email || profile.value?.email)
+);
+const userAvatarUrl = computed(() => normalizeText(authStore.avatarUrl));
+const emailVerified = computed(() =>
+  Boolean(authStore.user?.email_confirmed_at || authStore.user?.confirmed_at)
 );
 
-const ctaLabel = computed(() => `立即升级${selectedPlan.value.name} · ¥${selectedPlan.value.price}`);
-const portraitMetrics = computed(() =>
-  profilePortrait.value.metrics.map((item) => ({
-    ...item,
-    displayScore: item.score > 0 ? formatInteger(item.score) : "--",
-    barPercent: item.score > 0 ? Math.round((item.score / 90) * 100) : 0
-  }))
+const profileLocation = computed(() => {
+  const city = pickText(
+    profile.value?.city,
+    profile.value?.location_city,
+    profile.value?.study_city,
+    authStore.user?.user_metadata?.city
+  );
+  const country = pickText(
+    profile.value?.country,
+    profile.value?.region,
+    profile.value?.location_country,
+    authStore.user?.user_metadata?.country
+  );
+  const explicitLocation = pickText(
+    profile.value?.location,
+    profile.value?.region_city,
+    authStore.user?.user_metadata?.location
+  );
+
+  if (city && country) return `${city}, ${country}`;
+  return explicitLocation || city || country || "Melbourne, Australia";
+});
+
+const targetScore = computed(() =>
+  formatTargetScore(
+    pickText(
+      profile.value?.target_score,
+      profile.value?.targetScore,
+      profile.value?.goal_score,
+      profile.value?.goalScore,
+      profile.value?.pte_target_score,
+      authStore.user?.user_metadata?.target_score
+    ) || "79+"
+  )
 );
 
-const portraitSampleCount = computed(() => {
-  const totalFromHome = Number(homeAnalytics.value.totalCount || 0);
-  if (totalFromHome > 0) return totalFromHome;
-  return Number(profilePortrait.value.sampleCount || 0);
-});
-
-const portraitSampleLabel = computed(() => {
-  if (profilePortrait.value.loading) return "画像生成中...";
-  return `基于 ${formatInteger(portraitSampleCount.value)} 条作答`;
-});
-
-const portraitAdvice = computed(() => profilePortrait.value.advice);
-
-const radarChart = computed(() => buildRadarChart(portraitMetrics.value));
-const currentStreak = computed(() => Math.max(0, Number(homeAnalytics.value.currentStreak || 0)));
-const currentGoalDays = computed(() => {
-  if (currentStreak.value < 7) return 7;
-  if (currentStreak.value < 14) return 14;
-  if (currentStreak.value < 30) return 30;
-  return 30;
-});
-const streakGoalGap = computed(() => Math.max(0, currentGoalDays.value - currentStreak.value));
-const streakRingProgress = computed(() => {
-  if (homeAnalytics.value.loading) return 0;
-  if (!currentGoalDays.value) return 0;
-  return Math.max(0, Math.min(currentStreak.value / currentGoalDays.value, 1));
-});
-const streakRingDashoffset = computed(() => (276.5 * (1 - streakRingProgress.value)).toFixed(1));
-const streakHeading = computed(() => `连续练习 ${formatInteger(currentStreak.value)} 天`);
-const streakSummary = computed(() => {
-  if (homeAnalytics.value.loading) return "正在根据真实练习记录同步状态...";
-
-  if (currentStreak.value <= 0) {
-    if (Number(homeAnalytics.value.totalCount || 0) > 0) {
-      return "今天尚未练习，连续记录已中断";
-    }
-    return "完成第一题后即可开始累计连续记录";
-  }
-
-  if (currentStreak.value < 7) {
-    return `距 7 天目标还差 ${formatInteger(7 - currentStreak.value)} 天 · 继续加油`;
-  }
-
-  if (currentStreak.value < 14) {
-    return `7 天里程碑已解锁 · 距 14 天目标还差 ${formatInteger(14 - currentStreak.value)} 天`;
-  }
-
-  if (currentStreak.value < 30) {
-    return `14 天里程碑已解锁 · 距 30 天目标还差 ${formatInteger(30 - currentStreak.value)} 天`;
-  }
-
-  return `30 天里程碑已解锁 · 当前已连续 ${formatInteger(currentStreak.value)} 天`;
-});
-const nextMilestoneIndex = computed(() =>
-  STREAK_MILESTONES.findIndex((item) => currentStreak.value < item.days)
+const examDate = computed(() =>
+  formatDateValue(
+    pickText(
+      profile.value?.exam_date,
+      profile.value?.examDate,
+      profile.value?.test_date,
+      profile.value?.testDate,
+      profile.value?.target_exam_date,
+      authStore.user?.user_metadata?.exam_date
+    ),
+    "2026-08-18"
+  )
 );
-const milestoneSteps = computed(() =>
-  STREAK_MILESTONES.map((item, index) => {
-    const completed = currentStreak.value >= item.days;
-    const active = !completed && index === nextMilestoneIndex.value;
-    return {
-      ...item,
-      key: `milestone-${item.days}` ,
-      daysLabel: `${item.days}天`,
-      circle: completed ? "✓" : active ? "🔥" : `${item.days}`,
-      state: completed ? "done" : active ? "active" : ""
-    };
-  })
+
+const currentStage = computed(() =>
+  pickText(
+    profile.value?.current_stage,
+    profile.value?.currentStage,
+    profile.value?.stage,
+    profile.value?.learning_stage,
+    authStore.user?.user_metadata?.current_stage
+  ) || inferStageFromScore() || "冲刺提升"
 );
-const milestoneSegments = computed(() =>
-  STREAK_MILESTONES.slice(1).map((item, index) => ({
-    key: `segment-${item.days}`,
-    completed: currentStreak.value >= item.days,
-    index
-  }))
-);
-const streakTip = computed(() => {
-  if (homeAnalytics.value.loading) {
-    return {
-      icon: "🎯",
-      title: "正在根据真实练习记录计算里程碑状态",
-      subtitle: "节点、链条和周练习题数会在数据同步后自动更新"
-    };
-  }
 
-  if (Number(homeAnalytics.value.totalCount || 0) <= 0) {
-    return {
-      icon: "🎯",
-      title: "完成今天的第一题即可开始累计 7 天里程碑奖励",
-      subtitle: "连续打卡和本周练习统计会跟随真实练习记录自动更新"
-    };
+const membershipPill = computed(() => {
+  if (!authStore.loaded) {
+    return { kind: "loading", icon: "⌛", label: "状态同步中" };
   }
-
-  if (currentStreak.value < 7) {
-    return {
-      icon: "🎯",
-      title: `再练 ${formatInteger(7 - currentStreak.value)} 天即可解锁 7 天里程碑奖励`,
-      subtitle: currentStreak.value > 0
-        ? `当前已连续练习 ${formatInteger(currentStreak.value)} 天`
-        : "今天尚未练习，连续记录已中断"
-    };
+  if (authStore.isPremium) {
+    return { kind: "vip", icon: "♛", label: "VIP 无限练习" };
   }
-
-  if (currentStreak.value < 14) {
-    return {
-      icon: "🏆",
-      title: `7 天里程碑奖励已解锁，距离 14 天还差 ${formatInteger(14 - currentStreak.value)} 天`,
-      subtitle: `当前已连续练习 ${formatInteger(currentStreak.value)} 天`
-    };
+  if (authStore.isInTrial) {
+    return { kind: "trial", icon: "✦", label: `试用 ${formatInteger(authStore.trialDaysLeft)} 天` };
   }
-
-  if (currentStreak.value < 30) {
-    return {
-      icon: "🎯",
-      title: `14 天里程碑奖励已解锁，距离 30 天还差 ${formatInteger(30 - currentStreak.value)} 天`,
-      subtitle: `当前已连续练习 ${formatInteger(currentStreak.value)} 天`
-    };
-  }
-
-  return {
-    icon: "🎁",
-    title: "30 天里程碑奖励已解锁",
-    subtitle: `当前已连续练习 ${formatInteger(currentStreak.value)} 天，全部阶段已达成`
-  };
+  return { kind: "locked", icon: "◇", label: "未开通" };
 });
-const weekMaxCount = computed(() =>
-  Math.max(...homeAnalytics.value.recentDays.map((item) => Number(item.count || 0)), 0)
-);
-const weeklyBars = computed(() =>
-  homeAnalytics.value.recentDays.map((item) => {
-    const count = Number(item.count || 0);
-    const ratio = weekMaxCount.value > 0 ? count / weekMaxCount.value : 0;
-    return {
-      key: item.key,
-      label: item.isToday ? "今" : `${item.label || ""}`.replace(/^周/, "").slice(-1),
-      today: item.isToday,
-      has: count > 0,
-      count,
-      height: count > 0 ? `${Math.max(14, Math.round(ratio * 100))}%` : "3px"
-    };
-  })
-);
-const heroStudyRingProgress = computed(() => {
-  const score = Number(homeAnalytics.value.averageScore ?? 0);
-  if (homeAnalytics.value.loading || !Number.isFinite(score) || score <= 0) return 0;
-  return Math.max(0, Math.min(score / 90, 1));
-});
-const heroStudyRingDegree = computed(() => `${(heroStudyRingProgress.value * 360).toFixed(1)}deg`);
-const heroStudyScore = computed(() =>
-  homeAnalytics.value.loading ? "--" : formatScore(homeAnalytics.value.averageScore)
-);
-const heroStudyStatus = computed(() => {
-  if (homeAnalytics.value.loading) return "正在同步你的学习状态...";
 
-  const totalCount = Number(homeAnalytics.value.totalCount || 0);
-  const averageScore = Number(homeAnalytics.value.averageScore || 0);
-
-  if (totalCount <= 0) return "开始第一题后，这里会自动点亮。";
-  if (averageScore >= 60) return "状态在线，继续保持冲分节奏！";
-  if (averageScore >= 45) return "继续保持，稳步提升中！";
-  return "基础在累积，坚持练习会更稳。";
+const currentPlanLabel = computed(() => {
+  if (!authStore.loaded) return "同步中";
+  if (authStore.isPremium) {
+    const plan = normalizeText(profile.value?.vip_plan);
+    if (plan === "week") return "VIP 周卡";
+    if (plan === "month") return "VIP 月卡";
+    return "VIP 无限练习";
+  }
+  if (authStore.isInTrial) return `试用中 · 剩余 ${formatInteger(authStore.trialDaysLeft)} 天`;
+  return "暂未开通";
 });
-const heroStudyFacts = computed(() => [
-  `累计练习 ${formatInteger(homeAnalytics.value.totalCount)} 题`,
-  `已坚持 ${formatInteger(homeAnalytics.value.activeDaysCount)} 天`
+
+const membershipSummary = computed(() => {
+  if (!authStore.loaded) return "当前套餐：正在同步会员状态";
+  if (authStore.isPremium) {
+    const expiresAt = formatDateValue(profile.value?.vip_expires_at, "");
+    const suffix = expiresAt ? `有效期至 ${expiresAt}` : "长期有效";
+    return `当前套餐：${currentPlanLabel.value}（${suffix}）`;
+  }
+  if (authStore.isInTrial) return `当前套餐：试用权益（剩余 ${formatInteger(authStore.trialDaysLeft)} 天）`;
+  return "当前套餐：未开通";
+});
+
+const profileInfoRows = computed(() => [
+  { icon: "◎", label: "目标分数", value: targetScore.value, strong: true },
+  { icon: "▣", label: "考试日期", value: examDate.value, strong: true },
+  { icon: "◉", label: "当前阶段", value: currentStage.value, strong: true },
+  {
+    icon: "✉",
+    label: "邮箱",
+    value: userEmail.value || "邮箱未绑定",
+    badge: emailVerified.value ? "已验证" : "未验证",
+    badgeTone: emailVerified.value ? "ok" : "warn"
+  }
 ]);
-const heroWeekSummary = computed(() => {
-  if (homeAnalytics.value.loading) return "正在同步本周练习频率";
-  return `已练习 ${formatInteger(homeAnalytics.value.activeDaysCount)} 天 · 当前连续 ${formatInteger(currentStreak.value)} 天`;
+
+const accountStatusRows = computed(() => [
+  {
+    label: "最近一次登录",
+    value: formatLastLogin(authStore.user?.last_sign_in_at),
+    icon: "◉",
+    color: "purple"
+  },
+  {
+    label: "考员状态",
+    value: buildVipStatusText(),
+    icon: "♛",
+    color: "gold"
+  },
+  {
+    label: "做题时长/天数",
+    value: buildPracticeTimeText(),
+    icon: "◈",
+    color: "green"
+  },
+  {
+    label: "AI 私教记忆",
+    value: buildAgentMemoryText(),
+    icon: "A",
+    color: "blue"
+  },
+  {
+    label: "今日计划状态",
+    value: buildPlanStatusText(),
+    icon: "✓",
+    color: "teal"
+  }
+]);
+
+const identityConfig = computed(() => [
+  { label: "目标分数", value: targetScore.value, icon: "↗", color: "blue" },
+  { label: "重点模块", value: focusModules.value, icon: "▣", color: "purple" },
+  { label: "每日学习时长", value: dailyStudyTime.value, icon: "◷", color: "cyan" },
+  { label: "最佳时段", value: bestStudyWindow.value, icon: "☼", color: "gold" },
+  { label: "AI 建议强度", value: aiIntensity.value, icon: "✕", color: "red" }
+]);
+
+const focusModules = computed(() => {
+  const explicit = normalizeListValue(
+    profile.value?.focus_modules ||
+    profile.value?.focusModules ||
+    profile.value?.priority_modules ||
+    authStore.user?.user_metadata?.focus_modules
+  );
+  if (explicit.length) return explicit.slice(0, 4).join(" / ");
+
+  const completedCounts = profileProgress.value?.completedCounts || {};
+  const ranked = ["RA", "DI", "WFD", "RTS", "WE", "RS"]
+    .map((taskType) => ({
+      taskType,
+      count: Number(completedCounts[taskType] || 0)
+    }))
+    .sort((left, right) => left.count - right.count)
+    .map((item) => item.taskType);
+
+  return ranked.slice(0, 3).join(" / ") || "RA / DI / WFD";
 });
-const heroWeekDots = computed(() =>
-  homeAnalytics.value.recentDays.map((item, index) => ({
-    key: item.key,
-    label: WEEKDAY_SHORT_LABELS[index] || `${index + 1}`,
-    active: Number(item.count || 0) > 0,
-    today: Boolean(item.isToday)
-  }))
+
+const dailyStudyTime = computed(() => {
+  const explicit = pickText(
+    profile.value?.daily_study_time,
+    profile.value?.dailyStudyTime,
+    profile.value?.daily_minutes,
+    profile.value?.dailyStudyMinutes
+  );
+  if (explicit) return /\d/.test(explicit) && !explicit.includes("分钟") ? `${explicit} 分钟` : explicit;
+  if (planSnapshot.value.plan?.total_minutes) {
+    return `${formatInteger(planSnapshot.value.plan.total_minutes)} 分钟`;
+  }
+  return "60-90 分钟";
+});
+
+const bestStudyWindow = computed(() =>
+  pickText(
+    profile.value?.best_study_time,
+    profile.value?.bestStudyTime,
+    profile.value?.preferred_study_time,
+    profile.value?.study_window
+  ) || "晚上 19:00-22:00"
 );
-const heroQuoteLines = ["每一次练习，", "都是通往更好的自己。"];
+
+const aiIntensity = computed(() =>
+  pickText(
+    profile.value?.ai_intensity,
+    profile.value?.aiIntensity,
+    profile.value?.coach_intensity,
+    authStore.user?.user_metadata?.ai_intensity
+  ) || "标准"
+);
+
+const favorites = computed(() => {
+  const summary = favoritesSnapshot.value;
+  const total = summary.totalCount;
+  const templateCount = summary.countsByTask.RTS || summary.countsByTask.WE || 0;
+  const questionCount = total;
+  const materialCount = readLocalMaterialCount();
+
+  return [
+    { label: "收藏模板", count: templateCount, icon: "★", color: "gold" },
+    { label: "收藏题目", count: questionCount, icon: "▣", color: "green" },
+    { label: "收藏资料", count: materialCount, icon: "▤", color: "blue" }
+  ];
+});
+
+const favoritesSourceNote = computed(() => {
+  if (favoritesSnapshot.value.loading) return "同步中";
+  if (favoritesSnapshot.value.source === "error") return "同步失败";
+  if (favoritesSnapshot.value.source === "local_missing_table") return "本地记录";
+  return "";
+});
+
+const commonModules = computed(() => {
+  const taskCounts = homeAnalytics.value?.taskWeekCounts || {};
+  const ranked = Object.entries(taskCounts)
+    .filter(([, count]) => Number(count || 0) > 0)
+    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))
+    .map(([taskType]) => taskType);
+
+  return (ranked.length ? ranked : ["RA", "DI", "WFD"]).slice(0, 3).concat("AI 私教");
+});
+
+const recentPages = computed(() => {
+  const lastTask = normalizeText(homeAnalytics.value?.lastPracticeTaskType);
+  const pages = [lastTask && `${lastTask} 练习`, "AI 私教", "学习报告", "题库"].filter(Boolean);
+  return [...new Set(pages)].slice(0, 4);
+});
+
+const devices = computed(() => {
+  const current = detectCurrentDevice();
+  return [
+    {
+      icon: current.icon,
+      name: current.name,
+      meta: current.meta,
+      status: "当前设备",
+      current: true
+    },
+    {
+      icon: "▯",
+      name: "iPhone 13",
+      meta: "iOS · Safari",
+      status: "3 小时前",
+      current: false
+    }
+  ];
+});
+
+const loginRecords = computed(() => {
+  const current = detectCurrentDevice();
+  return [
+    {
+      icon: current.icon,
+      device: current.name,
+      location: profileLocation.value,
+      status: "当前在线",
+      online: true
+    },
+    {
+      icon: "▯",
+      device: "iPhone 13",
+      location: profileLocation.value,
+      status: "3 小时前"
+    },
+    {
+      icon: "▭",
+      device: "Windows PC",
+      location: profileLocation.value,
+      status: "昨天 11:42"
+    },
+    {
+      icon: "▭",
+      device: "iPad Air (5th gen)",
+      location: profileLocation.value,
+      status: "05-06 18:21"
+    }
+  ];
+});
+
+function isNavActive(item) {
+  if (item.key === "profile") return route.path === "/profile";
+  if (item.key === "home") return route.path === "/home" || route.path === "/";
+  return route.path === item.to || route.fullPath === item.to;
+}
+
+function goTo(path) {
+  const normalized = normalizeText(path);
+  if (!normalized) return;
+  if (normalized === route.fullPath) return;
+  router.push(normalized);
+}
 
 function selectPlan(planKey) {
   selectedPlanKey.value = planKey;
 }
 
-function goBack() {
-  router.push("/home");
-}
-
 function openUpgrade() {
+  if (BILLING_PAUSED) {
+    uiStore.showToast(BILLING_PAUSED_MESSAGE, "info", 3600);
+  }
   router.push({
     path: "/upgrade",
     query: {
@@ -457,9 +419,25 @@ function openUpgrade() {
   });
 }
 
-async function handleLogout() {
-  await authStore.logout();
-  router.replace("/auth");
+function handleEditProfile() {
+  uiStore.showToast("当前可先更换头像；昵称、城市等资料表单待接入。", "info");
+  triggerAvatarPicker();
+}
+
+function handleEditLearningConfig() {
+  uiStore.showToast("学习配置暂以 profiles/AI 计划读取为主，编辑表单待接入。", "info");
+}
+
+function openFavorites() {
+  router.push("/rts/favorites");
+}
+
+function openCommonContent() {
+  router.push("/home#quick");
+}
+
+function showLoginRecordsNotice() {
+  uiStore.showToast("登录设备记录目前是前端展示，待新增登录记录表/API 后可查看真实列表。", "info");
 }
 
 function triggerAvatarPicker() {
@@ -475,15 +453,17 @@ async function handleAvatarFileChange(event) {
   }
   if (!file) return;
 
-  avatarUploadError.value = "请选择图片文件";
+  avatarUploadError.value = "";
 
   if (!String(file.type || "").startsWith("image/")) {
     avatarUploadError.value = "请选择图片文件";
+    uiStore.showToast(avatarUploadError.value, "warning");
     return;
   }
 
   if (Number(file.size || 0) > 8 * 1024 * 1024) {
-    avatarUploadError.value = "请选择图片文件";
+    avatarUploadError.value = "图片不能超过 8MB";
+    uiStore.showToast(avatarUploadError.value, "warning");
     return;
   }
 
@@ -491,12 +471,403 @@ async function handleAvatarFileChange(event) {
   try {
     const avatarDataUrl = await createAvatarDataUrl(file);
     await authStore.updateAvatarDataUrl(avatarDataUrl);
+    uiStore.showToast("头像已更新", "success");
   } catch (error) {
     console.error("Avatar upload failed:", error);
     avatarUploadError.value = error?.message || "头像上传失败，请稍后重试";
+    uiStore.showToast(avatarUploadError.value, "warning");
   } finally {
     avatarUploading.value = false;
   }
+}
+
+async function loadProfileSnapshots({ reset = false } = {}) {
+  if (profileRefreshPromise) {
+    return profileRefreshPromise;
+  }
+
+  if (reset) {
+    homeAnalytics.value = createEmptyHomeAnalytics();
+    profileProgress.value = createEmptyProfileProgress();
+    favoritesSnapshot.value = createEmptyFavoritesSnapshot();
+    planSnapshot.value = createEmptyPlanSnapshot();
+  }
+
+  profileRefreshPromise = (async () => {
+    await authStore.init();
+    if (!authStore.loaded) {
+      await authStore.loadStatus();
+    }
+
+    const [
+      analyticsSnapshot,
+      progressSnapshot,
+      favoriteSummary,
+      todayPlan
+    ] = await Promise.all([
+      loadHomeAnalyticsSnapshotForAuth(authStore),
+      loadProfileProgressSnapshotForAuth(authStore),
+      loadFavoritesSnapshotForAuth(),
+      loadTodayPlanSnapshotForAuth()
+    ]);
+
+    homeAnalytics.value = analyticsSnapshot;
+    profileProgress.value = progressSnapshot;
+    favoritesSnapshot.value = favoriteSummary;
+    planSnapshot.value = todayPlan;
+  })();
+
+  try {
+    await profileRefreshPromise;
+  } finally {
+    profileRefreshPromise = null;
+  }
+}
+
+function handleProfileFocusRefresh() {
+  void loadProfileSnapshots({ reset: false });
+}
+
+function handleProfileVisibilityChange() {
+  if (typeof document === "undefined") return;
+  if (document.visibilityState !== "visible") return;
+  void loadProfileSnapshots({ reset: false });
+}
+
+onMounted(async () => {
+  await loadProfileSnapshots({ reset: true });
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", handleProfileFocusRefresh);
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handleProfileVisibilityChange);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("focus", handleProfileFocusRefresh);
+  }
+  if (typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", handleProfileVisibilityChange);
+  }
+});
+
+function buildVipStatusText() {
+  if (!authStore.loaded) return "会员状态同步中";
+  if (authStore.isPremium) {
+    const expiresAt = formatDateValue(profile.value?.vip_expires_at, "");
+    return expiresAt ? `${currentPlanLabel.value} · 有效期至 ${expiresAt}` : `${currentPlanLabel.value} · 长期有效`;
+  }
+  if (authStore.isInTrial) return `试用中 · 剩余 ${formatInteger(authStore.trialDaysLeft)} 天`;
+  return "未开通 VIP";
+}
+
+function buildPracticeTimeText() {
+  if (homeAnalytics.value.loading) return "练习记录同步中";
+  const weekMinutes = Number(homeAnalytics.value.weekMinutes || 0);
+  const activeDays = Number(homeAnalytics.value.activeDaysCount || 0);
+  if (weekMinutes > 0) return `本周 ${formatInteger(weekMinutes)} 分钟 · 累计 ${formatInteger(activeDays)} 天`;
+  return `累计 ${formatInteger(activeDays)} 天 · 做题时长待同步`;
+}
+
+function buildAgentMemoryText() {
+  if (!authStore.loaded || planSnapshot.value.loading) return "同步中";
+  if (!authStore.isPremium && !authStore.isInTrial) return "未启用 · VIP 专属";
+  if (planSnapshot.value.reasonCode === "table_missing") return "待配置 · 计划表未创建";
+  if (planSnapshot.value.reasonCode === "progress_error") return "已启用 · 进度同步失败";
+  if (planSnapshot.value.reasonCode === "error") return "同步失败";
+  if (planSnapshot.value.plan) {
+    const updatedAt = formatShortTime(planSnapshot.value.plan.updated_at || planSnapshot.value.plan.created_at);
+    return updatedAt ? `已启用 · 计划更新于 ${updatedAt}` : "已启用 · 今日计划已同步";
+  }
+  return "已启用 · 今日暂无计划";
+}
+
+function buildPlanStatusText() {
+  if (planSnapshot.value.loading) return "计划同步中";
+  if (planSnapshot.value.reasonCode === "progress_error") return "计划进度同步失败";
+  if (planSnapshot.value.reasonCode === "error") return "AI 计划同步失败";
+  const progress = planSnapshot.value.progress;
+  if (progress?.targetCount > 0) {
+    if (progress.isComplete) {
+      return `已完成 · ${formatInteger(progress.completedCount)} / ${formatInteger(progress.targetCount)} 项`;
+    }
+    return `进行中 · 已完成 ${formatInteger(progress.completedCount)} / ${formatInteger(progress.targetCount)} 项`;
+  }
+  if (homeAnalytics.value.todayCount > 0) {
+    return `暂无 AI 计划 · 今日已练 ${formatInteger(homeAnalytics.value.todayCount)} 题`;
+  }
+  return "暂无计划 · 可在 AI 私教生成";
+}
+
+function inferStageFromScore() {
+  const average = Number(homeAnalytics.value.averageScore);
+  if (!Number.isFinite(average) || average <= 0) return "";
+  if (average >= 75) return "冲刺提升";
+  if (average >= 58) return "稳步提分";
+  return "基础巩固";
+}
+
+async function loadFavoritesSnapshotForAuth() {
+  const userId = await resolveCurrentUserId();
+  if (!userId) {
+    return {
+      ...createEmptyFavoritesSnapshot(),
+      loading: false,
+      source: "auth_missing"
+    };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("favorites")
+      .select("task_type, question_id, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1000);
+
+    if (error) {
+      if (isMissingTableError(error, "favorites")) {
+        const localCounts = readLocalFavoriteCounts(userId);
+        return buildFavoritesSnapshotFromCounts(localCounts, "local_missing_table");
+      }
+      throw error;
+    }
+
+    const countsByTask = {};
+    (Array.isArray(data) ? data : []).forEach((row) => {
+      const taskType = normalizeTaskType(row?.task_type) || "OTHER";
+      countsByTask[taskType] = (countsByTask[taskType] || 0) + 1;
+    });
+
+    return buildFavoritesSnapshotFromCounts(countsByTask, "remote");
+  } catch (error) {
+    console.warn("Favorites summary load failed:", error);
+    return {
+      ...createEmptyFavoritesSnapshot(),
+      loading: false,
+      source: "error"
+    };
+  }
+}
+
+async function loadTodayPlanSnapshotForAuth() {
+  const userId = await resolveCurrentUserId();
+  if (!userId) {
+    return {
+      ...createEmptyPlanSnapshot(),
+      loading: false,
+      reasonCode: "auth_missing"
+    };
+  }
+
+  const dateKey = getLocalDateKey();
+
+  try {
+    const { data, error } = await supabase
+      .from("agent_daily_plans")
+      .select("id, user_id, plan_date, title, source, plan_json, created_at, updated_at")
+      .eq("user_id", userId)
+      .eq("plan_date", dateKey)
+      .maybeSingle();
+
+    if (error) {
+      if (isMissingTableError(error, "agent_daily_plans")) {
+        return {
+          ...createEmptyPlanSnapshot(),
+          loading: false,
+          reasonCode: "table_missing"
+        };
+      }
+      throw error;
+    }
+
+    if (!data) {
+      return {
+        ...createEmptyPlanSnapshot(),
+        loading: false,
+        reasonCode: "no_plan"
+      };
+    }
+
+    const plan = normalizePlanRow(data);
+    const progress = await loadPlanProgress({ userId, plan, dateKey });
+
+    return {
+      loading: false,
+      reasonCode: "ok",
+      plan,
+      progress
+    };
+  } catch (error) {
+    console.warn("Agent plan summary load failed:", error);
+    if (error?.profileViewReasonCode === "progress_error") {
+      return {
+        ...createEmptyPlanSnapshot(),
+        loading: false,
+        reasonCode: "progress_error"
+      };
+    }
+    return {
+      ...createEmptyPlanSnapshot(),
+      loading: false,
+      reasonCode: "error"
+    };
+  }
+}
+
+async function loadPlanProgress({ userId, plan, dateKey }) {
+  const { startIso, endIso } = getLocalDayRange(dateKey);
+  const { data, error } = await supabase
+    .from("practice_logs")
+    .select("id, task_type, created_at")
+    .eq("user_id", userId)
+    .gte("created_at", startIso)
+    .lt("created_at", endIso);
+
+  if (error) {
+    const progressError = new Error(error.message || "Plan progress load failed");
+    progressError.profileViewReasonCode = "progress_error";
+    progressError.cause = error;
+    throw progressError;
+  }
+
+  const counts = {};
+  if (Array.isArray(data)) {
+    data.forEach((row) => {
+      const taskType = normalizeTaskType(row?.task_type);
+      if (!taskType) return;
+      counts[taskType] = (counts[taskType] || 0) + 1;
+    });
+  }
+
+  let completedCount = 0;
+  let targetCount = 0;
+  (Array.isArray(plan.items) ? plan.items : []).forEach((item) => {
+    const taskType = normalizeTaskType(item?.task_type);
+    const target = Math.max(1, Math.round(Number(item?.target_count || item?.count || 1)));
+    const completed = Math.min(Math.max(0, Number(counts[taskType] || 0)), target);
+    targetCount += target;
+    completedCount += completed;
+  });
+
+  return {
+    completedCount,
+    targetCount,
+    isComplete: targetCount > 0 && completedCount >= targetCount
+  };
+}
+
+function normalizePlanRow(row) {
+  const rawPlan = isPlainObject(row?.plan_json) ? row.plan_json : {};
+  const rawItems = Array.isArray(rawPlan?.items) ? rawPlan.items : [];
+  const items = rawItems.map((item) => ({
+    task_type: normalizeTaskType(item?.task_type || item?.type),
+    label: normalizeText(item?.label),
+    count: Math.max(1, Math.round(Number(item?.count || item?.target_count || 1))),
+    minutes: Math.max(0, Math.round(Number(item?.minutes || 0)))
+  })).filter((item) => item.task_type);
+
+  return {
+    id: normalizeText(row?.id),
+    plan_date: normalizeText(row?.plan_date),
+    title: normalizeText(row?.title || rawPlan?.title) || "今日 AI 训练计划",
+    source: normalizeText(row?.source || rawPlan?.source),
+    total_minutes: Math.max(0, Math.round(Number(rawPlan?.total_minutes || sumBy(items, "minutes") || 0))),
+    created_at: normalizeText(row?.created_at),
+    updated_at: normalizeText(row?.updated_at),
+    items
+  };
+}
+
+function createEmptyFavoritesSnapshot() {
+  return {
+    loading: true,
+    source: "loading",
+    totalCount: 0,
+    countsByTask: {}
+  };
+}
+
+function createEmptyPlanSnapshot() {
+  return {
+    loading: true,
+    reasonCode: "loading",
+    plan: null,
+    progress: null
+  };
+}
+
+function buildFavoritesSnapshotFromCounts(countsByTask, source) {
+  const safeCounts = isPlainObject(countsByTask) ? countsByTask : {};
+  return {
+    loading: false,
+    source,
+    totalCount: Object.values(safeCounts).reduce((sum, value) => sum + Number(value || 0), 0),
+    countsByTask: safeCounts
+  };
+}
+
+function readLocalFavoriteCounts(userId) {
+  const taskTypes = ["RA", "RTS", "DI"];
+  return taskTypes.reduce((counts, taskType) => {
+    const key = `kai_kou_${taskType.toLowerCase()}_favorites_${userId}`;
+    counts[taskType] = readJsonArrayLengthFromLocalStorage(key);
+    return counts;
+  }, {});
+}
+
+function readLocalMaterialCount() {
+  if (typeof localStorage === "undefined") return 0;
+  const userId = normalizeText(authStore.user?.id);
+  if (!userId) return 0;
+
+  const scopedKeys = [
+    `kai_kou_saved_materials_${userId}`,
+    `kai_kou_saved_materials:${userId}`,
+    `kai_kou_material_favorites_${userId}`
+  ];
+
+  const scopedCount = scopedKeys.reduce((total, key) => (
+    total + readJsonArrayLengthFromLocalStorage(key)
+  ), 0);
+
+  if (scopedCount > 0) return scopedCount;
+
+  return readJsonArrayLengthFromLocalStorage("kai_kou_saved_materials", userId);
+}
+
+function readJsonArrayLengthFromLocalStorage(key, userId = "") {
+  if (typeof localStorage === "undefined") return 0;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return 0;
+
+    if (!userId) return parsed.length;
+
+    return parsed.filter((item) => {
+      const itemUserId = normalizeText(item?.user_id || item?.userId || item?.owner_id);
+      return itemUserId === userId;
+    }).length;
+  } catch {
+    return 0;
+  }
+}
+
+function formatFavoriteCount(count) {
+  if (favoritesSnapshot.value.loading || favoritesSnapshot.value.source === "error") return "--";
+  return formatInteger(count);
+}
+
+async function resolveCurrentUserId() {
+  const authUserId = normalizeText(authStore.user?.id);
+  if (authUserId) return authUserId;
+  const { data } = await supabase.auth.getSession();
+  return normalizeText(data?.session?.user?.id);
 }
 
 async function createAvatarDataUrl(file) {
@@ -507,16 +878,10 @@ async function createAvatarDataUrl(file) {
   canvas.height = size;
 
   const context = canvas.getContext("2d");
-  if (!context) {
-      throw new Error("当前浏览器不支持头像处理");
-  }
+  if (!context) throw new Error("当前浏览器不支持头像处理");
 
-  const sourceWidth = Number(image.naturalWidth || image.width || 0);
-  const sourceHeight = Number(image.naturalHeight || image.height || 0);
-  if (!sourceWidth || !sourceHeight) {
-    throw new Error("图片读取失败，请重新选择");
-  }
-
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
   const sourceSize = Math.min(sourceWidth, sourceHeight);
   const sourceX = Math.max(0, (sourceWidth - sourceSize) / 2);
   const sourceY = Math.max(0, (sourceHeight - sourceSize) / 2);
@@ -565,2133 +930,1407 @@ function blobToDataUrl(blob) {
   });
 }
 
-async function loadProfileSnapshots({ reset = false } = {}) {
-  if (profileRefreshPromise) {
-    return profileRefreshPromise;
+function detectCurrentDevice() {
+  if (typeof navigator === "undefined") {
+    return {
+      icon: "▭",
+      name: "当前浏览器设备",
+      meta: "Browser"
+    };
   }
 
-  if (reset) {
-    homeAnalytics.value = createEmptyHomeAnalytics();
-    profilePortrait.value = createEmptyProfilePortrait();
-    profileProgress.value = createEmptyProfileProgress();
-  }
+  const ua = navigator.userAgent || "";
+  const isMac = /Macintosh|Mac OS X/i.test(ua);
+  const isWindows = /Windows/i.test(ua);
+  const isIphone = /iPhone/i.test(ua);
+  const isIpad = /iPad/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  const isChrome = /Chrome|CriOS/i.test(ua) && !/Edg/i.test(ua);
+  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS/i.test(ua);
+  const isEdge = /Edg/i.test(ua);
+  const isFirefox = /Firefox/i.test(ua);
 
-  profileRefreshPromise = (async () => {
-    await authStore.init();
-    if (!authStore.loaded) {
-      await authStore.loadStatus();
-    }
-
-    const [analyticsSnapshot, portraitSnapshot, progressSnapshot] = await Promise.all([
-      loadHomeAnalyticsSnapshotForAuth(authStore),
-      loadProfilePortraitSnapshotForAuth(authStore),
-      loadProfileProgressSnapshotForAuth(authStore)
-    ]);
-
-    homeAnalytics.value = analyticsSnapshot;
-    profilePortrait.value = portraitSnapshot;
-    profileProgress.value = progressSnapshot;
-  })();
-
-  try {
-    await profileRefreshPromise;
-  } finally {
-    profileRefreshPromise = null;
-  }
+  const browser = isEdge ? "Edge" : isFirefox ? "Firefox" : isChrome ? "Chrome 浏览器" : isSafari ? "Safari" : "浏览器";
+  if (isIphone) return { icon: "▯", name: "iPhone", meta: `iOS · ${browser}` };
+  if (isIpad) return { icon: "▭", name: "iPad", meta: `iPadOS · ${browser}` };
+  if (isAndroid) return { icon: "▯", name: "Android Phone", meta: `Android · ${browser}` };
+  if (isMac) return { icon: "▭", name: "MacBook Pro 14-inch", meta: `macOS · ${browser}` };
+  if (isWindows) return { icon: "▭", name: "Windows PC", meta: `Windows · ${browser}` };
+  return { icon: "▭", name: "当前浏览器设备", meta: browser };
 }
 
-function handleProfileFocusRefresh() {
-  void loadProfileSnapshots({ reset: false });
+function formatLastLogin(value) {
+  const formatted = formatRelativeDateTime(value);
+  const device = detectCurrentDevice().name;
+  return formatted ? `${formatted} · ${device}` : `当前会话 · ${device}`;
 }
 
-function handleProfileVisibilityChange() {
-  if (typeof document === "undefined") return;
-  if (document.visibilityState !== "visible") return;
-  void loadProfileSnapshots({ reset: false });
+function formatRelativeDateTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const time = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+
+  if (sameDay) return `今天 ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return `昨天 ${time}`;
+
+  return date.toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit"
+  }) + ` ${time}`;
 }
 
-onMounted(async () => {
-  await loadProfileSnapshots({ reset: true });
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("focus", handleProfileFocusRefresh);
-  }
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", handleProfileVisibilityChange);
-  }
-});
-
-onUnmounted(() => {
-  if (typeof window !== "undefined") {
-    window.removeEventListener("focus", handleProfileFocusRefresh);
-  }
-  if (typeof document !== "undefined") {
-    document.removeEventListener("visibilitychange", handleProfileVisibilityChange);
-  }
-});
-
-function buildRadarChart(metrics) {
-  const normalizedMetrics = Array.isArray(metrics) ? metrics : [];
-  const count = normalizedMetrics.length;
-  const center = 70;
-  const radius = 44;
-  const labelRadius = 58;
-  const levels = [0.25, 0.5, 0.75, 1];
-
-  if (!count) {
-    return {
-      gridPolygons: [],
-      axes: [],
-      labels: [],
-      polygonPoints: "",
-      dataPoints: []
-    };
-  }
-
-  const pointAt = (index, scale = 1) => {
-    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
-    return {
-      x: center + Math.cos(angle) * radius * scale,
-      y: center + Math.sin(angle) * radius * scale
-    };
-  };
-
-  const labelPointAt = (index) => {
-    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
-    return {
-      x: center + Math.cos(angle) * labelRadius,
-      y: center + Math.sin(angle) * labelRadius
-    };
-  };
-
-  const gridPolygons = levels.map((level) =>
-    normalizedMetrics.map((_, index) => {
-      const point = pointAt(index, level);
-      return `${point.x},${point.y}`;
-    }).join(" ")
-  );
-
-  const axes = normalizedMetrics.map((_, index) => {
-    const point = pointAt(index, 1);
-    return {
-      key: `axis-${index}`,
-      x1: center,
-      y1: center,
-      x2: point.x,
-      y2: point.y
-    };
+function formatShortTime(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const time = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
   });
+  return sameDay ? `今日 ${time}` : formatDateValue(value, "");
+}
 
-  const labels = normalizedMetrics.map((metric, index) => {
-    const point = labelPointAt(index);
-    return {
-      key: metric.key,
-      label: metric.shortLabel,
-      x: point.x,
-      y: point.y,
-      anchor: resolveRadarAnchor(point.x, center)
-    };
-  });
+function formatDateValue(value, fallback) {
+  const text = normalizeText(value);
+  if (!text) return fallback;
+  const date = new Date(text);
+  if (!Number.isFinite(date.getTime())) return text;
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-  const dataPoints = normalizedMetrics.map((metric, index) => {
-    const point = pointAt(index, Math.max(0, Math.min(metric.score / 90, 1)));
-    return {
-      key: metric.key,
-      color: metric.color,
-      x: point.x,
-      y: point.y
-    };
-  });
+function formatTargetScore(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return "79+";
+  if (normalized.endsWith("+")) return normalized;
+  const numeric = Number(normalized);
+  if (Number.isFinite(numeric)) return `${Math.round(numeric)}+`;
+  return normalized;
+}
 
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalDayRange(dateKey) {
+  const [year, month, day] = `${dateKey || getLocalDateKey()}`.split("-").map((value) => Number(value));
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
   return {
-    gridPolygons,
-    axes,
-    labels,
-    polygonPoints: dataPoints.map((point) => `${point.x},${point.y}`).join(" "),
-    dataPoints
+    startIso: start.toISOString(),
+    endIso: end.toISOString()
   };
 }
 
-function resolveRadarAnchor(x, center) {
-  if (x > center + 6) return "start";
-  if (x < center - 6) return "end";
-  return "middle";
+function isMissingTableError(error, tableName) {
+  const code = normalizeText(error?.code).toUpperCase();
+  const message = normalizeText(error?.message).toLowerCase();
+  if (code === "42P01" || code === "PGRST205") return true;
+  return message.includes("relation") && message.includes(tableName);
+}
+
+function normalizeTaskType(value) {
+  const taskType = normalizeText(value).toUpperCase();
+  return ["RA", "RS", "RL", "WE", "WFD", "DI", "RTS"].includes(taskType) ? taskType : "";
+}
+
+function normalizeListValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeText(item)).filter(Boolean);
+  }
+  const normalized = normalizeText(value);
+  if (!normalized) return [];
+  return normalized.split(/[,/、，\s]+/).map((item) => normalizeText(item)).filter(Boolean);
+}
+
+function pickText(...values) {
+  for (const value of values) {
+    const normalized = normalizeText(value);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function normalizeText(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return `${value}`.trim();
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sumBy(items, key) {
+  return (Array.isArray(items) ? items : []).reduce((sum, item) => sum + Number(item?.[key] || 0), 0);
 }
 </script>
 
 <template>
-  <div class="profile-page">
-    <div class="nav">
-      <button type="button" class="nav-back" @click="goBack">← 返回首页</button>
-      <div class="nav-title">个人中心</div>
-      <div class="nav-spacer" />
-    </div>
+  <div class="personal-center-page">
+    <aside class="profile-sidebar">
+      <RouterLink class="profile-logo" to="/home" aria-label="返回首页">
+        <div class="profile-logo-icon" aria-hidden="true">
+          <svg width="18" height="18" fill="none" viewBox="0 0 18 18">
+            <rect x="2" y="2" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".95" />
+            <rect x="10" y="2" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".5" />
+            <rect x="2" y="10" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".5" />
+            <rect x="10" y="10" width="6" height="6" rx="1.5" fill="#F5EFE4" opacity=".75" />
+          </svg>
+        </div>
+        <span class="profile-logo-name">开口 PTE</span>
+      </RouterLink>
 
-    <div class="wrap">
-      <div class="hero">
-        <div class="hero-glow" />
-        <div class="hero-top">
-          <div class="av-wrap">
-            <button
-              type="button"
-              class="av"
-              :disabled="avatarUploading"
-              title="点击更换头像"
-              aria-label="点击更换头像"
-              @click="triggerAvatarPicker"
-            >
-              <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" class="av__img" />
+      <nav class="profile-nav" aria-label="个人中心导航">
+        <RouterLink
+          v-for="item in displayNavItems"
+          :key="item.key"
+          class="profile-nav-item"
+          :class="{ 'profile-nav-item--active': isNavActive(item) }"
+          :to="item.to"
+          :aria-current="isNavActive(item) ? 'page' : undefined"
+        >
+          <span class="profile-nav-icon" aria-hidden="true" v-html="item.icon"></span>
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </nav>
+
+      <div class="profile-sidebar-footer">
+        <div class="profile-promo">
+          <div class="profile-promo-title">PTE 备考资料包</div>
+          <div class="profile-promo-sub">真题 · 高频词汇 · 模板</div>
+          <button class="profile-promo-button" type="button" @click="goTo('/we/templates')">免费领取</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="profile-shell">
+      <header class="profile-topbar">
+        <div>
+          <div class="hello">你好，{{ userDisplayName }} 👋</div>
+          <div class="hello-sub">坚持每天进步一点，PTE 梦想更近一步！</div>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="vip-pill" :class="`vip-pill--${membershipPill.kind}`">
+            <span>{{ membershipPill.icon }}</span>
+            <span>{{ membershipPill.label }}</span>
+          </div>
+          <div class="user-mini">
+            <span class="mini-avatar">
+              <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" />
               <span v-else>{{ userInitial }}</span>
-            </button>
-            <span class="av-crown" aria-hidden="true">
-              <svg viewBox="0 0 24 24" class="av-crown__icon" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M4 17h16l-1.4-8-4.8 3.5L12 5 10.2 12.5 5.4 9 4 17Z" fill="currentColor" stroke="none" />
-                <path d="M6 19h12" stroke-linecap="round" />
-              </svg>
             </span>
-            <span class="av-spark" aria-hidden="true">
-              <svg viewBox="0 0 16 16" class="av-spark__icon" fill="currentColor">
-                <path d="M8 1.2 9.6 6.4 14.8 8l-5.2 1.6L8 14.8 6.4 9.6 1.2 8l5.2-1.6Z" />
-              </svg>
-            </span>
-          </div>
-          <input
-            ref="avatarInputRef"
-            type="file"
-            accept="image/*"
-            class="avatar-input"
-            @change="handleAvatarFileChange"
-          />
-          <div>
-            <div class="hero-name">{{ userDisplayName }}</div>
-            <div v-if="userEmail" class="hero-email">{{ userEmail }}</div>
-            <div class="trial-pill">
-              <div class="trial-pill__dot" />
-              {{ trialPillText }}
-            </div>
-            <div v-if="avatarUploadError" class="hero-avatar-error">{{ avatarUploadError }}</div>
+            <span>{{ userDisplayName }}</span>
           </div>
         </div>
+      </header>
 
-        <div class="hero-stats">
-          <div v-for="(stat, index) in heroStats" :key="stat.label" class="hs">
-            <div v-if="heroStatIcons[index]" class="hs-icon" aria-hidden="true">{{ heroStatIcons[index] }}</div>
-            <div class="hs-copy">
-              <div class="hs-n">{{ formatHeroStatValue(stat.value) }}</div>
-              <div class="hs-l">{{ stat.label }}</div>
-            </div>
-          </div>
-        </div>
+      <main class="profile-main">
+        <section class="page-heading">
+          <h1>个人中心</h1>
+          <span>PERSONAL CENTER</span>
+          <p>管理您的账号信息、学习身份配置、会员权益与设备安全</p>
+        </section>
 
-        <div class="hero-study-rail">
-          <section class="hero-study-card">
-            <div class="hero-study-card__title">学习状态</div>
-            <div class="hero-study-card__ring" :style="{ '--hero-study-progress': heroStudyRingDegree }">
-              <div class="hero-study-card__ring-inner">
-                <div class="hero-study-card__ring-value">{{ heroStudyScore }}</div>
-                <div class="hero-study-card__ring-label">平均分</div>
+        <section class="dashboard-grid">
+          <div class="dashboard-column">
+            <article class="pc-card profile-card">
+              <div class="card-title">
+                <span class="title-icon">♟</span>
+                <span>个人资料与账号中心</span>
               </div>
-            </div>
-            <p class="hero-study-card__message">{{ heroStudyStatus }}</p>
-            <ul class="hero-study-card__facts">
-              <li v-for="item in heroStudyFacts" :key="item">{{ item }}</li>
-            </ul>
-          </section>
 
-          <section class="hero-week-card">
-            <div class="hero-week-card__title">本周练习频率</div>
-            <p class="hero-week-card__summary">{{ heroWeekSummary }}</p>
-            <div class="hero-week-card__days">
-              <div v-for="item in heroWeekDots" :key="item.key" class="hero-week-card__day">
-                <span class="hero-week-card__label">{{ item.label }}</span>
-                <span
-                  class="hero-week-card__dot"
-                  :class="{
-                    'hero-week-card__dot--active': item.active,
-                    'hero-week-card__dot--today': item.today
-                  }"
-                >
-                  <span
-                    v-if="item.active"
-                    class="hero-week-card__dot-core"
-                    :class="{ 'hero-week-card__dot-core--today': item.today }"
+              <div class="profile-body">
+                <div class="profile-left">
+                  <button
+                    type="button"
+                    class="avatar-large"
+                    :disabled="avatarUploading"
+                    aria-label="更换头像"
+                    @click="triggerAvatarPicker"
                   >
-                    {{ item.today ? "🔥" : "" }}
-                  </span>
+                    <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" />
+                    <span v-else>{{ userInitial }}</span>
+                  </button>
+                  <input
+                    ref="avatarInputRef"
+                    type="file"
+                    accept="image/*"
+                    class="avatar-input"
+                    @change="handleAvatarFileChange"
+                  />
+                  <div class="profile-name">
+                    {{ userDisplayName }}
+                    <button type="button" class="icon-edit" aria-label="编辑个人资料" @click="handleEditProfile">✎</button>
+                  </div>
+                  <div class="profile-location">{{ profileLocation }}</div>
+                  <div class="profile-vip">♛ {{ membershipPill.label }}</div>
+                  <div v-if="avatarUploadError" class="avatar-error">{{ avatarUploadError }}</div>
+                </div>
+
+                <div class="profile-info">
+                  <div v-for="row in profileInfoRows" :key="row.label" class="info-row">
+                    <span class="row-label"><i>{{ row.icon }}</i>{{ row.label }}</span>
+                    <strong v-if="row.strong">{{ row.value }}</strong>
+                    <span v-else class="email-value">{{ row.value }}</span>
+                    <span v-if="row.badge" class="verified" :class="`verified--${row.badgeTone}`">{{ row.badge }}</span>
+                  </div>
+
+                  <button class="primary-btn profile-btn" type="button" @click="handleEditProfile">编辑个人资料</button>
+                </div>
+              </div>
+            </article>
+
+            <article class="pc-card membership-card">
+              <div class="card-title with-note">
+                <span>
+                  <span class="title-icon crown">♛</span>
+                  会员充值与权益
                 </span>
+                <em>{{ membershipSummary }}</em>
               </div>
-            </div>
-            <div class="hero-week-card__legend">
-              <span class="hero-week-card__legend-item">
-                <span class="hero-week-card__legend-dot hero-week-card__legend-dot--active" />
-                练习日
-              </span>
-              <span class="hero-week-card__legend-item">
-                <span class="hero-week-card__legend-dot" />
-                未练习
-              </span>
-            </div>
-          </section>
 
-          <section class="hero-atmosphere">
-            <div class="hero-atmosphere__copy">
-              <p v-for="line in heroQuoteLines" :key="line" class="hero-atmosphere__line">{{ line }}</p>
-            </div>
-
-            <div class="hero-atmosphere__scene" aria-hidden="true">
-              <svg viewBox="0 0 320 360" class="hero-atmosphere__svg" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <radialGradient id="profileSceneGlow" cx="72%" cy="82%" r="48%">
-                  <stop offset="0%" stop-color="rgba(255,226,174,0.92)" />
-                  <stop offset="35%" stop-color="rgba(255,226,174,0.34)" />
-                  <stop offset="100%" stop-color="rgba(255,226,174,0)" />
-                </radialGradient>
-                <linearGradient id="profileScenePath" x1="18%" y1="100%" x2="80%" y2="0%">
-                  <stop offset="0%" stop-color="#FFF3B1" />
-                  <stop offset="42%" stop-color="#FFE08A" />
-                  <stop offset="100%" stop-color="#FFF8DE" />
-                </linearGradient>
-                <linearGradient id="profileSceneHillBack" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#18396E" />
-                  <stop offset="100%" stop-color="#0E2751" />
-                </linearGradient>
-                <linearGradient id="profileSceneHillFront" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#10284F" />
-                  <stop offset="100%" stop-color="#091731" />
-                </linearGradient>
-                <filter id="profileSceneBlur" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="7" />
-                </filter>
-                <linearGradient id="profileSceneNebula" x1="16%" y1="0%" x2="84%" y2="100%">
-                  <stop offset="0%" stop-color="rgba(255,255,255,0)" />
-                  <stop offset="30%" stop-color="rgba(195,224,255,0.12)" />
-                  <stop offset="52%" stop-color="rgba(164,204,255,0.3)" />
-                  <stop offset="72%" stop-color="rgba(255,255,255,0.14)" />
-                  <stop offset="100%" stop-color="rgba(255,255,255,0)" />
-                </linearGradient>
-                <linearGradient id="profileSceneMist" x1="8%" y1="16%" x2="88%" y2="78%">
-                  <stop offset="0%" stop-color="rgba(125,164,245,0.03)" />
-                  <stop offset="46%" stop-color="rgba(125,164,245,0.18)" />
-                  <stop offset="100%" stop-color="rgba(125,164,245,0.02)" />
-                </linearGradient>
-              </defs>
-
-              <ellipse cx="236" cy="112" rx="126" ry="80" fill="#87AFFF" opacity="0.11" filter="url(#profileSceneBlur)" />
-              <ellipse cx="210" cy="176" rx="126" ry="88" fill="url(#profileSceneMist)" opacity="0.95" />
-              <ellipse cx="258" cy="314" rx="104" ry="36" fill="url(#profileSceneGlow)" opacity="0.75" />
-              <path d="M24 96C78 64 156 80 218 110C256 127 280 130 320 112" fill="none" stroke="url(#profileSceneNebula)" stroke-width="22" stroke-linecap="round" opacity="0.62" />
-              <path d="M42 150C96 122 150 126 192 146C228 162 264 168 320 152" fill="none" stroke="rgba(146,186,255,0.06)" stroke-width="16" stroke-linecap="round" opacity="0.7" />
-              <g fill="#FFFFFF" opacity="0.9">
-                <circle cx="34" cy="28" r="1.4" />
-                <circle cx="64" cy="42" r="1.2" />
-                <circle cx="102" cy="24" r="1.6" />
-                <circle cx="146" cy="48" r="1.2" />
-                <circle cx="188" cy="26" r="1.4" />
-                <circle cx="236" cy="38" r="1.3" />
-                <circle cx="276" cy="22" r="1.5" />
-                <circle cx="292" cy="54" r="1.1" />
-                <circle cx="52" cy="90" r="1" />
-                <circle cx="92" cy="74" r="1.1" />
-                <circle cx="254" cy="78" r="1" />
-                <circle cx="126" cy="82" r="1" />
-                <circle cx="284" cy="96" r="1.2" />
-                <circle cx="26" cy="142" r="1" />
-                <circle cx="298" cy="136" r="1" />
-              </g>
-
-              <path d="M0 240C36 216 78 206 126 214C164 220 199 214 236 186C264 166 291 164 320 174V360H0Z" fill="url(#profileSceneHillBack)" opacity="0.92" />
-              <path d="M0 282C40 258 78 256 118 268C156 280 190 273 227 244C260 220 288 218 320 230V360H0Z" fill="url(#profileSceneHillFront)" />
-
-              <path
-                d="M104 360C118 337 136 318 158 300C181 281 198 268 214 245C228 225 237 205 255 188C262 181 267 177 271 174"
-                fill="none"
-                stroke="url(#profileScenePath)"
-                stroke-width="10"
-                stroke-linecap="round"
-                opacity="0.96"
-              />
-              <path
-                d="M104 360C118 337 136 318 158 300C181 281 198 268 214 245C228 225 237 205 255 188C262 181 267 177 271 174"
-                fill="none"
-                stroke="#FFFFFF"
-                stroke-width="2.8"
-                stroke-linecap="round"
-                opacity="0.82"
-              />
-              <path
-                d="M104 360C116 343 132 328 151 312C173 293 188 282 205 258C218 239 225 220 244 201C255 190 262 183 271 177"
-                fill="none"
-                stroke="rgba(255,255,255,0.18)"
-                stroke-width="18"
-                stroke-linecap="round"
-                opacity="0.38"
-              />
-
-              <circle cx="266" cy="168" r="18" fill="#FFE8A8" opacity="0.2" />
-              <rect x="261" y="144" width="10" height="36" rx="3" fill="#F8F4EA" />
-              <rect x="256.5" y="158" width="19" height="10" rx="3" fill="#EAD49B" />
-              <rect x="263.4" y="137" width="5.2" height="12" rx="2.4" fill="#FFF3C8" />
-              <circle cx="266" cy="139" r="6" fill="#FFE59C" />
-
-              <path d="M30 318C40 292 51 280 64 271C82 258 100 258 118 268C104 282 93 299 86 318Z" fill="#08162F" />
-              <circle cx="84" cy="264" r="13" fill="#08162F" />
-              <path d="M72 270C81 278 89 288 95 302" fill="none" stroke="#15305F" stroke-width="4.5" stroke-linecap="round" />
-              <path d="M83 289C91 293 98 301 104 314" fill="none" stroke="#1C3D7A" stroke-width="3.6" stroke-linecap="round" />
-              </svg>
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <div class="content">
-        <div class="vip-card profile-section profile-section--vip">
-          <div class="vip-top">
-            <div class="vip-title">🚀 升级 VIP · 解锁无限练习</div>
-            <div class="vip-sub">试用期结束后继续练习，选一个最适合你的方案</div>
-          </div>
-          <div class="vip-plans">
-            <div
-              v-for="plan in plans"
-              :key="plan.key"
-              class="plan"
-              :class="{ featured: plan.featured, selected: selectedPlanKey === plan.key }"
-              @click="selectPlan(plan.key)"
-            >
-              <div v-if="plan.badge" class="plan-badge">{{ plan.badge }}</div>
-              <div class="plan-name">{{ plan.name }}</div>
-              <div class="plan-price">¥{{ plan.price }}</div>
-              <div class="plan-unit">{{ plan.unit }}</div>
-              <div class="plan-per">{{ plan.per }}</div>
-            </div>
-          </div>
-          <button id="cta-btn" type="button" class="vip-cta" @click="openUpgrade">{{ ctaLabel }}</button>
-          <div class="vip-features">
-            <div class="vf">
-              <div class="vf-dot" />
-              全题型无限练习
-            </div>
-            <div class="vf">
-              <div class="vf-dot" />
-              AI 评分不限次
-            </div>
-            <div class="vf">
-              <div class="vf-dot" />
-              随时退款
-            </div>
-          </div>
-        </div>
-
-        <div class="content-column content-column--primary">
-        <div class="sec profile-section profile-section--portrait">
-          <div class="sec-hdr">
-            <div class="sec-title">📊 口语能力画像</div>
-            <div class="sec-action">{{ portraitSampleLabel }}</div>
-          </div>
-          <div class="sec-body">
-            <div class="radar-wrap">
-              <svg
-                class="portrait-radar"
-                width="164"
-                height="152"
-                viewBox="-18 -10 176 160"
-                style="flex-shrink: 0"
-              >
-                <defs>
-                  <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color: #E8845A; stop-opacity: 0.3" />
-                    <stop offset="100%" style="stop-color: #2563EB; stop-opacity: 0.12" />
-                  </linearGradient>
-                </defs>
-                <polygon
-                  v-for="(polygon, index) in radarChart.gridPolygons"
-                  :key="`grid-${index}`"
-                  :points="polygon"
-                  fill="none"
-                  stroke="#DDE3EE"
-                  stroke-width="1"
-                />
-                <line
-                  v-for="axis in radarChart.axes"
-                  :key="axis.key"
-                  :x1="axis.x1"
-                  :y1="axis.y1"
-                  :x2="axis.x2"
-                  :y2="axis.y2"
-                  stroke="#DDE3EE"
-                  stroke-width="1"
-                />
-                <polygon
-                  :points="radarChart.polygonPoints"
-                  fill="url(#rg)"
-                  stroke="#E8845A"
-                  stroke-width="1.5"
-                  opacity=".9"
-                />
-                <circle
-                  v-for="point in radarChart.dataPoints"
-                  :key="point.key"
-                  :cx="point.x"
-                  :cy="point.y"
-                  r="3"
-                  :fill="point.color"
-                />
-                <text
-                  v-for="item in radarChart.labels"
-                  :key="item.key"
-                  :x="item.x"
-                  :y="item.y"
-                  :text-anchor="item.anchor"
-                  font-size="9"
-                  fill="#5A6B8A"
-                  font-family="sans-serif"
+              <div class="plans">
+                <button
+                  v-for="plan in plans"
+                  :key="plan.key"
+                  type="button"
+                  class="plan-card"
+                  :class="{
+                    recommended: plan.recommended,
+                    value: plan.value,
+                    selected: selectedPlanKey === plan.key
+                  }"
+                  @click="selectPlan(plan.key)"
                 >
-                  {{ item.label }}
-                </text>
-              </svg>
-
-              <div style="flex: 1">
-                <div v-for="item in portraitMetrics" :key="item.key" class="rl-item">
-                  <div class="rl-dot" :style="{ background: item.color }" />
-                  <div class="rl-name">{{ item.label }}</div>
-                  <div class="rl-bar">
-                    <div class="rl-fill" :style="{ width: `${item.barPercent}%`, background: item.color }" />
+                  <span v-if="plan.badge" class="plan-badge">{{ plan.badge }}</span>
+                  <div class="plan-name">{{ plan.name }}</div>
+                  <div class="plan-price">
+                    ¥{{ plan.price }}
+                    <small>/ {{ plan.duration }}</small>
                   </div>
-                  <div class="rl-score">{{ item.displayScore }}</div>
+                  <div class="plan-tags">
+                    <span v-for="tag in plan.tags" :key="tag">{{ tag }}</span>
+                  </div>
+                </button>
+              </div>
+
+              <div class="membership-footer">
+                <button class="primary-btn charge-btn" type="button" @click="openUpgrade">立即充值</button>
+                <div class="safe-text">⊙ 安全支付 · 随时可取消 · 专属客服支持</div>
+              </div>
+            </article>
+          </div>
+
+          <div class="dashboard-column">
+            <article class="pc-card status-card">
+              <div class="card-title">
+                <span class="title-icon">▤</span>
+                <span>账号状态摘要</span>
+              </div>
+
+              <div class="status-list">
+                <div v-for="item in accountStatusRows" :key="item.label" class="status-row">
+                  <span class="soft-icon" :class="item.color">{{ item.icon }}</span>
+                  <span class="status-label">{{ item.label }}</span>
+                  <span class="status-value">{{ item.value }}</span>
                 </div>
               </div>
-            </div>
+            </article>
 
-            <div class="radar-note">
-              {{ portraitAdvice }}
-            </div>
-          </div>
-        </div>
-
-        <div class="ms-card profile-section profile-section--streak">
-          <div class="ms-hdr">
-            <div class="ms-hdr-title">🔥 连续打卡 · 本周练习</div>
-          </div>
-          <div class="ms-body">
-            <div class="ms-ring-center">
-              <div class="ms-ring-wrap">
-                <svg width="110" height="110" viewBox="0 0 110 110">
-                  <defs>
-                    <linearGradient id="rg2" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" style="stop-color: rgba(5,150,105,0.85)" />
-                      <stop offset="100%" style="stop-color: #E8845A" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="55" cy="55" r="44" fill="none" stroke="#DDE3EE" stroke-width="9" />
-                  <circle
-                    cx="55"
-                    cy="55"
-                    r="44"
-                    fill="none"
-                    stroke="url(#rg2)"
-                    stroke-width="9"
-                    stroke-linecap="round"
-                    stroke-dasharray="276.5"
-                    :stroke-dashoffset="streakRingDashoffset"
-                    transform="rotate(-90 55 55)"
-                  />
-                  <text x="55" y="50" text-anchor="middle" font-size="26" font-weight="700" fill="#143164" font-family="sans-serif">
-                    {{ homeAnalytics.loading ? "--" : formatInteger(currentStreak) }}
-                  </text>
-                  <text x="55" y="64" text-anchor="middle" font-size="10" fill="#8CA0C0" font-family="sans-serif">
-                    / {{ currentGoalDays }} 天目标
-                  </text>
-                </svg>
+            <article class="pc-card identity-card">
+              <div class="card-title">
+                <span class="title-icon">⚙</span>
+                <span>学习身份配置</span>
               </div>
-              <div class="ms-ring-n">{{ streakHeading }}</div>
-              <div class="ms-ring-sub">{{ streakSummary }}</div>
-            </div>
 
-            <div class="ms-dots-wrap">
-              <div class="ms-dots-row">
-                <div
-                  v-for="(item, index) in milestoneSteps"
-                  :key="item.key"
-                  class="ms-dot-wrap"
-                >
-                  <div
-                    v-if="index > 0"
-                    class="ms-dot-segment"
-                    :class="{ 'ms-dot-segment--done': milestoneSegments[index - 1]?.completed }"
-                  />
-                  <div class="ms-dot-item">
-                    <div class="ms-dot-circle" :class="item.state">{{ item.circle }}</div>
-                    <div class="ms-dot-days" :class="item.state">{{ item.daysLabel }}</div>
-                    <div class="ms-dot-reward">{{ item.reward }}</div>
+              <div class="config-list">
+                <div v-for="item in identityConfig" :key="item.label" class="config-row">
+                  <span class="soft-icon" :class="item.color">{{ item.icon }}</span>
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              </div>
+
+              <button class="ghost-btn full" type="button" @click="handleEditLearningConfig">编辑学习配置</button>
+            </article>
+
+            <article class="pc-card favorites-card">
+              <div class="card-title">
+                <span class="title-icon">★</span>
+                <span>我的收藏与常用内容</span>
+              </div>
+
+              <div class="favorites-inner">
+                <div class="favorite-box">
+                  <div class="section-mini-title">
+                    我的收藏
+                    <span v-if="favoritesSourceNote" class="source-note">{{ favoritesSourceNote }}</span>
+                  </div>
+                  <div class="favorite-tiles">
+                    <div v-for="item in favorites" :key="item.label" class="favorite-tile">
+                      <span class="tile-icon" :class="item.color">{{ item.icon }}</span>
+                      <span>{{ item.label }}</span>
+                      <strong>{{ formatFavoriteCount(item.count) }}</strong>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div class="ms-tip">
-              <div style="font-size: 18px; flex-shrink: 0">{{ streakTip.icon }}</div>
-              <div>
-                <div class="ms-tip-title">{{ streakTip.title }}</div>
-                <div class="ms-tip-sub">{{ streakTip.subtitle }}</div>
-              </div>
-            </div>
-
-            <div class="ms-week-title">本周每日题数</div>
-            <div class="ms-sparkline">
-              <div v-for="item in weeklyBars" :key="item.key" class="ms-spark-col">
-                <div
-                  class="ms-spark-bar"
-                  :class="{ has: item.has, 'today-bar': item.today }"
-                  :style="{ height: item.height }"
-                  :title="`${item.label} · ${item.count} 题${item.today ? ' · 今日' : ''}`"
-                />
-                <div class="ms-spark-label" :class="{ today: item.today }">{{ item.label }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        </div>
-
-        <div class="content-column content-column--secondary">
-        <div class="sec profile-section profile-section--progress">
-          <div class="sec-hdr">
-            <div class="sec-title">📈 各题型进度</div>
-          </div>
-          <div class="sec-body" style="padding: 4px 18px">
-            <div class="prog-list">
-              <div v-for="item in liveProgressItems" :key="item.name" class="prog-row">
-                <div class="prog-icon" :style="{ background: item.iconBg }">{{ item.icon }}</div>
-                <div class="prog-meta">
-                  <div class="prog-name">{{ item.name }}</div>
-                  <div class="prog-bar">
-                    <div class="prog-fill" :style="{ width: item.width, background: item.fill }" />
+                <div class="common-box">
+                  <div class="section-mini-title">最近使用</div>
+                  <div class="chip-line">
+                    <span class="chip-label">常用模块</span>
+                    <span v-for="item in commonModules" :key="item" class="mini-chip">{{ item }}</span>
+                  </div>
+                  <div class="chip-line">
+                    <span class="chip-label">最近访问</span>
+                    <span v-for="item in recentPages" :key="item" class="mini-chip">{{ item }}</span>
                   </div>
                 </div>
-                <div class="prog-right">
-                  <div class="prog-count">{{ item.count }}</div>
-                  <div class="prog-pct" :style="{ color: item.pctColor || undefined }">{{ item.pct }}</div>
+              </div>
+
+              <div class="two-actions">
+                <button class="ghost-btn" type="button" @click="openFavorites">★ 查看我的收藏</button>
+                <button class="ghost-btn" type="button" @click="openCommonContent">→ 进入常用内容</button>
+              </div>
+            </article>
+          </div>
+
+          <article class="pc-card device-card">
+            <div class="card-title">
+              <span class="title-icon">▰</span>
+              <span>设备管理</span>
+            </div>
+
+            <div class="device-layout">
+              <div class="device-panel">
+                <div class="section-mini-title">当前登录设备（{{ devices.length }}）</div>
+                <div v-for="item in devices" :key="item.name" class="device-row">
+                  <span class="device-icon">{{ item.icon }}</span>
+                  <div>
+                    <strong>{{ item.name }}</strong>
+                    <p>{{ item.meta }}</p>
+                  </div>
+                  <span :class="item.current ? 'current-device' : 'device-time'">{{ item.status }}</span>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
 
-        <div class="sec profile-section profile-section--settings">
-          <div class="sec-hdr">
-            <div class="sec-title">⚙️ 设置</div>
-          </div>
-          <div class="sec-body" style="padding: 0 18px">
-            <div v-for="item in settingsItems" :key="item.label" class="menu-item">
-              <div class="mi-icon" :style="{ background: item.iconBg }">{{ item.icon }}</div>
-              <div class="mi-body">
-                <div class="menu-label">{{ item.label }}</div>
-                <div v-if="item.sub" class="menu-sub">{{ item.sub }}</div>
-              </div>
-              <div style="display: flex; align-items: center">
-                <div v-if="item.value" class="menu-val">{{ item.value }}</div>
-                <div v-if="item.badge" class="menu-badge">{{ item.badge }}</div>
-                <div class="menu-arr">›</div>
+              <div class="device-panel login-panel">
+                <div class="section-mini-title">近期登录记录</div>
+                <div v-for="item in loginRecords" :key="`${item.device}-${item.status}`" class="login-row">
+                  <span class="device-icon small">{{ item.icon }}</span>
+                  <strong>{{ item.device }}</strong>
+                  <span>{{ item.location }}</span>
+                  <em :class="{ online: item.online }">{{ item.status }}</em>
+                </div>
+                <button class="link-btn" type="button" @click="showLoginRecordsNotice">查看全部登录记录 →</button>
               </div>
             </div>
-          </div>
-        </div>
-
-        <button type="button" class="logout-btn profile-section profile-section--logout" @click="handleLogout">退出登录</button>
-        </div>
-        <div class="pb" />
-      </div>
-    </div>
+          </article>
+        </section>
+      </main>
+    </section>
   </div>
 </template>
 
 <style scoped>
-* {
+*,*::before,*::after {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
-.profile-page {
-  --navy: #0F2444;
-  --navy2: #1A3A6E;
-  --navy3: #243F75;
-  --orange: #E8845A;
-  --og-bg: #FEF3ED;
-  --og-mid: #F5C4A8;
-  --bg: #EEF1F7;
-  --card: #FFFFFF;
-  --bd: #DDE3EE;
-  --tx: #0A1628;
-  --mu: #5A6B8A;
-  --hi: #A8B5CB;
-  --navy-soft: #EDF1F8;
-  --green: #059669;
-  --blue: #2563EB;
-  --purple: #6941C6;
-  --r: 16px;
+button {
+  font: inherit;
+}
+
+.personal-center-page {
+  --c0: #1e1208;
+  --c1: #3a2510;
+  --c2: #7c5c3e;
+  --c3: #a07850;
+  --bg0: #f5efe4;
+  --bg1: #ede8dc;
+  --bg2: #e5dfd4;
+  --bg3: #d9cfbd;
+  --card: #faf6ef;
+  --card2: #f2ebe0;
+  --bdr: #d4c8b4;
+  --bdr2: #c4b49c;
+  --mute: #8f8477;
+  --soft: #9a8f80;
+  --content-max: 1320px;
+  --layout-gap: 16px;
+  --card-radius: 14px;
   min-height: 100vh;
-  font-family: -apple-system, "SF Pro Text", "DM Sans", "PingFang SC", sans-serif;
-  background:
-    radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.9) 0, rgba(255, 255, 255, 0) 22%),
-    linear-gradient(180deg, #eef4fb 0, #f6f8fc 220px, #f7f9fc 100%);
-  -webkit-font-smoothing: antialiased;
-  color: var(--tx);
-}
-
-.nav {
-  background: rgba(255, 255, 255, 0.92);
-  height: 52px;
   display: flex;
-  align-items: center;
-  padding: 0 24px;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  border-bottom: 1px solid #dbe4f0;
-  backdrop-filter: blur(10px);
-}
-
-.nav-back {
-  padding: 0;
-  border: none;
-  background: none;
-  font-size: 13px;
-  color: #6c7a93;
-  cursor: pointer;
-}
-
-.nav-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #143164;
-}
-
-.nav-spacer {
-  width: 60px;
-}
-
-.wrap {
-  width: min(100%, 1240px);
-  margin: 0 auto;
-  padding: 24px 20px 56px;
-}
-
-.hero {
-  background: linear-gradient(180deg, var(--navy) 0%, var(--navy2) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  box-shadow: 0 18px 40px rgba(15, 36, 68, 0.12);
-  padding: 28px 24px 30px;
-  position: relative;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 82% 10%, rgba(255, 249, 238, 0.86), transparent 32%),
+    var(--bg1);
+  color: var(--c0);
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.hero-glow {
-  position: absolute;
-  right: -40px;
-  top: -40px;
-  width: 180px;
-  height: 180px;
-  border-radius: 50%;
-  background: rgba(232, 132, 90, 0.08);
-  pointer-events: none;
+.profile-sidebar {
+  width: 220px;
+  min-height: 100vh;
+  background: var(--bg2);
+  border-right: 1px solid #d7cfc0;
+  display: flex;
+  flex: 0 0 220px;
+  flex-direction: column;
 }
 
-.hero-top {
+.profile-logo {
+  height: 68px;
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-bottom: 24px;
-  position: relative;
+  gap: 12px;
+  padding: 0 18px;
+  color: var(--c0);
+  text-decoration: none;
+  border-bottom: 1px solid #d7cfc0;
 }
 
-.av-wrap {
-  width: 58px;
-  height: 58px;
-  position: relative;
-  flex-shrink: 0;
+.profile-logo-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--c2);
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
-.av {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #5b79b3 0%, #344f80 34%, #1b315d 72%, #13274b 100%);
+.profile-logo-name {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.profile-nav {
+  padding: 22px 12px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.profile-nav-item {
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #8c8174;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.13s, border-color 0.13s, color 0.13s;
+}
+
+.profile-nav-item:hover {
+  background: #ede8df;
+  color: #6b5a44;
+}
+
+.profile-nav-item--active {
+  color: var(--c2);
+  background: var(--bg3);
+  border-color: #cabdaa;
+  box-shadow: inset 0 1px 0 rgba(245, 239, 228, 0.5);
+  font-weight: 700;
+}
+
+.profile-nav-icon {
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.55rem;
+  color: currentColor;
+  flex: 0 0 20px;
+}
+
+.profile-nav-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.profile-sidebar-footer {
+  padding: 0 14px 22px;
+}
+
+.profile-promo {
+  min-height: 105px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--bg3);
+  border: 1px solid #cfc4b1;
+  color: var(--c2);
+}
+
+.profile-promo-title {
+  font-size: 14px;
   font-weight: 800;
-  color: #fff;
-  border: 3px solid #dce6f8;
+}
+
+.profile-promo-sub {
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--soft);
+}
+
+.profile-promo-button {
+  margin-top: 13px;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 14px;
+  background: var(--c2);
+  color: #fff8ee;
+  font-weight: 800;
   cursor: pointer;
-  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
-  padding: 0;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 6px 12px rgba(19, 39, 75, 0.1);
+}
+
+.profile-shell {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-topbar {
+  height: 56px;
+  flex: 0 0 56px;
+  background: var(--bg2);
+  border-bottom: 1px solid #d7cfc0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 28px;
+}
+
+.hello {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.hello-sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--soft);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vip-pill {
+  height: 28px;
+  padding: 0 13px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #d5ad55;
+  background: #fff1c9;
+  color: var(--c2);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.vip-pill--trial {
+  background: #fff7dd;
+}
+
+.vip-pill--locked {
+  background: var(--card2);
+  border-color: var(--bdr);
+}
+
+.user-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mini-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   overflow: hidden;
+  background: var(--c2);
+  color: #fff8ee;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
 }
 
-.av:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(8, 20, 38, 0.2);
-}
-
-.av:disabled {
-  cursor: progress;
-  opacity: 0.88;
-}
-
-.av__img {
+.mini-avatar img,
+.avatar-large img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.av-crown {
-  position: absolute;
-  top: -8px;
-  left: 11px;
-  width: 20px;
-  height: 20px;
-  color: #f4b53f;
-  filter: drop-shadow(0 2px 2px rgba(167, 109, 0, 0.18));
-  pointer-events: none;
+.profile-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 22px 28px 24px;
 }
 
-.av-spark {
-  position: absolute;
-  top: 6px;
-  right: -1px;
-  width: 12px;
-  height: 12px;
-  color: #7e96c9;
-  pointer-events: none;
+.profile-main::-webkit-scrollbar {
+  width: 4px;
 }
 
-.av-crown__icon,
-.av-spark__icon {
-  width: 100%;
+.profile-main::-webkit-scrollbar-thumb {
+  background: var(--bdr);
+  border-radius: 99px;
+}
+
+.page-heading {
+  width: min(100%, var(--content-max));
+  margin: 0 auto var(--layout-gap);
+}
+
+.page-heading h1 {
+  display: inline-block;
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+
+.page-heading span {
+  margin-left: 14px;
+  color: var(--soft);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+.page-heading p {
+  margin: 7px 0 0;
+  color: #8b8073;
+  font-size: 14px;
+}
+
+.dashboard-grid {
+  width: min(100%, var(--content-max));
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr);
+  gap: var(--layout-gap);
+  align-items: stretch;
+}
+
+.dashboard-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--layout-gap);
   height: 100%;
+}
+
+.dashboard-column:first-child .profile-card {
+  flex: 0 0 auto;
+}
+
+.dashboard-column:first-child .membership-card {
+  flex: 1 1 auto;
+}
+
+.pc-card {
+  min-width: 0;
+  background: rgba(250, 246, 238, 0.82);
+  border: 1px solid #d8d0c3;
+  border-radius: var(--card-radius);
+  box-shadow:
+    0 10px 24px rgba(124, 92, 62, 0.035),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 900;
+  padding: 12px 16px 0;
+}
+
+.card-title.with-note {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.card-title.with-note > span {
+  font-weight: 900;
+}
+
+.card-title.with-note em {
+  font-style: normal;
+  color: var(--mute);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.title-icon {
+  color: var(--c2);
+  font-size: 14px;
+}
+
+.profile-card {
+  min-height: 275px;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-body {
+  display: grid;
+  grid-template-columns: 34% 1fr;
+  min-height: 228px;
+  flex: 1;
+  padding: 12px 28px 18px;
+}
+
+.profile-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #dfd6c9;
+  min-width: 0;
+}
+
+.avatar-large {
+  width: 86px;
+  height: 86px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(circle at 35% 30%, #9b734c, #6d4d30);
+  color: #fff8ee;
+  cursor: pointer;
+  font-size: 32px;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(109, 77, 48, 0.16);
+}
+
+.avatar-large:disabled {
+  cursor: progress;
+  opacity: 0.82;
 }
 
 .avatar-input {
   display: none;
 }
 
-.hero-avatar-error {
-  margin-top: 6px;
-  font-size: 11px;
-  color: rgba(255, 211, 201, 0.95);
-  font-weight: 600;
-}
-
-.hero-name {
-  font-size: 18px;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: -0.3px;
-}
-
-.hero-email {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.38);
-  margin-top: 2px;
-}
-
-.trial-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 7px;
-  background: rgba(232, 132, 90, 0.15);
-  border: 1px solid rgba(232, 132, 90, 0.28);
-  border-radius: 20px;
-  padding: 3px 10px;
-  font-size: 11px;
-  color: #E8845A;
-  font-weight: 500;
-}
-
-.trial-pill__dot {
-  width: 5px;
-  height: 5px;
-  background: var(--orange);
-  border-radius: 50%;
-}
-
-.hero-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.hero-study-rail {
-  display: none;
-}
-
-.hs {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 16px 12px;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.hs-icon {
-  display: none;
-}
-
-.hs-copy {
-  min-width: 0;
-}
-
-.hs-n {
-  font-size: 24px;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: -0.3px;
-}
-
-.hs-l {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.3);
-  margin-top: 5px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.hero-study-card,
-.hero-week-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 16px 15px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.hero-study-card__title,
-.hero-week-card__title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.hero-study-card__ring {
-  --hero-study-progress: 0deg;
-  width: 132px;
-  height: 132px;
-  margin: 14px auto 12px;
-  border-radius: 50%;
-  padding: 11px;
+.profile-name {
+  margin-top: 13px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    conic-gradient(from -90deg, #3C82FF 0deg var(--hero-study-progress), rgba(226, 234, 246, 0.26) var(--hero-study-progress) 360deg);
-}
-
-.hero-study-card__ring-inner {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(19, 40, 77, 0.98) 0%, rgba(16, 32, 65, 0.98) 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.hero-study-card__ring-value {
-  font-size: 30px;
-  font-weight: 800;
-  color: #fff;
-  letter-spacing: -0.04em;
-}
-
-.hero-study-card__ring-label {
-  margin-top: 4px;
-  font-size: 12px;
-  color: rgba(222, 233, 247, 0.6);
-}
-
-.hero-study-card__message {
-  margin: 0;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.hero-study-card__facts {
-  list-style: none;
-  padding: 0;
-  margin: 10px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hero-study-card__facts li {
-  position: relative;
-  padding-left: 14px;
-  font-size: 12px;
-  color: rgba(219, 229, 245, 0.72);
-}
-
-.hero-study-card__facts li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(94, 186, 255, 0.9);
-  transform: translateY(-50%);
-}
-
-.hero-week-card__summary {
-  margin: 7px 0 0;
-  font-size: 12px;
-  color: rgba(219, 229, 245, 0.56);
-}
-
-.hero-week-card__days {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.hero-week-card__day {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.hero-week-card__label {
-  font-size: 12px;
-  color: rgba(219, 229, 245, 0.64);
-}
-
-.hero-week-card__dot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(219, 229, 245, 0.28);
-  background: rgba(9, 23, 49, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-}
-
-.hero-week-card__dot--active {
-  background: linear-gradient(180deg, #51D38D 0%, #1DAA6A 100%);
-  border-color: rgba(146, 255, 199, 0.72);
-  box-shadow: 0 10px 20px rgba(29, 170, 106, 0.2);
-}
-
-.hero-week-card__dot-core {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  display: block;
-}
-
-.hero-week-card__dot-core--today {
-  width: auto;
-  height: auto;
-  background: transparent;
-  font-size: 11px;
-  line-height: 1;
-}
-
-.hero-week-card__legend {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.hero-week-card__legend-item {
-  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  color: rgba(219, 229, 245, 0.62);
+  font-size: 21px;
+  font-weight: 900;
 }
 
-.hero-week-card__legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(219, 229, 245, 0.28);
-  background: rgba(9, 23, 49, 0.35);
-}
-
-.hero-week-card__legend-dot--active {
-  background: linear-gradient(180deg, #51D38D 0%, #1DAA6A 100%);
-  border-color: rgba(146, 255, 199, 0.72);
-}
-
-.hero-atmosphere {
-  display: none;
-}
-
-.hero-atmosphere__svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.content {
-  margin-top: 18px;
-  padding: 0;
+.icon-edit {
+  border: 0;
   background: transparent;
-  border-radius: 0;
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.profile-section {
-  min-width: 0;
-}
-
-.content-column {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-width: 0;
-}
-
-.vip-card {
-  background: linear-gradient(135deg, var(--navy2) 0%, var(--navy) 100%);
-  border-radius: var(--r);
-  margin-bottom: 0;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 16px 32px rgba(15, 36, 68, 0.12);
-}
-
-.vip-top {
-  padding: 16px 18px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.vip-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 3px;
-}
-
-.vip-sub {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.vip-plans {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 14px 14px 16px;
-}
-
-.plan {
-  border-radius: 12px;
-  padding: 14px 10px;
-  text-align: center;
+  color: var(--c2);
   cursor: pointer;
-  border: 1.5px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
+  font-size: 14px;
+  padding: 2px;
+}
+
+.profile-location {
+  margin-top: 8px;
+  color: #4f463f;
+  font-size: 13px;
+  text-align: center;
+}
+
+.profile-vip {
+  margin-top: 13px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  border: 1px solid #d5ad55;
+  background: #fff1c9;
+  color: var(--c2);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.avatar-error {
+  margin-top: 8px;
+  max-width: 170px;
+  color: #b42318;
+  font-size: 11px;
+  text-align: center;
+}
+
+.profile-info {
+  padding-left: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.info-row {
+  min-height: 41px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #dfd6c9;
+  font-size: 14px;
+}
+
+.info-row:last-of-type {
+  border-bottom: 0;
+}
+
+.row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #5a5046;
+  font-weight: 700;
+}
+
+.row-label i {
+  color: var(--c2);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.info-row strong {
+  color: #121212;
+  font-size: 15px;
+}
+
+.email-value {
+  color: #2f2720;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.verified {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.verified--ok {
+  background: #dff0e4;
+  color: #4c9862;
+}
+
+.verified--warn {
+  background: #fff2cf;
+  color: #9b6b16;
+}
+
+.primary-btn,
+.ghost-btn {
+  border-radius: 8px;
+  min-height: 31px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primary-btn {
+  background: linear-gradient(180deg, #8a6744 0%, #755335 100%);
+  color: #fff8ee;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.primary-btn:hover {
+  filter: brightness(1.04);
+}
+
+.ghost-btn {
+  background: rgba(246, 241, 232, 0.78);
+  border-color: #d9cdbb;
+  color: var(--c2);
+}
+
+.ghost-btn:hover {
+  border-color: #b99f80;
+  color: #65472f;
+}
+
+.profile-btn {
+  margin-top: 10px;
+  width: min(226px, 100%);
+  align-self: start;
+}
+
+.status-card {
+  min-height: 154px;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-list {
+  padding: 8px 18px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.status-row,
+.config-row {
+  display: grid;
+  grid-template-columns: 21px minmax(86px, 0.66fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 21px;
+  font-size: 12px;
+}
+
+.status-label,
+.config-row > span:nth-child(2) {
+  color: #4f463f;
+  font-weight: 700;
+}
+
+.status-value,
+.config-row strong {
+  color: #6b6258;
+  font-weight: 500;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soft-icon,
+.tile-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.soft-icon.purple { background: #efe8ff; color: #7c4dff; }
+.soft-icon.gold { background: #fff0cf; color: #da8b18; }
+.soft-icon.green { background: #dff0e4; color: #4c9862; }
+.soft-icon.blue { background: #e6efff; color: #3f74d9; }
+.soft-icon.teal { background: #dff5ef; color: #18a679; }
+.soft-icon.cyan { background: #e4f6ff; color: #3a93c7; }
+.soft-icon.red { background: #ffe7ec; color: #db4a63; }
+
+.membership-card {
+  min-height: 236px;
+  display: flex;
+  flex-direction: column;
+}
+
+.plans {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+  padding: 12px 14px 0;
+}
+
+.plan-card {
+  min-height: 126px;
+  height: auto;
+  padding: 13px 12px 11px;
   position: relative;
-  transition: 0.15s;
+  border: 1px solid #d9cdbb;
+  border-radius: 10px;
+  background: rgba(255, 252, 247, 0.58);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--c0);
 }
 
-.plan:hover {
-  border-color: rgba(255, 255, 255, 0.25);
+.plan-card.selected,
+.plan-card.recommended {
+  border-color: #f28a43;
+  box-shadow: 0 0 0 1px rgba(242, 138, 67, 0.2);
 }
 
-.plan.featured {
-  background: var(--orange);
-  border-color: var(--orange);
-  box-shadow: 0 4px 18px rgba(232, 132, 90, 0.35);
+.plan-card.value {
+  overflow: hidden;
 }
 
 .plan-badge {
   position: absolute;
-  top: -9px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #FFD166;
-  color: #7A3F00;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 10px;
-  border-radius: 20px;
-  white-space: nowrap;
-  letter-spacing: 0.3px;
+  top: -1px;
+  right: -1px;
+  min-width: 47px;
+  height: 22px;
+  border-radius: 0 10px 0 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ff8a3d, #f06d2f);
+}
+
+.plan-card.value .plan-badge {
+  background: linear-gradient(135deg, #a679ff, #8d5ee9);
 }
 
 .plan-name {
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 8px;
-}
-
-.plan.featured .plan-name {
-  color: rgba(255, 255, 255, 0.88);
+  font-size: 18px;
+  font-weight: 900;
 }
 
 .plan-price {
-  font-size: 26px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.5px;
-  line-height: 1;
+  margin-top: 8px;
+  font-size: 27px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
 }
 
-.plan.featured .plan-price {
-  color: #fff;
-}
-
-.plan-unit {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.45);
-  margin-top: 4px;
-}
-
-.plan.featured .plan-unit {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.plan-per {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
-  margin-top: 3px;
-}
-
-.plan.featured .plan-per {
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.vip-cta {
-  margin: 0 14px 16px;
-  padding: 13px;
-  background: var(--orange);
-  border: none;
-  border-radius: 10px;
-  color: #fff;
+.plan-price small {
   font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  width: calc(100% - 28px);
-  display: block;
-  transition: 0.15s;
+  font-weight: 500;
+  color: #5f574e;
 }
 
-.vip-cta:hover {
-  background: #D4754E;
-}
-
-.vip-features {
+.plan-tags {
+  margin-top: auto;
+  padding-top: 12px;
   display: flex;
-  justify-content: center;
-  gap: 16px;
-  padding: 0 14px 16px;
+  gap: 6px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
-.vf {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.plan-tags span {
+  border: 1px solid #d9cdbb;
+  border-radius: 999px;
+  background: rgba(246, 241, 232, 0.78);
+  color: #5c5146;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.vf-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--orange);
-}
-
-.sec {
-  background: var(--card);
-  border: 1px solid var(--bd);
-  border-radius: var(--r);
-  margin-bottom: 12px;
-  overflow: hidden;
-}
-
-.sec-hdr {
-  padding: 14px 18px 10px;
-  border-bottom: 1px solid var(--bd);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.sec-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tx);
-}
-
-.sec-action {
-  font-size: 11px;
-  color: var(--navy2);
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.sec-body {
-  padding: 16px 18px;
-}
-
-.radar-wrap {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
-
-.portrait-radar {
-  overflow: visible;
-}
-
-.rl-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.rl-item:last-child {
-  margin-bottom: 0;
-}
-
-.rl-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.rl-name {
-  font-size: 12px;
-  color: var(--tx);
-  font-weight: 500;
-  width: 76px;
-  flex-shrink: 0;
+  padding: 4px 8px;
+  line-height: 1;
   white-space: nowrap;
 }
 
-.rl-bar {
-  flex: 1;
-  height: 4px;
-  background: var(--bd);
-  border-radius: 4px;
-  overflow: hidden;
+.mini-chip {
+  border: 1px solid #d9cdbb;
+  border-radius: 999px;
+  background: rgba(246, 241, 232, 0.78);
+  color: #5c5146;
+  font-size: 10px;
+  padding: 4px 7px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.rl-fill {
-  height: 100%;
-  border-radius: 4px;
-}
-
-.rl-score {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tx);
-  min-width: 32px;
-  text-align: right;
-}
-
-.radar-note {
-  font-size: 11px;
-  color: var(--mu);
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: var(--navy-soft);
-  border-radius: 9px;
-  line-height: 1.6;
-  border: 1px solid var(--bd);
-}
-
-.ms-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
-  border: 1px solid var(--bd);
-  border-radius: var(--r);
-  margin-bottom: 0;
-  overflow: hidden;
-  box-shadow: 0 16px 32px rgba(15, 36, 68, 0.05);
-}
-
-.ms-hdr {
-  padding: 14px 18px 12px;
-  border-bottom: 1px solid var(--bd);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.ms-hdr-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tx);
-}
-
-.ms-body {
-  padding: 18px;
-}
-
-.ms-ring-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 18px;
-}
-
-.ms-ring-wrap {
-  width: 110px;
-  height: 110px;
-  margin-bottom: 10px;
-}
-
-.ms-ring-n {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--tx);
-  text-align: center;
-  margin-bottom: 3px;
-}
-
-.ms-ring-sub {
-  font-size: 11px;
-  color: var(--mu);
-  text-align: center;
-}
-
-.ms-dots-wrap {
-  position: relative;
-  margin-bottom: 16px;
-  padding: 0 4px;
-}
-
-.ms-dots-row {
+.membership-footer {
+  margin-top: 0;
+  padding: 10px 14px 13px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  position: relative;
-  z-index: 1;
-  column-gap: 8px;
+  grid-template-columns: minmax(210px, 0.48fr) 1fr;
+  align-items: center;
+  gap: 16px;
 }
 
-.ms-dot-wrap {
-  position: relative;
+.charge-btn {
+  min-height: 34px;
 }
 
-.ms-dot-item {
-  position: relative;
-  z-index: 1;
+.safe-text {
+  color: var(--mute);
+  font-size: 12px;
+  text-align: center;
+}
+
+.identity-card {
+  min-height: 164px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 5px;
 }
 
-.ms-dot-segment {
-  position: absolute;
-  top: 12px;
-  left: calc(-50% + 13px);
-  right: calc(50% - 13px);
-  height: 2px;
-  background: #E3EAF4;
-  border-radius: 2px;
-  z-index: 0;
-}
-
-.ms-dot-segment--done {
-  background: rgba(52, 211, 153, 0.92);
-  box-shadow: 0 0 8px rgba(52, 211, 153, 0.28);
-}
-
-.ms-dot-circle {
-  position: relative;
-  z-index: 1;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+.config-list {
+  padding: 6px 18px 4px;
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.identity-card .full {
+  display: block;
+  width: calc(100% - 118px);
+  margin: auto auto 9px;
+}
+
+.favorites-card {
+  min-height: 142px;
+  display: flex;
+  flex-direction: column;
+}
+
+.favorites-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 8px;
+  padding: 7px 14px 0;
+}
+
+.favorite-box,
+.common-box,
+.device-panel {
+  border: 1px solid #d9cdbb;
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.45);
+  padding: 6px 8px;
+}
+
+.section-mini-title {
+  font-size: 12px;
+  color: #6e5840;
+  font-weight: 900;
+}
+
+.source-note {
+  margin-left: 7px;
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.favorite-tiles {
+  margin-top: 5px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.favorite-tile {
+  min-height: 40px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  font-size: 12px;
+  color: #332820;
+}
+
+.favorite-tile span {
   font-size: 11px;
-  font-weight: 600;
-  border: 2px solid #DBE4F0;
-  background: #F6F9FD;
-  color: #9AACBF;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.ms-dot-circle.done {
-  background: var(--green);
-  border-color: var(--green);
-  color: #fff;
-}
-
-.ms-dot-circle.active {
-  background: var(--orange);
-  border-color: var(--orange);
-  color: #fff;
-  box-shadow: 0 0 10px rgba(232, 132, 90, 0.4);
-}
-
-.ms-dot-days {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--hi);
-}
-
-.ms-dot-days.done {
-  color: rgba(52, 211, 153, 0.9);
-}
-
-.ms-dot-days.active {
-  color: var(--orange);
-}
-
-.ms-dot-reward {
+.favorite-tile strong {
   font-size: 13px;
 }
 
-.ms-tip {
-  background: var(--navy-soft);
-  border: 1px solid var(--bd);
-  border-radius: 10px;
-  padding: 11px 14px;
+.tile-icon.gold { background: #fff0cf; color: #f5a623; }
+.tile-icon.green { background: #dff0e4; color: #50b86a; }
+.tile-icon.blue { background: #e6efff; color: #4f7bee; }
+
+.chip-line {
+  min-height: 22px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.ms-tip-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--tx);
-  margin-bottom: 2px;
-}
-
-.ms-tip-sub {
-  font-size: 10px;
-  color: var(--mu);
-}
-
-.ms-week-title {
-  font-size: 10px;
-  color: var(--mu);
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-
-.ms-sparkline {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 60px;
-  margin-bottom: 0;
-}
-
-.ms-spark-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 4px;
-  height: 100%;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  color: #5f574e;
 }
 
-.ms-spark-bar {
-  width: 100%;
-  border-radius: 4px 4px 0 0;
-  min-height: 3px;
-  background: #E2E9F2;
+.chip-label {
+  color: #6e5840;
+  font-size: 11px;
+  font-weight: 900;
 }
 
-.ms-spark-bar.has {
-  background: rgba(232, 132, 90, 0.4);
+.two-actions {
+  margin-top: auto;
+  padding: 6px 14px 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
-.ms-spark-bar.today-bar {
-  background: linear-gradient(180deg, var(--orange), #C4622A);
-  box-shadow: 0 0 8px rgba(232, 132, 90, 0.35);
+.device-card {
+  grid-column: 1 / -1;
+  min-height: 180px;
 }
 
-.ms-spark-label {
-  font-size: 9px;
-  color: #9AA7BB;
+.device-layout {
+  padding: 10px 14px 15px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--layout-gap);
 }
 
-.ms-spark-label.today {
-  color: var(--orange);
-  font-weight: 600;
+.device-panel {
+  min-height: 116px;
 }
 
-.prog-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.prog-row {
-  display: flex;
+.device-row {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bd);
+  gap: 10px;
+  border-bottom: 1px solid #e4dacd;
 }
 
-.prog-row:last-child {
-  border-bottom: none;
+.device-row:last-child {
+  border-bottom: 0;
 }
 
-.prog-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+.device-icon {
+  width: 22px;
+  color: var(--c2);
+  font-size: 17px;
+  text-align: center;
+}
+
+.device-icon.small {
   font-size: 14px;
 }
 
-.prog-meta {
-  flex: 1;
-}
-
-.prog-name {
+.device-row strong,
+.login-row strong {
+  color: #2f2720;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--tx);
-  margin-bottom: 5px;
 }
 
-.prog-bar {
-  height: 4px;
-  background: var(--bd);
-  border-radius: 4px;
-  overflow: hidden;
+.device-row p {
+  margin: 3px 0 0;
+  color: #8a8075;
+  font-size: 12px;
 }
 
-.prog-fill {
-  height: 100%;
-  border-radius: 4px;
+.current-device {
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: #dff0e4;
+  color: #4c9862;
+  font-size: 12px;
+  font-weight: 900;
 }
 
-.prog-right {
+.device-time {
+  color: #7f756a;
+  font-size: 12px;
+}
+
+.login-row {
+  min-height: 24px;
+  display: grid;
+  grid-template-columns: 24px minmax(160px, 1fr) minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: #7a7066;
+}
+
+.login-row em {
+  font-style: normal;
+  color: #7a7066;
   text-align: right;
 }
 
-.prog-count {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tx);
+.login-row em.online {
+  color: #4c9862;
+  font-weight: 900;
 }
 
-.prog-pct {
-  font-size: 10px;
-  color: var(--mu);
-  margin-top: 2px;
-}
-
-.menu-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--bd);
+.link-btn {
+  display: block;
+  margin: 12px 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c2);
   cursor: pointer;
-}
-
-.menu-item:last-child {
-  border-bottom: none;
-}
-
-.mi-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  flex-shrink: 0;
-}
-
-.mi-body {
-  flex: 1;
-}
-
-.menu-label {
-  font-size: 13px;
-  color: var(--tx);
-}
-
-.menu-sub {
-  font-size: 11px;
-  color: var(--mu);
-  margin-top: 1px;
-}
-
-.menu-val {
   font-size: 12px;
-  color: var(--mu);
+  font-weight: 800;
 }
 
-.menu-arr {
-  color: var(--hi);
-  font-size: 16px;
-  margin-left: 4px;
-}
-
-.menu-badge {
-  font-size: 10px;
-  background: var(--og-bg);
-  color: #C4622A;
-  padding: 2px 8px;
-  border-radius: 20px;
-  font-weight: 500;
-  border: 1px solid var(--og-mid);
-}
-
-.logout-btn {
-  width: 100%;
-  padding: 13px;
-  background: var(--card);
-  border: 1.5px solid #FECACA;
-  border-radius: var(--r);
-  color: #D92D20;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  margin-top: 12px;
-}
-
-.pb {
-  padding-bottom: 40px;
-}
-
-.plan.selected {
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-@media (max-width: 620px) {
-  .wrap {
-    padding: 20px 16px 40px;
+@media (max-width: 1320px) {
+  .profile-sidebar {
+    width: 206px;
+    flex-basis: 206px;
   }
 
-  .hero {
-    padding: 24px 18px 26px;
+  .profile-main {
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
-  .hero-top {
-    gap: 14px;
-    margin-bottom: 22px;
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(350px, 0.9fr);
   }
 
-  .hero-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
+  .profile-body {
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
-  .hs {
-    padding: 12px 8px;
-  }
-
-  .hs-n {
-    font-size: 20px;
-  }
-
-  .hs-l {
-    font-size: 8px;
-    margin-top: 3px;
+  .profile-info {
+    padding-left: 22px;
   }
 }
 
-@media (max-width: 520px) {
-  .hero-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
+@media (max-width: 1180px) {
+  .personal-center-page {
+    overflow-x: auto;
   }
 
-  .hs {
-    padding: 10px 6px;
-  }
-
-  .hs-n {
-    font-size: 17px;
-  }
-
-  .hs-l {
-    font-size: 7px;
-    margin-top: 2px;
-  }
-}
-
-@media (max-width: 430px) {
-  .hero-stats {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-  }
-
-  .hs {
-    padding: 9px 5px;
-  }
-
-  .hs-n {
-    font-size: 15px;
-  }
-
-  .hs-l {
-    font-size: 6px;
-    margin-top: 2px;
-  }
-}
-
-@media (max-width: 360px) {
-  .hero-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .hs {
-    padding: 14px 12px;
-  }
-
-  .hs-n {
-    font-size: 19px;
-  }
-
-  .hs-l {
-    font-size: 9px;
-    margin-top: 3px;
-  }
-}
-
-@media (min-width: 960px) {
-  .profile-page {
-    background:
-      radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0) 22%),
-      radial-gradient(circle at 82% 8%, rgba(232, 132, 90, 0.12) 0, rgba(232, 132, 90, 0) 18%),
-      linear-gradient(180deg, #edf3fb 0, #eaf0f9 220px, #f6f8fc 220px, #f6f8fc 100%);
-  }
-
-  .nav {
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 10px 30px rgba(10, 22, 40, 0.08);
-  }
-
-  .wrap {
-    max-width: 1320px;
-    padding: 28px 24px 72px;
-  }
-
-  .content {
-    margin-top: 26px;
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-    gap: 24px;
-    align-items: start;
-  }
-
-  .content-column {
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-    min-width: 0;
-  }
-
-  .profile-section--vip {
-    grid-column: 1 / -1;
-    margin-bottom: 0;
-  }
-
-  .content-column > .profile-section {
-    margin-bottom: 0;
-  }
-
-  .vip-card,
-  .sec,
-  .ms-card,
-  .logout-btn {
-    box-shadow: 0 18px 42px rgba(15, 36, 68, 0.08);
-  }
-
-  .profile-section--portrait .sec-body,
-  .profile-section--progress .sec-body {
-    padding-top: 18px;
-    padding-bottom: 18px;
-  }
-
-  .radar-wrap {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 18px;
-  }
-
-  .portrait-radar {
-    align-self: center;
-    width: 272px;
-    height: 248px;
-  }
-
-  .sec-body {
-    padding: 18px 20px;
-  }
-
-  .ms-body {
-    padding: 22px 24px;
-  }
-
-  .ms-sparkline {
-    height: 72px;
-  }
-
-  .logout-btn {
-    margin-top: 0;
-  }
-}
-
-@media (min-width: 1080px) {
-  .nav {
-    background: rgba(15, 36, 68, 0.96);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: none;
-  }
-
-  .nav-back {
-    color: rgba(255, 255, 255, 0.72);
-  }
-
-  .nav-title {
-    color: #fff;
-  }
-
-  .wrap {
-    width: min(calc(100vw - 48px), 1720px);
-    max-width: 1720px;
-    padding: 28px 16px 72px;
-    display: grid;
-    grid-template-columns: 340px minmax(0, 1fr);
-    gap: 28px;
-    align-items: stretch;
-  }
-
-  .hero {
-    height: 100%;
-    min-height: 100%;
-    padding: 22px 18px 22px;
-    border-radius: 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .hero-top {
-    gap: 14px;
-    align-items: center;
-    margin-bottom: 0;
-  }
-
-  .hero-stats {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .hero-study-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    flex: 1;
-  }
-
-  .hs {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    text-align: left;
-    padding: 16px 16px;
-    border-radius: 18px;
-  }
-
-  .hs-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
-    font-size: 18px;
-    flex: none;
-  }
-
-  .hs-copy {
-    flex: 1;
-  }
-
-  .hs-n {
-    font-size: 28px;
-    line-height: 1;
-  }
-
-  .hs-l {
-    font-size: 12px;
-    margin-top: 8px;
-    text-transform: none;
-    letter-spacing: 0;
-  }
-
-  .hero-study-card,
-  .hero-week-card {
-    padding: 18px 16px;
-    border-radius: 22px;
-  }
-
-  .hero-atmosphere {
-    position: relative;
-    display: flex;
-    flex: 1;
-    align-items: flex-start;
-    min-height: 338px;
-    margin: 6px -18px -22px;
-    padding: 26px 28px 0;
-    overflow: hidden;
-  }
-
-  .hero-atmosphere::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at 72% 26%, rgba(125, 167, 255, 0.12) 0, rgba(125, 167, 255, 0) 26%),
-      linear-gradient(180deg, rgba(33, 70, 131, 0.02) 0%, rgba(19, 45, 89, 0.08) 22%, rgba(12, 31, 64, 0.18) 100%);
-    z-index: 0;
-  }
-
-  .hero-atmosphere::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(18, 41, 80, 0) 0%, rgba(18, 41, 80, 0.12) 12%, rgba(8, 24, 50, 0.42) 100%);
-    z-index: 0;
-  }
-
-  .hero-atmosphere__copy {
-    position: relative;
-    z-index: 2;
-    width: min(69%, 194px);
-    padding-left: 2px;
-    padding-top: 8px;
-  }
-
-  .hero-atmosphere__line {
-    margin: 0;
-    font-size: 18px;
-    line-height: 1.62;
-    font-weight: 670;
-    color: rgba(255, 255, 255, 0.95);
-    letter-spacing: 0.012em;
-    text-shadow: 0 3px 10px rgba(4, 14, 29, 0.22);
-  }
-
-  .hero-atmosphere__scene {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    opacity: 0.98;
-  }
-
-  .content {
-    margin-top: 0;
-  }
-
-  .vip-card {
-    box-shadow: 0 18px 42px rgba(15, 36, 68, 0.08);
-  }
-
-  .ms-card {
-    background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
-    border: 1px solid var(--bd);
-    box-shadow: 0 18px 42px rgba(15, 36, 68, 0.08);
-  }
-
-  .ms-hdr {
-    border-bottom: 1px solid var(--bd);
-  }
-
-  .ms-hdr-title,
-  .ms-ring-n {
-    color: var(--tx);
-  }
-
-  .ms-ring-sub {
-    color: var(--mu);
-  }
-
-  .ms-dot-segment {
-    background: #E3EAF4;
-  }
-
-  .ms-dot-circle {
-    border: 2px solid #DBE4F0;
-    background: #F6F9FD;
-    color: #9AACBF;
-  }
-
-  .ms-dot-days {
-    color: var(--hi);
-  }
-
-  .ms-tip {
-    background: var(--navy-soft);
-    border: 1px solid var(--bd);
-  }
-
-  .ms-tip-title {
-    color: var(--tx);
-  }
-
-  .ms-tip-sub,
-  .ms-week-title,
-  .ms-spark-label {
-    color: var(--mu);
-  }
-
-  .ms-spark-bar {
-    background: #E2E9F2;
+  .profile-shell {
+    min-width: 1000px;
   }
 }
 </style>
-
-
-
-
-
