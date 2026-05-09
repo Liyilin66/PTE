@@ -16,6 +16,10 @@ import {
   loadLoginEventsForAuth,
   parseCurrentDevice
 } from "@/lib/login-events";
+import {
+  createEmptyProfileProgress,
+  loadProfileProgressSnapshotForAuth
+} from "@/lib/profile-progress";
 import { supabase } from "@/lib/supabase";
 
 const route = useRoute();
@@ -28,7 +32,7 @@ const homeAnalytics = ref(createEmptyHomeAnalytics());
 const favoritesSnapshot = ref(createEmptyFavoritesSnapshot());
 const planSnapshot = ref(createEmptyPlanSnapshot());
 const loginEventsSnapshot = ref(createEmptyLoginEventsSnapshot());
-const practiceIdentitySnapshot = ref(createEmptyPracticeIdentitySnapshot());
+const profileProgress = ref(createEmptyProfileProgress());
 const avatarInputRef = ref(null);
 const avatarUploading = ref(false);
 const avatarUploadError = ref("");
@@ -44,12 +48,6 @@ let profileRefreshPromise = null;
 const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const PROFILE_AVATAR_ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const stageOptions = ["基础巩固", "稳步提分", "冲刺提升"];
-const IDENTITY_PRACTICE_LIMIT = 120;
-const IDENTITY_RECENT_LIMIT = 30;
-const IDENTITY_RECENT_DAYS = 7;
-const IDENTITY_MIN_ROWS_FOR_PERIOD = 3;
-const IDENTITY_ESTIMATED_MINUTES_PER_PRACTICE = 3;
-const IDENTITY_MAX_DURATION_MINUTES = 180;
 const profileInfoIconMap = {
   target:
     '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.6"/></svg>',
@@ -122,6 +120,21 @@ const accountStatusIconMap = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6a3 3 0 0 1 5.4-1.8A3.7 3.7 0 0 1 19 7.4a3.2 3.2 0 0 1-.7 5.8A3.7 3.7 0 0 1 15 20a3 3 0 0 1-3-2 3 3 0 0 1-3 2 3.7 3.7 0 0 1-3.3-6.8A3.2 3.2 0 0 1 5 7.4 3.7 3.7 0 0 1 8 6Z"/><path d="M12 6v12"/><path d="M8.5 10H12"/><path d="M12 14h3.5"/></svg>',
   plan:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 6h10"/><path d="M10 12h10"/><path d="M10 18h10"/><path d="m4 6 1 1 2-2"/><path d="m4 12 1 1 2-2"/><path d="m4 18 1 1 2-2"/></svg>'
+};
+
+const identityIconMap = {
+  summary:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Z"/><path d="m4 11 8 4 8-4"/><path d="m4 15 8 4 8-4"/></svg>',
+  score:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0-9-9"/><path d="M12 17a5 5 0 1 0-5-5"/><path d="M12 13a1 1 0 1 0-1-1"/><path d="m15 9 5-5"/><path d="M16 4h4v4"/></svg>',
+  modules:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
+  duration:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/></svg>',
+  window:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+  ai:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m5.6 5.6 2.1 2.1"/><path d="m16.3 16.3 2.1 2.1"/><path d="m18.4 5.6-2.1 2.1"/><path d="m7.7 16.3-2.1 2.1"/><path d="M9.5 12a2.5 2.5 0 0 1 5 0c0 1.4-1.2 2.2-2.5 3-1.3-.8-2.5-1.6-2.5-3Z"/></svg>'
 };
 
 const favoriteIconMap = {
@@ -299,80 +312,66 @@ const identityTargetScore = computed(() => {
   return configuredTarget ? formatTargetScore(configuredTarget) : "未设置";
 });
 
-const identityPracticeStats = computed(() =>
-  buildIdentityPracticeStats(practiceIdentitySnapshot.value.rows || [])
-);
-
 const identityConfig = computed(() => [
-  { label: "目标分数", value: identityTargetScore.value, icon: "↗", color: "blue" },
-  { label: "重点模块", value: focusModules.value, icon: "▣", color: "purple" },
-  { label: "每日学习时长", value: dailyStudyTime.value, icon: "◷", color: "cyan" },
-  { label: "最佳时段", value: bestStudyWindow.value, icon: "☼", color: "gold" },
-  { label: "AI 建议强度", value: aiIntensity.value, icon: "✕", color: "red" }
+  { label: "目标分数", value: identityTargetScore.value, icon: "score", color: "blue" },
+  { label: "重点模块", value: focusModules.value, icon: "modules", color: "purple" },
+  { label: "每日学习时长", value: dailyStudyTime.value, icon: "duration", color: "cyan" },
+  { label: "最佳时段", value: bestStudyWindow.value, icon: "window", color: "gold" },
+  { label: "AI 建议强度", value: aiIntensity.value, icon: "ai", color: "red" }
 ]);
 
 const focusModules = computed(() => {
-  if (practiceIdentitySnapshot.value.loading) return "同步中";
-  if (identityPracticeStats.value.focusModules.length) {
-    return identityPracticeStats.value.focusModules.join(" / ");
-  }
-  if (identityPracticeStats.value.recentPracticeModules.length) {
-    return identityPracticeStats.value.recentPracticeModules.join(" / ");
-  }
-  return "练习后自动生成";
+  const explicit = normalizeListValue(
+    profile.value?.focus_modules ||
+    profile.value?.focusModules ||
+    profile.value?.priority_modules ||
+    authStore.user?.user_metadata?.focus_modules
+  );
+  if (explicit.length) return explicit.slice(0, 4).join(" / ");
+
+  const completedCounts = profileProgress.value?.completedCounts || {};
+  const ranked = ["RA", "DI", "WFD", "RTS", "WE", "RS"]
+    .map((taskType) => ({
+      taskType,
+      count: Number(completedCounts[taskType] || 0)
+    }))
+    .sort((left, right) => left.count - right.count)
+    .map((item) => item.taskType);
+
+  return ranked.slice(0, 3).join(" / ") || "RA / DI / WFD";
 });
 
 const dailyStudyTime = computed(() => {
-  if (practiceIdentitySnapshot.value.loading) return "同步中";
-  if (identityPracticeStats.value.averageDailyMinutes > 0) {
-    return `约 ${formatInteger(identityPracticeStats.value.averageDailyMinutes)} 分钟/天`;
-  }
-  if (identityPracticeStats.value.estimatedDailyMinutes > 0) {
-    return `约 ${formatInteger(identityPracticeStats.value.estimatedDailyMinutes)} 分钟/天`;
-  }
+  const explicit = pickText(
+    profile.value?.daily_study_time,
+    profile.value?.dailyStudyTime,
+    profile.value?.daily_minutes,
+    profile.value?.dailyStudyMinutes
+  );
+  if (explicit) return /\d/.test(explicit) && !explicit.includes("分钟") ? `${explicit} 分钟` : explicit;
   if (planSnapshot.value.plan?.total_minutes) {
-    return `计划 ${formatInteger(planSnapshot.value.plan.total_minutes)} 分钟/天`;
+    return `${formatInteger(planSnapshot.value.plan.total_minutes)} 分钟`;
   }
-  return "暂无足够数据";
+  return "60-90 分钟";
 });
 
 const bestStudyWindow = computed(() =>
-  practiceIdentitySnapshot.value.loading
-    ? "同步中"
-    : identityPracticeStats.value.bestStudyWindow || "练习后自动生成"
+  pickText(
+    profile.value?.best_study_time,
+    profile.value?.bestStudyTime,
+    profile.value?.preferred_study_time,
+    profile.value?.study_window
+  ) || "晚上 19:00-22:00"
 );
 
-const aiIntensity = computed(() => {
-  if (practiceIdentitySnapshot.value.loading || homeAnalytics.value.loading) return "同步中";
-  const stats = identityPracticeStats.value;
-  const target = parseTargetScoreNumber(identityTargetScore.value);
-  const recentAverage = firstFiniteNumber(
-    homeAnalytics.value.currentPeriodAverageScore,
-    stats.averageScore,
-    homeAnalytics.value.averageScore
-  );
-  const currentStreak = Number(homeAnalytics.value.currentStreak || 0);
-
-  if (!stats.recentRows.length && !Number(homeAnalytics.value.scoredCount || 0)) {
-    return "标准";
-  }
-  if (target !== null && recentAverage !== null && target >= 79 && recentAverage <= target - 15) {
-    return "严格";
-  }
-  if (target !== null && recentAverage !== null && stats.weakModuleCount >= 2 && recentAverage <= target - 10) {
-    return "严格";
-  }
-  if (
-    target !== null &&
-    recentAverage !== null &&
-    recentAverage >= target - 3 &&
-    currentStreak >= 3 &&
-    stats.sevenDayRows.length >= 5
-  ) {
-    return "温和";
-  }
-  return "标准";
-});
+const aiIntensity = computed(() =>
+  pickText(
+    profile.value?.ai_intensity,
+    profile.value?.aiIntensity,
+    profile.value?.coach_intensity,
+    authStore.user?.user_metadata?.ai_intensity
+  ) || "标准"
+);
 
 const favorites = computed(() => {
   const summary = favoritesSnapshot.value;
@@ -612,7 +611,7 @@ async function loadProfileSnapshots({ reset = false } = {}) {
     favoritesSnapshot.value = createEmptyFavoritesSnapshot();
     planSnapshot.value = createEmptyPlanSnapshot();
     loginEventsSnapshot.value = createEmptyLoginEventsSnapshot();
-    practiceIdentitySnapshot.value = createEmptyPracticeIdentitySnapshot();
+    profileProgress.value = createEmptyProfileProgress();
   }
 
   profileRefreshPromise = (async () => {
@@ -626,20 +625,20 @@ async function loadProfileSnapshots({ reset = false } = {}) {
       favoriteSummary,
       todayPlan,
       loginEventsSummary,
-      practiceIdentitySummary
+      progressSnapshot
     ] = await Promise.all([
       loadHomeAnalyticsSnapshotForAuth(authStore),
       loadFavoritesSnapshotForAuth(),
       loadTodayPlanSnapshotForAuth(),
       loadLoginEventsForAuth(authStore),
-      loadPracticeIdentitySnapshotForAuth()
+      loadProfileProgressSnapshotForAuth(authStore)
     ]);
 
     homeAnalytics.value = analyticsSnapshot;
     favoritesSnapshot.value = favoriteSummary;
     planSnapshot.value = todayPlan;
     loginEventsSnapshot.value = loginEventsSummary;
-    practiceIdentitySnapshot.value = practiceIdentitySummary;
+    profileProgress.value = progressSnapshot;
   })();
 
   try {
@@ -885,42 +884,6 @@ async function loadPlanProgress({ userId, plan, dateKey }) {
   };
 }
 
-async function loadPracticeIdentitySnapshotForAuth() {
-  const userId = await resolveCurrentUserId();
-  if (!userId) {
-    return {
-      ...createEmptyPracticeIdentitySnapshot(),
-      loading: false,
-      source: "auth_missing"
-    };
-  }
-
-  try {
-    const { data, error } = await supabase
-      .from("practice_logs")
-      .select("id, task_type, created_at, score_json")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(IDENTITY_PRACTICE_LIMIT);
-
-    if (error) throw error;
-
-    return {
-      loading: false,
-      source: "remote",
-      rows: Array.isArray(data) ? data : []
-    };
-  } catch (error) {
-    console.warn("Practice identity snapshot load failed:", error);
-    return {
-      ...createEmptyPracticeIdentitySnapshot(),
-      loading: false,
-      source: "error"
-    };
-  }
-}
-
 function normalizePlanRow(row) {
   const rawPlan = isPlainObject(row?.plan_json) ? row.plan_json : {};
   const rawItems = Array.isArray(rawPlan?.items) ? rawPlan.items : [];
@@ -958,14 +921,6 @@ function createEmptyPlanSnapshot() {
     reasonCode: "loading",
     plan: null,
     progress: null
-  };
-}
-
-function createEmptyPracticeIdentitySnapshot() {
-  return {
-    loading: true,
-    source: "loading",
-    rows: []
   };
 }
 
@@ -1205,259 +1160,6 @@ function formatTargetScore(value) {
   const numeric = Number(normalized);
   if (Number.isFinite(numeric)) return `${Math.round(numeric)}+`;
   return normalized;
-}
-
-function buildIdentityPracticeStats(rows) {
-  const normalizedRows = normalizePracticeIdentityRows(rows);
-  const sevenDayRows = filterRowsWithinDays(normalizedRows, IDENTITY_RECENT_DAYS);
-  const recentRows = sevenDayRows.length >= IDENTITY_MIN_ROWS_FOR_PERIOD
-    ? sevenDayRows
-    : normalizedRows.slice(0, IDENTITY_RECENT_LIMIT);
-  const moduleStats = buildModuleStats(recentRows);
-  const scoredModules = moduleStats.filter((item) => item.scoredCount > 0);
-  const focusModules = scoredModules
-    .slice()
-    .sort((left, right) =>
-      left.averageScore - right.averageScore ||
-      right.lowScoreCount - left.lowScoreCount ||
-      right.count - left.count
-    )
-    .slice(0, 3)
-    .map((item) => item.taskType);
-  const recentPracticeModules = moduleStats
-    .slice()
-    .sort((left, right) => right.count - left.count || left.lastIndex - right.lastIndex)
-    .slice(0, 3)
-    .map((item) => item.taskType);
-  const weeklyDurationMinutes = sumPracticeDurationMinutes(sevenDayRows);
-  const weeklyPracticeCount = sevenDayRows.length;
-  const averageScore = calculatePracticeAverageScore(recentRows);
-
-  return {
-    rows: normalizedRows,
-    sevenDayRows,
-    recentRows,
-    focusModules,
-    recentPracticeModules,
-    averageDailyMinutes: weeklyDurationMinutes > 0 ? Math.max(1, Math.round(weeklyDurationMinutes / 7)) : 0,
-    estimatedDailyMinutes: weeklyDurationMinutes > 0 || weeklyPracticeCount <= 0
-      ? 0
-      : Math.max(1, Math.round((weeklyPracticeCount * IDENTITY_ESTIMATED_MINUTES_PER_PRACTICE) / 7)),
-    bestStudyWindow: resolveBestStudyWindow(recentRows),
-    averageScore,
-    weakModuleCount: scoredModules.filter((item) => item.averageScore < 65).length
-  };
-}
-
-function normalizePracticeIdentityRows(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .map((row) => {
-      const createdAt = new Date(row?.created_at);
-      return {
-        ...row,
-        taskType: normalizeTaskType(row?.task_type),
-        createdAt,
-        score: resolvePracticeScore(row),
-        durationMinutes: resolvePracticeDurationMinutes(row)
-      };
-    })
-    .filter((row) => row.taskType && Number.isFinite(row.createdAt.getTime()))
-    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
-}
-
-function filterRowsWithinDays(rows, days) {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - Math.max(1, Number(days || 1)));
-  return (Array.isArray(rows) ? rows : []).filter((row) => row.createdAt >= cutoff);
-}
-
-function buildModuleStats(rows) {
-  const stats = new Map();
-  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
-    if (!row.taskType) return;
-    const current = stats.get(row.taskType) || {
-      taskType: row.taskType,
-      count: 0,
-      scoredCount: 0,
-      scoreTotal: 0,
-      averageScore: 0,
-      lowScoreCount: 0,
-      lastIndex: index
-    };
-    current.count += 1;
-    current.lastIndex = Math.min(current.lastIndex, index);
-    if (row.score !== null) {
-      current.scoredCount += 1;
-      current.scoreTotal += row.score;
-      if (row.score < 65) current.lowScoreCount += 1;
-    }
-    stats.set(row.taskType, current);
-  });
-
-  return [...stats.values()].map((item) => ({
-    ...item,
-    averageScore: item.scoredCount ? item.scoreTotal / item.scoredCount : 0
-  }));
-}
-
-function calculatePracticeAverageScore(rows) {
-  const scores = (Array.isArray(rows) ? rows : [])
-    .map((row) => row.score)
-    .filter((score) => score !== null);
-  if (!scores.length) return null;
-  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
-}
-
-function sumPracticeDurationMinutes(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .reduce((sum, row) => sum + Number(row?.durationMinutes || 0), 0);
-}
-
-function resolvePracticeScore(row) {
-  const score = toPlainObject(row?.score_json) || {};
-  const candidates = [
-    score?.overall,
-    score?.score_overall,
-    score?.overall_score,
-    score?.overall_estimated,
-    score?.total_score,
-    score?.final_score,
-    score?.score,
-    score?.estimated_score,
-    score?.scores?.overall,
-    score?.display_scores?.overall,
-    score?.diagnostics?.display_scores?.overall,
-    score?.ai_review?.display_scores?.overall,
-    score?.ai_review?.diagnostics?.display_scores?.overall,
-    score?.ai_review?.overall,
-    score?.ai_review?.product?.overall,
-    score?.product?.overall,
-    score?.result?.overall,
-    score?.result?.overall_score,
-    score?.feedback?.overall,
-    score?.feedback?.overall_score
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizePracticeScore(candidate);
-    if (normalized !== null) return normalized;
-  }
-  return null;
-}
-
-function resolvePracticeDurationMinutes(row) {
-  const score = toPlainObject(row?.score_json) || {};
-  const secondCandidates = [
-    score?.analytics?.total_active_sec,
-    score?.analytics?.totalActiveSec,
-    score?.duration_sec,
-    score?.durationSec,
-    score?.duration_seconds,
-    score?.durationSeconds,
-    score?.time_spent_sec,
-    score?.timeSpentSec,
-    score?.time_spent_seconds,
-    score?.timeSpentSeconds,
-    score?.elapsed_sec,
-    score?.elapsedSec,
-    score?.elapsed_seconds,
-    score?.elapsedSeconds,
-    score?.metrics?.speech_duration_sec,
-    score?.metrics?.speechDurationSec,
-    score?.audio_signals?.duration_sec,
-    score?.audio_signals?.durationSec,
-    score?.recording_duration_sec,
-    score?.recordingDurationSec
-  ];
-  const minuteCandidates = [
-    score?.duration_min,
-    score?.durationMin,
-    score?.duration_minutes,
-    score?.durationMinutes,
-    score?.time_spent_min,
-    score?.timeSpentMin,
-    score?.time_spent_minutes,
-    score?.timeSpentMinutes,
-    score?.minutes
-  ];
-
-  for (const candidate of secondCandidates) {
-    const minutes = normalizeDurationMinutes(Number(candidate) / 60);
-    if (minutes > 0) return minutes;
-  }
-  for (const candidate of minuteCandidates) {
-    const minutes = normalizeDurationMinutes(candidate);
-    if (minutes > 0) return minutes;
-  }
-
-  const durationMs = Number(score?.audio_signals?.duration_ms ?? score?.audio_signals?.durationMs);
-  if (Number.isFinite(durationMs) && durationMs > 0) {
-    return normalizeDurationMinutes(durationMs / 60000);
-  }
-  return 0;
-}
-
-function resolveBestStudyWindow(rows) {
-  if (!Array.isArray(rows) || rows.length < IDENTITY_MIN_ROWS_FOR_PERIOD) return "";
-  const windows = {
-    morning: { label: "早上 06:00-12:00", count: 0 },
-    afternoon: { label: "下午 12:00-18:00", count: 0 },
-    evening: { label: "晚上 18:00-24:00", count: 0 },
-    late: { label: "深夜 00:00-06:00", count: 0 }
-  };
-
-  rows.forEach((row) => {
-    const hour = row.createdAt.getHours();
-    if (hour >= 6 && hour < 12) {
-      windows.morning.count += 1;
-    } else if (hour >= 12 && hour < 18) {
-      windows.afternoon.count += 1;
-    } else if (hour >= 18 && hour < 24) {
-      windows.evening.count += 1;
-    } else {
-      windows.late.count += 1;
-    }
-  });
-
-  const best = Object.values(windows).sort((left, right) => right.count - left.count)[0];
-  return best?.count > 0 ? best.label : "";
-}
-
-function parseTargetScoreNumber(value) {
-  const numeric = Number(normalizeText(value).replace(/[^\d.]/g, ""));
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-}
-
-function firstFiniteNumber(...values) {
-  for (const value of values) {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric) && numeric > 0) return numeric;
-  }
-  return null;
-}
-
-function normalizePracticeScore(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return Math.max(0, Math.min(90, numeric));
-}
-
-function normalizeDurationMinutes(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
-  return Math.min(IDENTITY_MAX_DURATION_MINUTES, numeric);
-}
-
-function toPlainObject(value) {
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return isPlainObject(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  return isPlainObject(value) ? value : null;
 }
 
 function normalizeTargetScoreInput(value) {
@@ -1754,19 +1456,17 @@ function sumBy(items, key) {
 
             <article class="pc-card identity-card">
               <div class="card-title">
-                <span class="title-icon">⚙</span>
+                <span class="title-icon title-icon-svg" aria-hidden="true" v-html="identityIconMap.summary"></span>
                 <span>学习身份配置</span>
               </div>
 
               <div class="config-list">
                 <div v-for="item in identityConfig" :key="item.label" class="config-row">
-                  <span class="soft-icon" :class="item.color">{{ item.icon }}</span>
+                  <span class="soft-icon config-icon" :class="item.color" aria-hidden="true" v-html="identityIconMap[item.icon]"></span>
                   <span>{{ item.label }}</span>
                   <strong>{{ item.value }}</strong>
                 </div>
               </div>
-
-              <div class="auto-config-note">根据练习数据自动更新</div>
             </article>
 
           </div>
@@ -2976,32 +2676,56 @@ button {
 }
 
 .identity-card {
-  min-height: 164px;
+  min-height: auto;
   display: flex;
   flex-direction: column;
 }
 
 .config-list {
-  padding: 6px 18px 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  padding: 12px 14px 15px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.auto-config-note {
-  width: calc(100% - 118px);
-  margin: auto auto 9px;
-  min-height: 31px;
-  border: 1px solid #d9cdbb;
+.identity-card .config-row {
+  min-height: 56px;
+  padding: 8px;
+  border: 1px solid rgba(217, 205, 187, 0.76);
   border-radius: 8px;
-  background: rgba(246, 241, 232, 0.56);
-  color: #8a7259;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  background: rgba(255, 252, 247, 0.55);
+}
+
+.identity-card .soft-icon {
+  grid-row: 1 / 3;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0;
+}
+
+.identity-card .config-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.identity-card .config-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.05;
+}
+
+.identity-card .config-row > span:nth-child(2) {
+  color: #5c5146;
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.identity-card .config-row strong {
+  color: #2f2720;
+  font-size: 13px;
+  line-height: 1.18;
 }
 
 .favorites-card {
