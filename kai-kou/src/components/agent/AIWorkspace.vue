@@ -403,7 +403,7 @@ import { parseAgentContent } from "@/lib/agent-rich-content";
 
 const props = defineProps({
   navItems: { type: Array, default: () => [] },
-  userDisplayName: { type: String, default: "yli71641" },
+  userDisplayName: { type: String, default: "同学" },
   userInitial: { type: String, default: "Y" },
   userAvatarUrl: { type: String, default: "" },
   showUserAvatar: { type: Boolean, default: false },
@@ -549,7 +549,7 @@ const quickCmds = computed(() => (props.quickActions.length ? props.quickActions
 const followupQuestions = computed(() => props.recommendedQuestions.length
   ? props.recommendedQuestions.map((item) => normalizeText(item.text || item.prompt || item)).filter(Boolean)
   : ["我今天最应该练哪个题型？", "DI 如何快速提高信息覆盖率？", "RTS 复述流畅度怎么练？", "WFD 总丢冠词和复数怎么办？"]);
-const userName = computed(() => normalizeText(props.userDisplayName) || "yli71641");
+const userName = computed(() => normalizeText(props.userDisplayName) || "同学");
 const userLetter = computed(() => normalizeText(props.userInitial) || userName.value.charAt(0).toUpperCase() || "Y");
 
 watch(

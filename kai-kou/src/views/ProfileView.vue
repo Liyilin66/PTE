@@ -10,9 +10,10 @@ import {
   loadHomeAnalyticsSnapshotForAuth
 } from "@/lib/home-analytics";
 import {
-  createEmptyProfileProgress,
-  loadProfileProgressSnapshotForAuth
-} from "@/lib/profile-progress";
+  createEmptyLoginEventsSnapshot,
+  formatLoginEventDevice,
+  loadLoginEventsForAuth
+} from "@/lib/login-events";
 import { supabase } from "@/lib/supabase";
 
 const route = useRoute();
@@ -22,13 +23,41 @@ const uiStore = useUIStore();
 
 const selectedPlanKey = ref("month");
 const homeAnalytics = ref(createEmptyHomeAnalytics());
-const profileProgress = ref(createEmptyProfileProgress());
 const favoritesSnapshot = ref(createEmptyFavoritesSnapshot());
 const planSnapshot = ref(createEmptyPlanSnapshot());
+const loginEventsSnapshot = ref(createEmptyLoginEventsSnapshot());
+const practiceIdentitySnapshot = ref(createEmptyPracticeIdentitySnapshot());
 const avatarInputRef = ref(null);
 const avatarUploading = ref(false);
 const avatarUploadError = ref("");
+const profileModalOpen = ref(false);
+const profileSaving = ref(false);
+const profileSaveError = ref("");
+const profileDraft = ref(createProfileDraft());
+const profileDraftOriginal = ref(createProfileDraft());
+const avatarDraftDataUrl = ref("");
+const avatarDraftName = ref("");
+const loggingOut = ref(false);
 let profileRefreshPromise = null;
+const PROFILE_AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const PROFILE_AVATAR_ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const stageOptions = ["基础巩固", "稳步提分", "冲刺提升"];
+const IDENTITY_PRACTICE_LIMIT = 120;
+const IDENTITY_RECENT_LIMIT = 30;
+const IDENTITY_RECENT_DAYS = 7;
+const IDENTITY_MIN_ROWS_FOR_PERIOD = 3;
+const IDENTITY_ESTIMATED_MINUTES_PER_PRACTICE = 3;
+const IDENTITY_MAX_DURATION_MINUTES = 180;
+const profileInfoIconMap = {
+  target:
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.6"/></svg>',
+  calendar:
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/></svg>',
+  stage:
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 18.5h16"/><path d="M7 15.5l4-4 3 3 5-6"/><path d="M15.5 8.5H19v3.5"/></svg>',
+  mail:
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M5 8l6.1 4.4a1.6 1.6 0 0 0 1.8 0L19 8"/></svg>'
+};
 
 const navIconMap = {
   home: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>',
@@ -95,32 +124,11 @@ const userEmail = computed(() =>
   normalizeText(authStore.user?.email || profile.value?.email)
 );
 const userAvatarUrl = computed(() => normalizeText(authStore.avatarUrl));
+const modalAvatarPreview = computed(() => avatarDraftDataUrl.value || userAvatarUrl.value);
+const todayDateKey = computed(() => getLocalDateKey());
 const emailVerified = computed(() =>
   Boolean(authStore.user?.email_confirmed_at || authStore.user?.confirmed_at)
 );
-
-const profileLocation = computed(() => {
-  const city = pickText(
-    profile.value?.city,
-    profile.value?.location_city,
-    profile.value?.study_city,
-    authStore.user?.user_metadata?.city
-  );
-  const country = pickText(
-    profile.value?.country,
-    profile.value?.region,
-    profile.value?.location_country,
-    authStore.user?.user_metadata?.country
-  );
-  const explicitLocation = pickText(
-    profile.value?.location,
-    profile.value?.region_city,
-    authStore.user?.user_metadata?.location
-  );
-
-  if (city && country) return `${city}, ${country}`;
-  return explicitLocation || city || country || "Melbourne, Australia";
-});
 
 const targetScore = computed(() =>
   formatTargetScore(
@@ -196,11 +204,11 @@ const membershipSummary = computed(() => {
 });
 
 const profileInfoRows = computed(() => [
-  { icon: "◎", label: "目标分数", value: targetScore.value, strong: true },
-  { icon: "▣", label: "考试日期", value: examDate.value, strong: true },
-  { icon: "◉", label: "当前阶段", value: currentStage.value, strong: true },
+  { icon: "target", label: "目标分数", value: targetScore.value, strong: true },
+  { icon: "calendar", label: "考试日期", value: examDate.value, strong: true },
+  { icon: "stage", label: "当前阶段", value: currentStage.value, strong: true },
   {
-    icon: "✉",
+    icon: "mail",
     label: "邮箱",
     value: userEmail.value || "邮箱未绑定",
     badge: emailVerified.value ? "已验证" : "未验证",
@@ -211,7 +219,7 @@ const profileInfoRows = computed(() => [
 const accountStatusRows = computed(() => [
   {
     label: "最近一次登录",
-    value: formatLastLogin(authStore.user?.last_sign_in_at),
+    value: latestLoginStatusText.value,
     icon: "◉",
     color: "purple"
   },
@@ -241,8 +249,23 @@ const accountStatusRows = computed(() => [
   }
 ]);
 
+const identityTargetScore = computed(() => {
+  const configuredTarget = pickText(
+    profile.value?.target_score,
+    profile.value?.targetScore,
+    profile.value?.goal_score,
+    profile.value?.goalScore,
+    profile.value?.pte_target_score
+  );
+  return configuredTarget ? formatTargetScore(configuredTarget) : "未设置";
+});
+
+const identityPracticeStats = computed(() =>
+  buildIdentityPracticeStats(practiceIdentitySnapshot.value.rows || [])
+);
+
 const identityConfig = computed(() => [
-  { label: "目标分数", value: targetScore.value, icon: "↗", color: "blue" },
+  { label: "目标分数", value: identityTargetScore.value, icon: "↗", color: "blue" },
   { label: "重点模块", value: focusModules.value, icon: "▣", color: "purple" },
   { label: "每日学习时长", value: dailyStudyTime.value, icon: "◷", color: "cyan" },
   { label: "最佳时段", value: bestStudyWindow.value, icon: "☼", color: "gold" },
@@ -250,57 +273,67 @@ const identityConfig = computed(() => [
 ]);
 
 const focusModules = computed(() => {
-  const explicit = normalizeListValue(
-    profile.value?.focus_modules ||
-    profile.value?.focusModules ||
-    profile.value?.priority_modules ||
-    authStore.user?.user_metadata?.focus_modules
-  );
-  if (explicit.length) return explicit.slice(0, 4).join(" / ");
-
-  const completedCounts = profileProgress.value?.completedCounts || {};
-  const ranked = ["RA", "DI", "WFD", "RTS", "WE", "RS"]
-    .map((taskType) => ({
-      taskType,
-      count: Number(completedCounts[taskType] || 0)
-    }))
-    .sort((left, right) => left.count - right.count)
-    .map((item) => item.taskType);
-
-  return ranked.slice(0, 3).join(" / ") || "RA / DI / WFD";
+  if (practiceIdentitySnapshot.value.loading) return "同步中";
+  if (identityPracticeStats.value.focusModules.length) {
+    return identityPracticeStats.value.focusModules.join(" / ");
+  }
+  if (identityPracticeStats.value.recentPracticeModules.length) {
+    return identityPracticeStats.value.recentPracticeModules.join(" / ");
+  }
+  return "练习后自动生成";
 });
 
 const dailyStudyTime = computed(() => {
-  const explicit = pickText(
-    profile.value?.daily_study_time,
-    profile.value?.dailyStudyTime,
-    profile.value?.daily_minutes,
-    profile.value?.dailyStudyMinutes
-  );
-  if (explicit) return /\d/.test(explicit) && !explicit.includes("分钟") ? `${explicit} 分钟` : explicit;
-  if (planSnapshot.value.plan?.total_minutes) {
-    return `${formatInteger(planSnapshot.value.plan.total_minutes)} 分钟`;
+  if (practiceIdentitySnapshot.value.loading) return "同步中";
+  if (identityPracticeStats.value.averageDailyMinutes > 0) {
+    return `约 ${formatInteger(identityPracticeStats.value.averageDailyMinutes)} 分钟/天`;
   }
-  return "60-90 分钟";
+  if (identityPracticeStats.value.estimatedDailyMinutes > 0) {
+    return `约 ${formatInteger(identityPracticeStats.value.estimatedDailyMinutes)} 分钟/天`;
+  }
+  if (planSnapshot.value.plan?.total_minutes) {
+    return `计划 ${formatInteger(planSnapshot.value.plan.total_minutes)} 分钟/天`;
+  }
+  return "暂无足够数据";
 });
 
 const bestStudyWindow = computed(() =>
-  pickText(
-    profile.value?.best_study_time,
-    profile.value?.bestStudyTime,
-    profile.value?.preferred_study_time,
-    profile.value?.study_window
-  ) || "晚上 19:00-22:00"
+  practiceIdentitySnapshot.value.loading
+    ? "同步中"
+    : identityPracticeStats.value.bestStudyWindow || "练习后自动生成"
 );
 
-const aiIntensity = computed(() =>
-  pickText(
-    profile.value?.ai_intensity,
-    profile.value?.aiIntensity,
-    profile.value?.coach_intensity,
-    authStore.user?.user_metadata?.ai_intensity
-  ) || "标准"
-);
+const aiIntensity = computed(() => {
+  if (practiceIdentitySnapshot.value.loading || homeAnalytics.value.loading) return "同步中";
+  const stats = identityPracticeStats.value;
+  const target = parseTargetScoreNumber(identityTargetScore.value);
+  const recentAverage = firstFiniteNumber(
+    homeAnalytics.value.currentPeriodAverageScore,
+    stats.averageScore,
+    homeAnalytics.value.averageScore
+  );
+  const currentStreak = Number(homeAnalytics.value.currentStreak || 0);
+
+  if (!stats.recentRows.length && !Number(homeAnalytics.value.scoredCount || 0)) {
+    return "标准";
+  }
+  if (target !== null && recentAverage !== null && target >= 79 && recentAverage <= target - 15) {
+    return "严格";
+  }
+  if (target !== null && recentAverage !== null && stats.weakModuleCount >= 2 && recentAverage <= target - 10) {
+    return "严格";
+  }
+  if (
+    target !== null &&
+    recentAverage !== null &&
+    recentAverage >= target - 3 &&
+    currentStreak >= 3 &&
+    stats.sevenDayRows.length >= 5
+  ) {
+    return "温和";
+  }
+  return "标准";
+});
 
 const favorites = computed(() => {
   const summary = favoritesSnapshot.value;
@@ -339,56 +372,35 @@ const recentPages = computed(() => {
   return [...new Set(pages)].slice(0, 4);
 });
 
-const devices = computed(() => {
-  const current = detectCurrentDevice();
-  return [
-    {
-      icon: current.icon,
-      name: current.name,
-      meta: current.meta,
-      status: "当前设备",
-      current: true
-    },
-    {
-      icon: "▯",
-      name: "iPhone 13",
-      meta: "iOS · Safari",
-      status: "3 小时前",
-      current: false
-    }
-  ];
+const loginEvents = computed(() => loginEventsSnapshot.value.events || []);
+const latestLoginEvent = computed(() => loginEvents.value[0] || null);
+const latestLoginStatusText = computed(() => {
+  if (loginEventsSnapshot.value.loading) return "登录记录同步中";
+  if (latestLoginEvent.value) return formatLoginEventSummary(latestLoginEvent.value);
+  return formatLastLoginFallback(authStore.user?.last_sign_in_at);
 });
 
-const loginRecords = computed(() => {
-  const current = detectCurrentDevice();
-  return [
-    {
-      icon: current.icon,
-      device: current.name,
-      location: profileLocation.value,
-      status: "当前在线",
-      online: true
-    },
-    {
-      icon: "▯",
-      device: "iPhone 13",
-      location: profileLocation.value,
-      status: "3 小时前"
-    },
-    {
-      icon: "▭",
-      device: "Windows PC",
-      location: profileLocation.value,
-      status: "昨天 11:42"
-    },
-    {
-      icon: "▭",
-      device: "iPad Air (5th gen)",
-      location: profileLocation.value,
-      status: "05-06 18:21"
-    }
-  ];
-});
+const devices = computed(() =>
+  loginEvents.value.map((event, index) => ({
+    id: event.id || `${event.logged_in_at}-${index}`,
+    icon: getDeviceIcon(event),
+    name: formatLoginEventDevice(event),
+    meta: formatLoginEventBrowser(event),
+    status: formatRelativeDateTime(event.logged_in_at) || "时间未记录",
+    current: index === 0
+  }))
+);
+
+const loginRecords = computed(() =>
+  loginEvents.value.map((event, index) => ({
+    id: event.id || `${event.logged_in_at}-${index}`,
+    icon: getDeviceIcon(event),
+    device: formatLoginEventDevice(event),
+    browser: formatLoginEventBrowser(event),
+    status: formatRelativeDateTime(event.logged_in_at) || "时间未记录",
+    online: index === 0
+  }))
+);
 
 function isNavActive(item) {
   if (item.key === "profile") return route.path === "/profile";
@@ -420,12 +432,19 @@ function openUpgrade() {
 }
 
 function handleEditProfile() {
-  uiStore.showToast("当前可先更换头像；昵称、城市等资料表单待接入。", "info");
-  triggerAvatarPicker();
-}
-
-function handleEditLearningConfig() {
-  uiStore.showToast("学习配置暂以 profiles/AI 计划读取为主，编辑表单待接入。", "info");
+  const draft = createProfileDraft({
+    displayName: userDisplayName.value,
+    targetScore: targetScore.value,
+    examDate: examDate.value,
+    currentStage: currentStage.value
+  });
+  profileDraft.value = draft;
+  profileDraftOriginal.value = { ...draft };
+  avatarDraftDataUrl.value = "";
+  avatarDraftName.value = "";
+  avatarUploadError.value = "";
+  profileSaveError.value = "";
+  profileModalOpen.value = true;
 }
 
 function openFavorites() {
@@ -436,12 +455,34 @@ function openCommonContent() {
   router.push("/home#quick");
 }
 
+async function handleLogout() {
+  if (loggingOut.value) return;
+  loggingOut.value = true;
+  try {
+    await authStore.logout();
+    router.replace("/auth");
+  } catch (error) {
+    console.error("Logout failed:", error);
+    uiStore.showToast("退出登录失败，请稍后重试", "warning");
+  } finally {
+    loggingOut.value = false;
+  }
+}
+
 function showLoginRecordsNotice() {
-  uiStore.showToast("登录设备记录目前是前端展示，待新增登录记录表/API 后可查看真实列表。", "info");
+  if (loginEventsSnapshot.value.source === "missing_table") {
+    uiStore.showToast("登录记录表尚未创建，请先执行 user_login_events SQL。", "warning");
+    return;
+  }
+  if (loginEventsSnapshot.value.source === "error") {
+    uiStore.showToast("登录记录同步失败，请稍后重试。", "warning");
+    return;
+  }
+  uiStore.showToast("当前仅保留最近 5 条真实登录记录。", "info");
 }
 
 function triggerAvatarPicker() {
-  if (avatarUploading.value) return;
+  if (avatarUploading.value || profileSaving.value) return;
   avatarInputRef.value?.click?.();
 }
 
@@ -455,14 +496,14 @@ async function handleAvatarFileChange(event) {
 
   avatarUploadError.value = "";
 
-  if (!String(file.type || "").startsWith("image/")) {
-    avatarUploadError.value = "请选择图片文件";
+  if (!PROFILE_AVATAR_ACCEPTED_TYPES.has(String(file.type || "").toLowerCase())) {
+    avatarUploadError.value = "请选择 JPG、PNG 或 WebP 图片";
     uiStore.showToast(avatarUploadError.value, "warning");
     return;
   }
 
-  if (Number(file.size || 0) > 8 * 1024 * 1024) {
-    avatarUploadError.value = "图片不能超过 8MB";
+  if (Number(file.size || 0) > PROFILE_AVATAR_MAX_BYTES) {
+    avatarUploadError.value = "图片不能超过 2MB";
     uiStore.showToast(avatarUploadError.value, "warning");
     return;
   }
@@ -470,14 +511,66 @@ async function handleAvatarFileChange(event) {
   avatarUploading.value = true;
   try {
     const avatarDataUrl = await createAvatarDataUrl(file);
-    await authStore.updateAvatarDataUrl(avatarDataUrl);
-    uiStore.showToast("头像已更新", "success");
+    avatarDraftDataUrl.value = avatarDataUrl;
+    avatarDraftName.value = normalizeText(file.name);
   } catch (error) {
     console.error("Avatar upload failed:", error);
-    avatarUploadError.value = error?.message || "头像上传失败，请稍后重试";
+    avatarUploadError.value = "头像处理失败，请稍后重试";
     uiStore.showToast(avatarUploadError.value, "warning");
   } finally {
     avatarUploading.value = false;
+  }
+}
+
+function closeProfileModal() {
+  if (profileSaving.value) return;
+  profileModalOpen.value = false;
+  profileSaveError.value = "";
+  avatarUploadError.value = "";
+}
+
+function handleProfileOverlayClick(event) {
+  if (event.target !== event.currentTarget) return;
+  closeProfileModal();
+}
+
+async function saveProfileDraft() {
+  if (profileSaving.value) return;
+
+  const validationError = validateProfileDraft(profileDraft.value, profileDraftOriginal.value);
+  if (validationError) {
+    profileSaveError.value = validationError;
+    return;
+  }
+
+  profileSaving.value = true;
+  profileSaveError.value = "";
+  try {
+    const updatePayload = {
+      displayName: profileDraft.value.displayName,
+      avatarDataUrl: avatarDraftDataUrl.value
+    };
+
+    if (profileDraft.value.targetScore !== profileDraftOriginal.value.targetScore) {
+      updatePayload.targetScore = profileDraft.value.targetScore;
+    }
+    if (profileDraft.value.examDate !== profileDraftOriginal.value.examDate) {
+      updatePayload.examDate = profileDraft.value.examDate;
+    }
+    if (profileDraft.value.currentStage !== profileDraftOriginal.value.currentStage) {
+      updatePayload.currentStage = profileDraft.value.currentStage;
+    }
+
+    await authStore.updateProfileDetails(updatePayload);
+    profileModalOpen.value = false;
+    avatarDraftDataUrl.value = "";
+    avatarDraftName.value = "";
+    uiStore.showToast("个人资料已更新", "success");
+  } catch (error) {
+    console.error("Profile update failed:", error);
+    profileSaveError.value = toFriendlyProfileError(error);
+  } finally {
+    profileSaving.value = false;
   }
 }
 
@@ -488,9 +581,10 @@ async function loadProfileSnapshots({ reset = false } = {}) {
 
   if (reset) {
     homeAnalytics.value = createEmptyHomeAnalytics();
-    profileProgress.value = createEmptyProfileProgress();
     favoritesSnapshot.value = createEmptyFavoritesSnapshot();
     planSnapshot.value = createEmptyPlanSnapshot();
+    loginEventsSnapshot.value = createEmptyLoginEventsSnapshot();
+    practiceIdentitySnapshot.value = createEmptyPracticeIdentitySnapshot();
   }
 
   profileRefreshPromise = (async () => {
@@ -501,20 +595,23 @@ async function loadProfileSnapshots({ reset = false } = {}) {
 
     const [
       analyticsSnapshot,
-      progressSnapshot,
       favoriteSummary,
-      todayPlan
+      todayPlan,
+      loginEventsSummary,
+      practiceIdentitySummary
     ] = await Promise.all([
       loadHomeAnalyticsSnapshotForAuth(authStore),
-      loadProfileProgressSnapshotForAuth(authStore),
       loadFavoritesSnapshotForAuth(),
-      loadTodayPlanSnapshotForAuth()
+      loadTodayPlanSnapshotForAuth(),
+      loadLoginEventsForAuth(authStore),
+      loadPracticeIdentitySnapshotForAuth()
     ]);
 
     homeAnalytics.value = analyticsSnapshot;
-    profileProgress.value = progressSnapshot;
     favoritesSnapshot.value = favoriteSummary;
     planSnapshot.value = todayPlan;
+    loginEventsSnapshot.value = loginEventsSummary;
+    practiceIdentitySnapshot.value = practiceIdentitySummary;
   })();
 
   try {
@@ -760,6 +857,42 @@ async function loadPlanProgress({ userId, plan, dateKey }) {
   };
 }
 
+async function loadPracticeIdentitySnapshotForAuth() {
+  const userId = await resolveCurrentUserId();
+  if (!userId) {
+    return {
+      ...createEmptyPracticeIdentitySnapshot(),
+      loading: false,
+      source: "auth_missing"
+    };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("practice_logs")
+      .select("id, task_type, created_at, score_json")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(IDENTITY_PRACTICE_LIMIT);
+
+    if (error) throw error;
+
+    return {
+      loading: false,
+      source: "remote",
+      rows: Array.isArray(data) ? data : []
+    };
+  } catch (error) {
+    console.warn("Practice identity snapshot load failed:", error);
+    return {
+      ...createEmptyPracticeIdentitySnapshot(),
+      loading: false,
+      source: "error"
+    };
+  }
+}
+
 function normalizePlanRow(row) {
   const rawPlan = isPlainObject(row?.plan_json) ? row.plan_json : {};
   const rawItems = Array.isArray(rawPlan?.items) ? rawPlan.items : [];
@@ -797,6 +930,23 @@ function createEmptyPlanSnapshot() {
     reasonCode: "loading",
     plan: null,
     progress: null
+  };
+}
+
+function createEmptyPracticeIdentitySnapshot() {
+  return {
+    loading: true,
+    source: "loading",
+    rows: []
+  };
+}
+
+function createProfileDraft(seed = {}) {
+  return {
+    displayName: normalizeText(seed.displayName),
+    targetScore: normalizeTargetScoreInput(seed.targetScore),
+    examDate: normalizeDateInput(seed.examDate),
+    currentStage: normalizeText(seed.currentStage)
   };
 }
 
@@ -930,39 +1080,41 @@ function blobToDataUrl(blob) {
   });
 }
 
-function detectCurrentDevice() {
-  if (typeof navigator === "undefined") {
-    return {
-      icon: "▭",
-      name: "当前浏览器设备",
-      meta: "Browser"
-    };
-  }
-
-  const ua = navigator.userAgent || "";
-  const isMac = /Macintosh|Mac OS X/i.test(ua);
-  const isWindows = /Windows/i.test(ua);
-  const isIphone = /iPhone/i.test(ua);
-  const isIpad = /iPad/i.test(ua);
-  const isAndroid = /Android/i.test(ua);
-  const isChrome = /Chrome|CriOS/i.test(ua) && !/Edg/i.test(ua);
-  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS/i.test(ua);
-  const isEdge = /Edg/i.test(ua);
-  const isFirefox = /Firefox/i.test(ua);
-
-  const browser = isEdge ? "Edge" : isFirefox ? "Firefox" : isChrome ? "Chrome 浏览器" : isSafari ? "Safari" : "浏览器";
-  if (isIphone) return { icon: "▯", name: "iPhone", meta: `iOS · ${browser}` };
-  if (isIpad) return { icon: "▭", name: "iPad", meta: `iPadOS · ${browser}` };
-  if (isAndroid) return { icon: "▯", name: "Android Phone", meta: `Android · ${browser}` };
-  if (isMac) return { icon: "▭", name: "MacBook Pro 14-inch", meta: `macOS · ${browser}` };
-  if (isWindows) return { icon: "▭", name: "Windows PC", meta: `Windows · ${browser}` };
-  return { icon: "▭", name: "当前浏览器设备", meta: browser };
+function formatLoginEventSummary(event) {
+  const formatted = formatRelativeDateTime(event?.logged_in_at);
+  const deviceText = formatLoginEventFullDevice(event);
+  if (formatted && deviceText) return `${formatted} · ${deviceText}`;
+  if (formatted) return formatted;
+  return deviceText || "暂无记录";
 }
 
-function formatLastLogin(value) {
+function formatLoginEventBrowser(event) {
+  const browser = normalizeText(event?.browser);
+  return browser && browser !== "Unknown Browser" ? browser : "浏览器未知";
+}
+
+function formatLoginEventFullDevice(event) {
+  const parts = [];
+  const device = formatLoginEventDevice(event);
+  const browser = normalizeText(event?.browser);
+  if (device && device !== "Unknown Device") parts.push(device);
+  if (browser && browser !== "Unknown Browser") parts.push(browser);
+  if (parts.length) return parts.join(" · ");
+
+  const legacy = normalizeText(event?.device_label);
+  return legacy || "Unknown Device";
+}
+
+function formatLastLoginFallback(value) {
   const formatted = formatRelativeDateTime(value);
-  const device = detectCurrentDevice().name;
-  return formatted ? `${formatted} · ${device}` : `当前会话 · ${device}`;
+  if (formatted) return `${formatted} · 设备未记录`;
+  return "暂无记录";
+}
+
+function getDeviceIcon(event) {
+  const normalized = `${event?.device_label || ""} ${event?.os || ""}`.toLowerCase();
+  if (normalized.includes("iphone") || normalized.includes("android")) return "▯";
+  return "▭";
 }
 
 function formatRelativeDateTime(value) {
@@ -1020,6 +1172,313 @@ function formatTargetScore(value) {
   const numeric = Number(normalized);
   if (Number.isFinite(numeric)) return `${Math.round(numeric)}+`;
   return normalized;
+}
+
+function buildIdentityPracticeStats(rows) {
+  const normalizedRows = normalizePracticeIdentityRows(rows);
+  const sevenDayRows = filterRowsWithinDays(normalizedRows, IDENTITY_RECENT_DAYS);
+  const recentRows = sevenDayRows.length >= IDENTITY_MIN_ROWS_FOR_PERIOD
+    ? sevenDayRows
+    : normalizedRows.slice(0, IDENTITY_RECENT_LIMIT);
+  const moduleStats = buildModuleStats(recentRows);
+  const scoredModules = moduleStats.filter((item) => item.scoredCount > 0);
+  const focusModules = scoredModules
+    .slice()
+    .sort((left, right) =>
+      left.averageScore - right.averageScore ||
+      right.lowScoreCount - left.lowScoreCount ||
+      right.count - left.count
+    )
+    .slice(0, 3)
+    .map((item) => item.taskType);
+  const recentPracticeModules = moduleStats
+    .slice()
+    .sort((left, right) => right.count - left.count || left.lastIndex - right.lastIndex)
+    .slice(0, 3)
+    .map((item) => item.taskType);
+  const weeklyDurationMinutes = sumPracticeDurationMinutes(sevenDayRows);
+  const weeklyPracticeCount = sevenDayRows.length;
+  const averageScore = calculatePracticeAverageScore(recentRows);
+
+  return {
+    rows: normalizedRows,
+    sevenDayRows,
+    recentRows,
+    focusModules,
+    recentPracticeModules,
+    averageDailyMinutes: weeklyDurationMinutes > 0 ? Math.max(1, Math.round(weeklyDurationMinutes / 7)) : 0,
+    estimatedDailyMinutes: weeklyDurationMinutes > 0 || weeklyPracticeCount <= 0
+      ? 0
+      : Math.max(1, Math.round((weeklyPracticeCount * IDENTITY_ESTIMATED_MINUTES_PER_PRACTICE) / 7)),
+    bestStudyWindow: resolveBestStudyWindow(recentRows),
+    averageScore,
+    weakModuleCount: scoredModules.filter((item) => item.averageScore < 65).length
+  };
+}
+
+function normalizePracticeIdentityRows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const createdAt = new Date(row?.created_at);
+      return {
+        ...row,
+        taskType: normalizeTaskType(row?.task_type),
+        createdAt,
+        score: resolvePracticeScore(row),
+        durationMinutes: resolvePracticeDurationMinutes(row)
+      };
+    })
+    .filter((row) => row.taskType && Number.isFinite(row.createdAt.getTime()))
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+}
+
+function filterRowsWithinDays(rows, days) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - Math.max(1, Number(days || 1)));
+  return (Array.isArray(rows) ? rows : []).filter((row) => row.createdAt >= cutoff);
+}
+
+function buildModuleStats(rows) {
+  const stats = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+    if (!row.taskType) return;
+    const current = stats.get(row.taskType) || {
+      taskType: row.taskType,
+      count: 0,
+      scoredCount: 0,
+      scoreTotal: 0,
+      averageScore: 0,
+      lowScoreCount: 0,
+      lastIndex: index
+    };
+    current.count += 1;
+    current.lastIndex = Math.min(current.lastIndex, index);
+    if (row.score !== null) {
+      current.scoredCount += 1;
+      current.scoreTotal += row.score;
+      if (row.score < 65) current.lowScoreCount += 1;
+    }
+    stats.set(row.taskType, current);
+  });
+
+  return [...stats.values()].map((item) => ({
+    ...item,
+    averageScore: item.scoredCount ? item.scoreTotal / item.scoredCount : 0
+  }));
+}
+
+function calculatePracticeAverageScore(rows) {
+  const scores = (Array.isArray(rows) ? rows : [])
+    .map((row) => row.score)
+    .filter((score) => score !== null);
+  if (!scores.length) return null;
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+function sumPracticeDurationMinutes(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .reduce((sum, row) => sum + Number(row?.durationMinutes || 0), 0);
+}
+
+function resolvePracticeScore(row) {
+  const score = toPlainObject(row?.score_json) || {};
+  const candidates = [
+    score?.overall,
+    score?.score_overall,
+    score?.overall_score,
+    score?.overall_estimated,
+    score?.total_score,
+    score?.final_score,
+    score?.score,
+    score?.estimated_score,
+    score?.scores?.overall,
+    score?.display_scores?.overall,
+    score?.diagnostics?.display_scores?.overall,
+    score?.ai_review?.display_scores?.overall,
+    score?.ai_review?.diagnostics?.display_scores?.overall,
+    score?.ai_review?.overall,
+    score?.ai_review?.product?.overall,
+    score?.product?.overall,
+    score?.result?.overall,
+    score?.result?.overall_score,
+    score?.feedback?.overall,
+    score?.feedback?.overall_score
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePracticeScore(candidate);
+    if (normalized !== null) return normalized;
+  }
+  return null;
+}
+
+function resolvePracticeDurationMinutes(row) {
+  const score = toPlainObject(row?.score_json) || {};
+  const secondCandidates = [
+    score?.analytics?.total_active_sec,
+    score?.analytics?.totalActiveSec,
+    score?.duration_sec,
+    score?.durationSec,
+    score?.duration_seconds,
+    score?.durationSeconds,
+    score?.time_spent_sec,
+    score?.timeSpentSec,
+    score?.time_spent_seconds,
+    score?.timeSpentSeconds,
+    score?.elapsed_sec,
+    score?.elapsedSec,
+    score?.elapsed_seconds,
+    score?.elapsedSeconds,
+    score?.metrics?.speech_duration_sec,
+    score?.metrics?.speechDurationSec,
+    score?.audio_signals?.duration_sec,
+    score?.audio_signals?.durationSec,
+    score?.recording_duration_sec,
+    score?.recordingDurationSec
+  ];
+  const minuteCandidates = [
+    score?.duration_min,
+    score?.durationMin,
+    score?.duration_minutes,
+    score?.durationMinutes,
+    score?.time_spent_min,
+    score?.timeSpentMin,
+    score?.time_spent_minutes,
+    score?.timeSpentMinutes,
+    score?.minutes
+  ];
+
+  for (const candidate of secondCandidates) {
+    const minutes = normalizeDurationMinutes(Number(candidate) / 60);
+    if (minutes > 0) return minutes;
+  }
+  for (const candidate of minuteCandidates) {
+    const minutes = normalizeDurationMinutes(candidate);
+    if (minutes > 0) return minutes;
+  }
+
+  const durationMs = Number(score?.audio_signals?.duration_ms ?? score?.audio_signals?.durationMs);
+  if (Number.isFinite(durationMs) && durationMs > 0) {
+    return normalizeDurationMinutes(durationMs / 60000);
+  }
+  return 0;
+}
+
+function resolveBestStudyWindow(rows) {
+  if (!Array.isArray(rows) || rows.length < IDENTITY_MIN_ROWS_FOR_PERIOD) return "";
+  const windows = {
+    morning: { label: "早上 06:00-12:00", count: 0 },
+    afternoon: { label: "下午 12:00-18:00", count: 0 },
+    evening: { label: "晚上 18:00-24:00", count: 0 },
+    late: { label: "深夜 00:00-06:00", count: 0 }
+  };
+
+  rows.forEach((row) => {
+    const hour = row.createdAt.getHours();
+    if (hour >= 6 && hour < 12) {
+      windows.morning.count += 1;
+    } else if (hour >= 12 && hour < 18) {
+      windows.afternoon.count += 1;
+    } else if (hour >= 18 && hour < 24) {
+      windows.evening.count += 1;
+    } else {
+      windows.late.count += 1;
+    }
+  });
+
+  const best = Object.values(windows).sort((left, right) => right.count - left.count)[0];
+  return best?.count > 0 ? best.label : "";
+}
+
+function parseTargetScoreNumber(value) {
+  const numeric = Number(normalizeText(value).replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  return null;
+}
+
+function normalizePracticeScore(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.max(0, Math.min(90, numeric));
+}
+
+function normalizeDurationMinutes(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.min(IDENTITY_MAX_DURATION_MINUTES, numeric);
+}
+
+function toPlainObject(value) {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return isPlainObject(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return isPlainObject(value) ? value : null;
+}
+
+function normalizeTargetScoreInput(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return "";
+  const numeric = Number(normalized.replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(numeric)) return "";
+  return `${Math.max(10, Math.min(90, Math.round(numeric)))}`;
+}
+
+function normalizeDateInput(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return "";
+  const date = new Date(normalized);
+  if (!Number.isFinite(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function validateProfileDraft(draft, original = {}) {
+  if (!normalizeText(draft?.displayName)) return "请输入昵称/用户名";
+
+  const targetText = normalizeText(draft?.targetScore);
+  const target = Number(targetText);
+  if (!targetText && normalizeText(original?.targetScore)) {
+    return "目标分数不能为空";
+  }
+  if (targetText && (!Number.isFinite(target) || target < 10 || target > 90)) {
+    return "目标分数请输入 10 到 90 之间的数字";
+  }
+
+  if (normalizeText(draft?.examDate)) {
+    const date = new Date(`${draft.examDate}T00:00:00`);
+    if (!Number.isFinite(date.getTime())) return "请选择有效的考试日期";
+    if (draft.examDate < getLocalDateKey()) return "考试日期不能早于今天";
+  }
+
+  return "";
+}
+
+function toFriendlyProfileError(error) {
+  const message = normalizeText(error?.message);
+  if (/schema cache|column .* does not exist|could not find .* column/i.test(message)) {
+    return "当前资料字段还未在数据库启用，已保留其它可保存内容。";
+  }
+  if (/permission|policy|rls|row-level|not authorized|401|403/i.test(message)) {
+    return "当前账号暂时没有更新权限，请重新登录后再试。";
+  }
+  if (/jwt|token|session|auth/i.test(message)) {
+    return "登录状态已过期，请重新登录后再试。";
+  }
+  return "保存失败，请稍后重试。";
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -1139,6 +1598,9 @@ function sumBy(items, key) {
             </span>
             <span>{{ userDisplayName }}</span>
           </div>
+          <button class="logout-btn" type="button" :disabled="loggingOut" @click="handleLogout">
+            {{ loggingOut ? "退出中..." : "退出登录" }}
+          </button>
         </div>
       </header>
 
@@ -1162,9 +1624,9 @@ function sumBy(items, key) {
                   <button
                     type="button"
                     class="avatar-large"
-                    :disabled="avatarUploading"
+                    :disabled="avatarUploading || profileSaving"
                     aria-label="更换头像"
-                    @click="triggerAvatarPicker"
+                    @click="handleEditProfile"
                   >
                     <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" />
                     <span v-else>{{ userInitial }}</span>
@@ -1172,7 +1634,7 @@ function sumBy(items, key) {
                   <input
                     ref="avatarInputRef"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     class="avatar-input"
                     @change="handleAvatarFileChange"
                   />
@@ -1180,14 +1642,16 @@ function sumBy(items, key) {
                     {{ userDisplayName }}
                     <button type="button" class="icon-edit" aria-label="编辑个人资料" @click="handleEditProfile">✎</button>
                   </div>
-                  <div class="profile-location">{{ profileLocation }}</div>
                   <div class="profile-vip">♛ {{ membershipPill.label }}</div>
                   <div v-if="avatarUploadError" class="avatar-error">{{ avatarUploadError }}</div>
                 </div>
 
                 <div class="profile-info">
                   <div v-for="row in profileInfoRows" :key="row.label" class="info-row">
-                    <span class="row-label"><i>{{ row.icon }}</i>{{ row.label }}</span>
+                    <span class="row-label">
+                      <i class="row-icon" v-html="profileInfoIconMap[row.icon]"></i>
+                      {{ row.label }}
+                    </span>
                     <strong v-if="row.strong">{{ row.value }}</strong>
                     <span v-else class="email-value">{{ row.value }}</span>
                     <span v-if="row.badge" class="verified" :class="`verified--${row.badgeTone}`">{{ row.badge }}</span>
@@ -1269,7 +1733,7 @@ function sumBy(items, key) {
                 </div>
               </div>
 
-              <button class="ghost-btn full" type="button" @click="handleEditLearningConfig">编辑学习配置</button>
+              <div class="auto-config-note">根据练习数据自动更新</div>
             </article>
 
             <article class="pc-card favorites-card">
@@ -1321,8 +1785,8 @@ function sumBy(items, key) {
 
             <div class="device-layout">
               <div class="device-panel">
-                <div class="section-mini-title">当前登录设备（{{ devices.length }}）</div>
-                <div v-for="item in devices" :key="item.name" class="device-row">
+                <div class="section-mini-title">最近登录设备（{{ devices.length }}）</div>
+                <div v-for="item in devices" :key="item.id" class="device-row">
                   <span class="device-icon">{{ item.icon }}</span>
                   <div>
                     <strong>{{ item.name }}</strong>
@@ -1330,15 +1794,21 @@ function sumBy(items, key) {
                   </div>
                   <span :class="item.current ? 'current-device' : 'device-time'">{{ item.status }}</span>
                 </div>
+                <div v-if="!devices.length" class="empty-login-state">
+                  暂无真实登录设备记录
+                </div>
               </div>
 
               <div class="device-panel login-panel">
                 <div class="section-mini-title">近期登录记录</div>
-                <div v-for="item in loginRecords" :key="`${item.device}-${item.status}`" class="login-row">
+                <div v-for="item in loginRecords" :key="item.id" class="login-row">
                   <span class="device-icon small">{{ item.icon }}</span>
                   <strong>{{ item.device }}</strong>
-                  <span>{{ item.location }}</span>
+                  <span>{{ item.browser }}</span>
                   <em :class="{ online: item.online }">{{ item.status }}</em>
+                </div>
+                <div v-if="!loginRecords.length" class="empty-login-state">
+                  暂无真实登录记录
                 </div>
                 <button class="link-btn" type="button" @click="showLoginRecordsNotice">查看全部登录记录 →</button>
               </div>
@@ -1347,6 +1817,112 @@ function sumBy(items, key) {
         </section>
       </main>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="profileModalOpen"
+        class="profile-modal-overlay"
+        role="presentation"
+        @click="handleProfileOverlayClick"
+      >
+        <section class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title">
+          <header class="profile-modal-head">
+            <div>
+              <p>PERSONAL PROFILE</p>
+              <h2 id="profile-edit-title">编辑个人资料</h2>
+            </div>
+            <button type="button" class="profile-modal-close" aria-label="关闭编辑个人资料" @click="closeProfileModal">
+              ×
+            </button>
+          </header>
+
+          <div class="profile-modal-body">
+            <div class="profile-edit-avatar">
+              <button
+                type="button"
+                class="profile-edit-avatar-btn"
+                :disabled="avatarUploading || profileSaving"
+                @click="triggerAvatarPicker"
+              >
+                <img v-if="modalAvatarPreview" :src="modalAvatarPreview" alt="头像预览" />
+                <span v-else>{{ userInitial }}</span>
+              </button>
+              <div>
+                <button
+                  type="button"
+                  class="profile-edit-upload"
+                  :disabled="avatarUploading || profileSaving"
+                  @click="triggerAvatarPicker"
+                >
+                  {{ avatarUploading ? "处理中..." : "更换头像" }}
+                </button>
+                <p>{{ avatarDraftName || "JPG / PNG / WebP，2MB 以内" }}</p>
+                <p v-if="avatarUploadError" class="profile-modal-error">{{ avatarUploadError }}</p>
+              </div>
+            </div>
+
+            <label class="profile-edit-field">
+              <span>昵称/用户名</span>
+              <input
+                v-model.trim="profileDraft.displayName"
+                type="text"
+                maxlength="32"
+                autocomplete="nickname"
+                :disabled="profileSaving"
+              />
+            </label>
+
+            <div class="profile-edit-grid">
+              <label class="profile-edit-field">
+                <span>目标分数</span>
+                <input
+                  v-model="profileDraft.targetScore"
+                  type="number"
+                  min="10"
+                  max="90"
+                  step="1"
+                  :disabled="profileSaving"
+                />
+              </label>
+
+              <label class="profile-edit-field">
+                <span>考试日期</span>
+                <input v-model="profileDraft.examDate" type="date" :min="todayDateKey" :disabled="profileSaving" />
+              </label>
+            </div>
+
+            <label class="profile-edit-field">
+              <span>当前阶段</span>
+              <select v-model="profileDraft.currentStage" :disabled="profileSaving">
+                <option v-for="stage in stageOptions" :key="stage" :value="stage">{{ stage }}</option>
+              </select>
+            </label>
+
+            <div class="profile-locked-fields" aria-label="不可修改资料">
+              <label class="profile-edit-field profile-edit-field--locked">
+                <span>邮箱</span>
+                <input :value="userEmail || '邮箱未绑定'" type="text" disabled />
+              </label>
+              <label class="profile-edit-field profile-edit-field--locked">
+                <span>VIP 权限/套餐状态</span>
+                <input :value="membershipPill.label" type="text" disabled />
+              </label>
+            </div>
+
+            <p v-if="profileSaveError" class="profile-modal-error" role="alert">{{ profileSaveError }}</p>
+          </div>
+
+          <footer class="profile-modal-actions">
+            <button type="button" class="profile-modal-secondary" :disabled="profileSaving" @click="closeProfileModal">
+              取消
+            </button>
+            <button type="button" class="profile-modal-primary" :disabled="profileSaving" @click="saveProfileDraft">
+              {{ profileSaving ? "保存中..." : "保存" }}
+            </button>
+          </footer>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1579,6 +2155,28 @@ button {
   font-weight: 600;
 }
 
+.logout-btn {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid #d9cdbb;
+  border-radius: 8px;
+  background: rgba(246, 241, 232, 0.82);
+  color: #76563a;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.logout-btn:hover:not(:disabled) {
+  border-color: #b99f80;
+  color: #5f3f27;
+}
+
+.logout-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .mini-avatar {
   width: 28px;
   height: 28px;
@@ -1774,13 +2372,6 @@ button {
   padding: 2px;
 }
 
-.profile-location {
-  margin-top: 8px;
-  color: #4f463f;
-  font-size: 13px;
-  text-align: center;
-}
-
 .profile-vip {
   margin-top: 13px;
   height: 28px;
@@ -1832,10 +2423,25 @@ button {
   font-weight: 700;
 }
 
-.row-label i {
-  color: var(--c2);
-  font-style: normal;
-  font-weight: 700;
+.row-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(154, 113, 73, 0.24);
+  border-radius: 8px;
+  background: rgba(154, 113, 73, 0.08);
+  color: #8a6744;
+}
+
+.row-icon :deep(svg) {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .info-row strong {
@@ -1901,6 +2507,219 @@ button {
   margin-top: 10px;
   width: min(226px, 100%);
   align-self: start;
+}
+
+.profile-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(40, 29, 18, 0.38);
+  backdrop-filter: blur(9px);
+}
+
+.profile-modal {
+  width: min(560px, calc(100vw - 36px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid rgba(199, 180, 153, 0.9);
+  border-radius: 18px;
+  background: rgba(250, 246, 239, 0.94);
+  box-shadow: 0 24px 70px rgba(53, 35, 18, 0.28);
+  color: #2b2119;
+}
+
+.profile-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 14px;
+  border-bottom: 1px solid rgba(216, 204, 187, 0.8);
+}
+
+.profile-modal-head p {
+  margin: 0 0 5px;
+  color: #9a8f80;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.profile-modal-head h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.profile-modal-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d9cdbb;
+  border-radius: 10px;
+  background: rgba(246, 241, 232, 0.78);
+  color: #7c5c3e;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.profile-modal-body {
+  padding: 18px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profile-edit-avatar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  padding: 14px;
+  border: 1px solid rgba(216, 204, 187, 0.8);
+  border-radius: 14px;
+  background: rgba(255, 252, 247, 0.54);
+}
+
+.profile-edit-avatar-btn {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  background: #9a7149;
+  color: #fff8ee;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(120, 82, 45, 0.24);
+}
+
+.profile-edit-avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-edit-avatar-btn:disabled,
+.profile-edit-upload:disabled,
+.profile-modal-primary:disabled,
+.profile-modal-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.profile-edit-upload {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #cbbba2;
+  border-radius: 9px;
+  background: rgba(246, 241, 232, 0.86);
+  color: #6f4d30;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.profile-edit-avatar p {
+  margin: 7px 0 0;
+  color: #8f8477;
+  font-size: 12px;
+}
+
+.profile-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-edit-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.profile-edit-field span {
+  color: #6e5840;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profile-edit-field input,
+.profile-edit-field select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #d2c4ae;
+  border-radius: 10px;
+  background: rgba(255, 252, 247, 0.82);
+  color: #2b2119;
+  font: 700 14px/1.2 inherit;
+  outline: none;
+  padding: 0 12px;
+}
+
+.profile-edit-field input:focus,
+.profile-edit-field select:focus {
+  border-color: #8a6744;
+  box-shadow: 0 0 0 3px rgba(124, 92, 62, 0.12);
+}
+
+.profile-edit-field--locked input {
+  background: rgba(234, 226, 215, 0.58);
+  color: #7d7268;
+  cursor: not-allowed;
+}
+
+.profile-locked-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(216, 204, 187, 0.82);
+}
+
+.profile-modal-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.profile-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 22px;
+}
+
+.profile-modal-primary,
+.profile-modal-secondary {
+  min-width: 112px;
+  min-height: 39px;
+  border-radius: 10px;
+  cursor: pointer;
+  font: 900 14px/1 inherit;
+}
+
+.profile-modal-primary {
+  border: 0;
+  background: linear-gradient(180deg, #8a6744 0%, #755335 100%);
+  color: #fff8ee;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.profile-modal-secondary {
+  border: 1px solid #d9cdbb;
+  background: rgba(246, 241, 232, 0.82);
+  color: #6f4d30;
 }
 
 .status-card {
@@ -2076,13 +2895,14 @@ button {
   margin-top: 0;
   padding: 10px 14px 13px;
   display: grid;
-  grid-template-columns: minmax(210px, 0.48fr) 1fr;
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 16px;
+  gap: 9px;
 }
 
 .charge-btn {
-  min-height: 34px;
+  width: 100%;
+  min-height: 40px;
 }
 
 .safe-text {
@@ -2104,10 +2924,20 @@ button {
   gap: 2px;
 }
 
-.identity-card .full {
-  display: block;
+.auto-config-note {
   width: calc(100% - 118px);
   margin: auto auto 9px;
+  min-height: 31px;
+  border: 1px solid #d9cdbb;
+  border-radius: 8px;
+  background: rgba(246, 241, 232, 0.56);
+  color: #8a7259;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .favorites-card {
@@ -2287,6 +3117,15 @@ button {
   font-weight: 900;
 }
 
+.empty-login-state {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  color: #8a8075;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .link-btn {
   display: block;
   margin: 12px 0 0 auto;
@@ -2331,6 +3170,28 @@ button {
 
   .profile-shell {
     min-width: 1000px;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-modal-overlay {
+    padding: 16px;
+    align-items: center;
+  }
+
+  .profile-modal {
+    width: calc(100vw - 28px);
+  }
+
+  .profile-modal-head,
+  .profile-modal-body,
+  .profile-modal-actions {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .profile-edit-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

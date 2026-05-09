@@ -47,7 +47,10 @@
         </div>
         <div class="tb-right">
           <div class="vip-pill" :class="`vip-pill--${membershipPill.kind}`">{{ membershipPill.icon }} {{ membershipPill.label }}</div>
-          <div class="user-av">{{ userInitial }}</div>
+          <div class="user-av">
+            <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" />
+            <span v-else>{{ userInitial }}</span>
+          </div>
           <span class="user-name">{{ username }}</span>
         </div>
       </header>
@@ -426,6 +429,7 @@ const goalModalOpen = ref(false);
 const goalDraft = ref({});
 
 const username = computed(() => authStore.displayName || "同学");
+const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
 const userInitial = computed(() => {
   const first = `${username.value || ""}`.trim().charAt(0);
   return first ? first.toUpperCase() : "K";
@@ -1408,7 +1412,8 @@ const hasRecentItems = computed(() => recentItems.value.length > 0);
 .vip-pill--vip{background:#FFF4CF;border-color:#D7A84B;color:#7C5520;box-shadow:inset 0 1px 0 rgba(255,255,255,.58);}
 .vip-pill--trial{background:var(--org2);border-color:var(--org3);color:var(--org);}
 .vip-pill--locked,.vip-pill--loading{background:var(--card2);border-color:var(--bdr2);color:var(--mute);}
-.user-av{width:26px;height:26px;border-radius:50%;background:var(--c2);color:var(--bg0);font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.user-av{width:26px;height:26px;border-radius:50%;background:var(--c2);color:var(--bg0);font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.user-av img{width:100%;height:100%;object-fit:cover;display:block;}
 .user-name{font-size:12px;color:var(--c1);}
 .scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 18px 20px;display:flex;flex-direction:column;gap:12px;}
 .scroll::-webkit-scrollbar{width:4px;}
