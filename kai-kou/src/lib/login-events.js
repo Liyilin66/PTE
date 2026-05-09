@@ -1,76 +1,84 @@
 import { supabase } from "@/lib/supabase";
 
-export const LOGIN_EVENTS_LIMIT = 5;
+export const LOGIN_EVENT_LIMIT = 5;
+
+const MISSING_LOGIN_EVENTS_TABLE_CODES = new Set(["42P01", "PGRST205"]);
 
 export function createEmptyLoginEventsSnapshot() {
   return {
     loading: true,
+    events: [],
     rows: [],
-    source: "pending",
+    source: "loading",
     error: null
   };
 }
 
-export async function recordLoginEvent(authStore) {
-  const userId = await resolveCurrentUserId(authStore);
-  if (!userId) return null;
+export async function recordLoginEventForUser(userId) {
+  const normalizedUserId = normalizeText(userId);
+  if (!normalizedUserId) return null;
 
-  const device = detectLoginEventDevice();
+  const device = parseCurrentDevice();
   const payload = {
-    user_id: userId,
-    device_label: normalizePayloadText(device.device_label, "当前浏览器设备"),
-    browser: normalizePayloadText(device.browser, "浏览器"),
-    os: normalizePayloadText(device.os, "未知系统")
+    user_id: normalizedUserId,
+    device_label: device.device_label,
+    browser: device.browser,
+    os: device.os
   };
 
   const { data, error } = await supabase
     .from("user_login_events")
     .insert(payload)
-    .select("id, user_id, device_label, browser, os, created_at")
-    .single();
+    .select("id, user_id, logged_in_at, device_label, browser, os, created_at")
+    .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    if (isMissingLoginEventsTableError(error)) return null;
+    throw error;
+  }
   return normalizeLoginEventRow(data);
 }
 
-export async function loadLoginEventsForAuth(authStore, limit = LOGIN_EVENTS_LIMIT) {
+export async function loadLoginEventsForAuth(authStore) {
   const userId = await resolveCurrentUserId(authStore);
   if (!userId) {
     return {
       ...createEmptyLoginEventsSnapshot(),
       loading: false,
-      source: "anonymous"
+      source: "auth_missing"
     };
   }
 
   try {
-    const normalizedLimit = clampInteger(limit, 1, LOGIN_EVENTS_LIMIT);
     const { data, error } = await supabase
       .from("user_login_events")
-      .select("id, user_id, device_label, browser, os, created_at")
+      .select("id, user_id, logged_in_at, device_label, browser, os, created_at")
       .eq("user_id", userId)
+      .order("logged_in_at", { ascending: false })
       .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(normalizedLimit);
+      .limit(LOGIN_EVENT_LIMIT);
 
-    if (error) throw error;
+    if (error) {
+      if (isMissingLoginEventsTableError(error)) {
+        return {
+          ...createEmptyLoginEventsSnapshot(),
+          loading: false,
+          source: "missing_table"
+        };
+      }
+      throw error;
+    }
+
+    const events = normalizeLoginEventRows(data);
 
     return {
       loading: false,
-      rows: (Array.isArray(data) ? data : []).map(normalizeLoginEventRow).filter(Boolean),
-      source: "supabase",
+      events,
+      rows: events,
+      source: "remote",
       error: null
     };
   } catch (error) {
-    if (isMissingLoginEventsTableError(error)) {
-      return {
-        ...createEmptyLoginEventsSnapshot(),
-        loading: false,
-        source: "table_missing",
-        error
-      };
-    }
-
     console.warn("Login events load failed:", error);
     return {
       ...createEmptyLoginEventsSnapshot(),
@@ -81,95 +89,113 @@ export async function loadLoginEventsForAuth(authStore, limit = LOGIN_EVENTS_LIM
   }
 }
 
-export function detectLoginEventDevice() {
-  const ua = typeof navigator === "undefined" ? "" : String(navigator.userAgent || "");
-  const os = detectOs(ua);
+export function parseCurrentDevice() {
+  if (typeof navigator === "undefined") {
+    return {
+      device_label: "当前浏览器设备",
+      browser: "浏览器",
+      os: "未知系统"
+    };
+  }
+
+  return parseUserAgent(navigator.userAgent || "");
+}
+
+export function parseUserAgent(userAgent) {
+  const ua = normalizeText(userAgent);
+  const os = detectOS(ua);
   const browser = detectBrowser(ua);
-  const deviceLabel = detectDeviceLabel(ua, os);
+  const device_label = detectDeviceLabel(ua, os);
 
   return {
-    device_label: deviceLabel,
+    device_label,
     browser,
     os
   };
 }
 
-export function formatLoginEventMeta(row) {
-  const browser = normalizeText(row?.browser);
-  const os = normalizeText(row?.os);
+export function formatLoginEventDevice(event) {
+  const deviceLabel = normalizeText(event?.device_label);
+  if (deviceLabel) return deviceLabel;
+
+  const os = normalizeText(event?.os);
+  if (os === "Windows") return "Windows PC";
+  if (os === "macOS") return "Mac";
+  if (os === "iOS") return "iPhone";
+  if (os === "iPadOS") return "iPad";
+  if (os === "Android") return "Android Device";
+  return "当前浏览器设备";
+}
+
+export function formatLoginEventMeta(event) {
+  const os = normalizeText(event?.os);
+  const browser = normalizeText(event?.browser);
   return [os, browser].filter(Boolean).join(" · ") || "设备信息未记录";
 }
 
-export function normalizeLoginEventRow(row) {
-  if (!row || typeof row !== "object") return null;
+function detectOS(ua) {
+  if (!ua) return "Unknown OS";
+  if (/ipad/i.test(ua)) return "iPadOS";
+  if (/iphone|ipod/i.test(ua)) return "iOS";
+  if (/macintosh/i.test(ua) && /mobile/i.test(ua)) return "iPadOS";
+  if (/android/i.test(ua)) return "Android";
+  if (/windows nt/i.test(ua)) return "Windows";
+  if (/mac os x|macintosh/i.test(ua)) return "macOS";
+  return "Unknown OS";
+}
 
-  return {
-    id: row.id,
-    user_id: normalizeText(row.user_id),
-    device_label: normalizeText(row.device_label) || "设备未记录",
-    browser: normalizeText(row.browser) || "浏览器未记录",
-    os: normalizeText(row.os) || "系统未记录",
-    created_at: normalizeText(row.created_at)
-  };
+function detectBrowser(ua) {
+  if (!ua) return "Unknown Browser";
+  if (/edg\//i.test(ua)) return "Edge";
+  if (/chrome|crios/i.test(ua) && !/edg\//i.test(ua)) return "Chrome";
+  if (/firefox|fxios/i.test(ua)) return "Firefox";
+  if (/safari/i.test(ua) && !/chrome|crios|android/i.test(ua)) return "Safari";
+  return "Unknown Browser";
+}
+
+function detectDeviceLabel(ua, os) {
+  if (/ipad/i.test(ua)) return "iPad";
+  if (/iphone|ipod/i.test(ua)) return "iPhone";
+  if (/macintosh/i.test(ua) && /mobile/i.test(ua)) return "iPad";
+  if (/android/i.test(ua)) return /mobile/i.test(ua) ? "Android Phone" : "Android Tablet";
+  if (os === "Windows") return "Windows PC";
+  if (os === "macOS") return "Mac";
+  return "Unknown Device";
 }
 
 async function resolveCurrentUserId(authStore) {
   const authUserId = normalizeText(authStore?.user?.id);
   if (authUserId) return authUserId;
-
   const { data } = await supabase.auth.getSession();
   return normalizeText(data?.session?.user?.id);
 }
 
-function detectDeviceLabel(ua, os) {
-  if (/iPhone/i.test(ua)) return "iPhone";
-  if (/iPad/i.test(ua)) return "iPad";
-  if (/Android/i.test(ua) && /Mobile/i.test(ua)) return "Android Phone";
-  if (/Android/i.test(ua)) return "Android Tablet";
-  if (/Macintosh|Mac OS X/i.test(ua)) return "Mac";
-  if (/Windows/i.test(ua)) return "Windows PC";
-  if (/Linux/i.test(ua)) return "Linux PC";
-  return os && os !== "未知系统" ? `${os} 设备` : "当前浏览器设备";
+function normalizeLoginEventRow(row) {
+  if (!row || typeof row !== "object") return null;
+  return {
+    id: normalizeText(row.id),
+    user_id: normalizeText(row.user_id),
+    logged_in_at: normalizeText(row.logged_in_at),
+    device_label: normalizePayloadText(row.device_label, "当前浏览器设备"),
+    browser: normalizePayloadText(row.browser, "浏览器"),
+    os: normalizePayloadText(row.os, "未知系统"),
+    created_at: normalizeText(row.created_at)
+  };
 }
 
-function detectOs(ua) {
-  if (/iPhone|iPad/i.test(ua)) return "iOS";
-  if (/Android/i.test(ua)) return "Android";
-  if (/Macintosh|Mac OS X/i.test(ua)) return "macOS";
-  if (/Windows NT/i.test(ua)) return "Windows";
-  if (/Linux/i.test(ua)) return "Linux";
-  return "未知系统";
-}
-
-function detectBrowser(ua) {
-  if (/Edg\//i.test(ua)) return "Edge";
-  if (/OPR\//i.test(ua)) return "Opera";
-  if (/Firefox\//i.test(ua)) return "Firefox";
-  if (/CriOS/i.test(ua)) return "Chrome";
-  if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return "Chrome 浏览器";
-  if (/Safari\//i.test(ua) && !/Chrome|CriOS|Android/i.test(ua)) return "Safari";
-  return "浏览器";
-}
-
-function clampInteger(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return max;
-  return Math.min(max, Math.max(min, Math.trunc(number)));
+function normalizeLoginEventRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map(normalizeLoginEventRow).filter(Boolean);
 }
 
 function isMissingLoginEventsTableError(error) {
   const code = normalizeText(error?.code).toUpperCase();
-  const message = normalizeText(error?.message).toLowerCase();
-  return (
-    code === "42P01" ||
-    code === "PGRST205" ||
-    (message.includes("relation") && message.includes("user_login_events")) ||
-    message.includes("could not find the table")
-  );
+  const message = normalizeText(error?.message);
+  return MISSING_LOGIN_EVENTS_TABLE_CODES.has(code) || /user_login_events/i.test(message) && /schema cache|does not exist|not find/i.test(message);
 }
 
 function normalizeText(value) {
-  return String(value ?? "").trim();
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return `${value}`.trim();
 }
 
 function normalizePayloadText(value, fallback) {

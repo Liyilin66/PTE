@@ -259,13 +259,17 @@ watch(
 
 const userDisplayName = computed(() => {
   if (!authStore.isLoggedIn && authStore.loaded) return "未登录";
-  return authStore.displayName || "yli71641";
+  return authStore.displayName || "同学";
 });
 const userAvatarUrl = computed(() => `${authStore.avatarUrl || ""}`.trim());
 const showUserAvatar = computed(() => Boolean(userAvatarUrl.value) && !avatarLoadFailed.value);
 const userInitial = computed(() => {
   const first = `${userDisplayName.value || ""}`.trim().charAt(0);
   return first ? first.toUpperCase() : "Y";
+});
+
+watch(userAvatarUrl, () => {
+  avatarLoadFailed.value = false;
 });
 
 const recentTaskSnapshot = computed(() => agentOverview.value?.recentTaskSnapshot || null);
@@ -2129,6 +2133,9 @@ function normalizeText(value) {
     v-if="isWarmShellState"
     :mode="agentWorkspaceState"
     :user-id="userDisplayName"
+    :user-initial="userInitial"
+    :user-avatar-url="userAvatarUrl"
+    :show-user-avatar="showUserAvatar"
     :nav-items="agentLoadingNavItems"
     :steps="agentWarmShellSteps"
     :feature-items="agentWarmShellFeatures"
@@ -2140,6 +2147,7 @@ function normalizeText(value) {
     :primary-action-loading-label="agentWarmPrimaryActionLoadingLabel"
     :primary-action-loading="pending"
     :secondary-action-label="agentWarmSecondaryActionLabel"
+    @avatar-error="handleAvatarError"
     @primary-action="handleWarmShellPrimaryAction"
     @secondary-action="handleWarmShellSecondaryAction"
   />
