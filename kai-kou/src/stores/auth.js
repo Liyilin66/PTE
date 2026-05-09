@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { getApiUrl } from "@/lib/api-url";
 import { ACCESS_STATUS, getAccessStatus } from "@/lib/access-status";
+import { recordLoginEvent } from "@/lib/login-events";
 import { supabase } from "@/lib/supabase";
 
 let initPromise = null;
@@ -175,6 +176,12 @@ export const useAuthStore = defineStore("auth", {
       this.user = data?.user || null;
 
       if (this.user) {
+        try {
+          await recordLoginEvent(this);
+        } catch (eventError) {
+          console.warn("recordLoginEvent failed:", eventError);
+        }
+
         await this.loadStatus();
       }
 

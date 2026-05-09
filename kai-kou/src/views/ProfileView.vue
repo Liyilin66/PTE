@@ -4,11 +4,18 @@ import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useUIStore } from "@/stores/ui";
 import { BILLING_PAUSED, BILLING_PAUSED_MESSAGE } from "@/lib/billing";
+import { classifyDeviceFamily, getDeviceIconSource } from "@/lib/device-icons";
 import {
   createEmptyHomeAnalytics,
   formatInteger,
   loadHomeAnalyticsSnapshotForAuth
 } from "@/lib/home-analytics";
+import {
+  createEmptyLoginEventsSnapshot,
+  detectLoginEventDevice,
+  formatLoginEventMeta,
+  loadLoginEventsForAuth
+} from "@/lib/login-events";
 import {
   createEmptyProfileProgress,
   loadProfileProgressSnapshotForAuth
@@ -22,13 +29,26 @@ const uiStore = useUIStore();
 
 const selectedPlanKey = ref("month");
 const homeAnalytics = ref(createEmptyHomeAnalytics());
+const loginEventsSnapshot = ref(createEmptyLoginEventsSnapshot());
 const profileProgress = ref(createEmptyProfileProgress());
 const favoritesSnapshot = ref(createEmptyFavoritesSnapshot());
 const planSnapshot = ref(createEmptyPlanSnapshot());
 const avatarInputRef = ref(null);
 const avatarUploading = ref(false);
 const avatarUploadError = ref("");
+const profileModalOpen = ref(false);
+const profileSaving = ref(false);
+const profileSaveError = ref("");
+const profileDraft = ref(createEmptyProfileDraft());
+const todayDateKey = ref(getLocalDateKey());
+const logoutPending = ref(false);
 let profileRefreshPromise = null;
+
+const profileStageOptions = ["基础巩固", "稳步提分", "冲刺提升"];
+const defaultProfileStage = profileStageOptions[0];
+const targetScoreMin = 10;
+const targetScoreMax = 90;
+const defaultTargetScore = 50;
 
 const navIconMap = {
   home: '<svg width="14" height="14" fill="none" viewBox="0 0 14 14"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>',
@@ -112,14 +132,8 @@ const profileLocation = computed(() => {
     profile.value?.location_country,
     authStore.user?.user_metadata?.country
   );
-  const explicitLocation = pickText(
-    profile.value?.location,
-    profile.value?.region_city,
-    authStore.user?.user_metadata?.location
-  );
-
   if (city && country) return `${city}, ${country}`;
-  return explicitLocation || city || country || "Melbourne, Australia";
+  return city || country || "未设置";
 });
 
 const targetScore = computed(() =>
@@ -131,7 +145,7 @@ const targetScore = computed(() =>
       profile.value?.goalScore,
       profile.value?.pte_target_score,
       authStore.user?.user_metadata?.target_score
-    ) || "79+"
+    ) || defaultTargetScore
   )
 );
 
@@ -150,13 +164,15 @@ const examDate = computed(() =>
 );
 
 const currentStage = computed(() =>
-  pickText(
-    profile.value?.current_stage,
-    profile.value?.currentStage,
-    profile.value?.stage,
-    profile.value?.learning_stage,
-    authStore.user?.user_metadata?.current_stage
-  ) || inferStageFromScore() || "冲刺提升"
+  normalizeStageValue(
+    pickText(
+      profile.value?.current_stage,
+      profile.value?.currentStage,
+      profile.value?.stage,
+      profile.value?.learning_stage,
+      authStore.user?.user_metadata?.current_stage
+    )
+  ) || inferStageFromScore() || defaultProfileStage
 );
 
 const membershipPill = computed(() => {
@@ -195,12 +211,70 @@ const membershipSummary = computed(() => {
   return "当前套餐：未开通";
 });
 
+const profileInfoIconMap = {
+  target:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6"/></svg>',
+  calendar:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>',
+  stage:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
+  mail:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 8 7.8 5.2a2.2 2.2 0 0 0 2.4 0L21 8"/></svg>'
+};
+
+const accountStatusIconMap = {
+  summary:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h7"/><path d="M9 12h7"/><path d="M9 19h5"/><path d="M5 5h.01"/><path d="M5 12h.01"/><path d="M5 19h.01"/></svg>',
+  login:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"/><path d="M3.05 11a9 9 0 1 1 2.64 6.36"/><path d="M3 17h3v-3"/></svg>',
+  status:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 2.9 8 7 10 4.1-2 7-5.6 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>',
+  time:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12"/><path d="M6 21h12"/><path d="M7 3c0 4 5 5 5 9s-5 5-5 9"/><path d="M17 3c0 4-5 5-5 9s5 5 5 9"/></svg>',
+  memory:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6a3 3 0 0 1 5.4-1.8A3.7 3.7 0 0 1 19 7.4a3.2 3.2 0 0 1-.7 5.8A3.7 3.7 0 0 1 15 20a3 3 0 0 1-3-2 3 3 0 0 1-3 2 3.7 3.7 0 0 1-3.3-6.8A3.2 3.2 0 0 1 5 7.4 3.7 3.7 0 0 1 8 6Z"/><path d="M12 6v12"/><path d="M8.5 10H12"/><path d="M12 14h3.5"/></svg>',
+  plan:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 6h10"/><path d="M10 12h10"/><path d="M10 18h10"/><path d="m4 6 1 1 2-2"/><path d="m4 12 1 1 2-2"/><path d="m4 18 1 1 2-2"/></svg>'
+};
+
+const identityIconMap = {
+  summary:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 7l8 4 8-4-8-4Z"/><path d="m4 11 8 4 8-4"/><path d="m4 15 8 4 8-4"/></svg>',
+  score:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0-9-9"/><path d="M12 17a5 5 0 1 0-5-5"/><path d="M12 13a1 1 0 1 0-1-1"/><path d="m15 9 5-5"/><path d="M16 4h4v4"/></svg>',
+  modules:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
+  duration:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/></svg>',
+  window:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+  ai:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m5.6 5.6 2.1 2.1"/><path d="m16.3 16.3 2.1 2.1"/><path d="m18.4 5.6-2.1 2.1"/><path d="m7.7 16.3-2.1 2.1"/><path d="M9.5 12a2.5 2.5 0 0 1 5 0c0 1.4-1.2 2.2-2.5 3-1.3-.8-2.5-1.6-2.5-3Z"/></svg>'
+};
+
+const favoriteIconMap = {
+  ra:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><path d="M12 19v3"/></svg>',
+  rs:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 8h8a4 4 0 0 1 0 8H9"/><path d="m11 12-4 4 4 4"/><path d="M5 8h2"/><path d="M3 5h4"/></svg>',
+  rl:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"/><path d="M7 19V9a5 5 0 0 1 10 0v10"/><path d="M9 10h6"/><path d="M12 3v3"/></svg>',
+  wfd:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M5 13h3v6H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2Z"/><path d="M19 13h-3v6h3a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2Z"/></svg>',
+  we:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4-10 10H6v-4L16 4Z"/><path d="m14 6 4 4"/><path d="M4 20h16"/></svg>',
+  di:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-4.2-4.2a2 2 0 0 0-2.8 0L7 18"/></svg>',
+  rts:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18.5 4 21v-5.5A7.5 7.5 0 0 1 11.5 8h1A7.5 7.5 0 0 1 20 15.5 7.5 7.5 0 0 1 12.5 23h-1a7.4 7.4 0 0 1-4-1.2"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>'
+};
+
 const profileInfoRows = computed(() => [
-  { icon: "◎", label: "目标分数", value: targetScore.value, strong: true },
-  { icon: "▣", label: "考试日期", value: examDate.value, strong: true },
-  { icon: "◉", label: "当前阶段", value: currentStage.value, strong: true },
+  { icon: "target", label: "目标分数", value: targetScore.value, strong: true },
+  { icon: "calendar", label: "考试日期", value: examDate.value, strong: true },
+  { icon: "stage", label: "当前阶段", value: currentStage.value, strong: true },
   {
-    icon: "✉",
+    icon: "mail",
     label: "邮箱",
     value: userEmail.value || "邮箱未绑定",
     badge: emailVerified.value ? "已验证" : "未验证",
@@ -208,45 +282,50 @@ const profileInfoRows = computed(() => [
   }
 ]);
 
+const latestLoginEvent = computed(() => {
+  const rows = Array.isArray(loginEventsSnapshot.value.rows) ? loginEventsSnapshot.value.rows : [];
+  return rows[0] || null;
+});
+
 const accountStatusRows = computed(() => [
   {
     label: "最近一次登录",
-    value: formatLastLogin(authStore.user?.last_sign_in_at),
-    icon: "◉",
+    value: formatLatestLoginText(),
+    icon: "login",
     color: "purple"
   },
   {
     label: "考员状态",
     value: buildVipStatusText(),
-    icon: "♛",
+    icon: "status",
     color: "gold"
   },
   {
     label: "做题时长/天数",
     value: buildPracticeTimeText(),
-    icon: "◈",
+    icon: "time",
     color: "green"
   },
   {
     label: "AI 私教记忆",
     value: buildAgentMemoryText(),
-    icon: "A",
+    icon: "memory",
     color: "blue"
   },
   {
     label: "今日计划状态",
     value: buildPlanStatusText(),
-    icon: "✓",
+    icon: "plan",
     color: "teal"
   }
 ]);
 
 const identityConfig = computed(() => [
-  { label: "目标分数", value: targetScore.value, icon: "↗", color: "blue" },
-  { label: "重点模块", value: focusModules.value, icon: "▣", color: "purple" },
-  { label: "每日学习时长", value: dailyStudyTime.value, icon: "◷", color: "cyan" },
-  { label: "最佳时段", value: bestStudyWindow.value, icon: "☼", color: "gold" },
-  { label: "AI 建议强度", value: aiIntensity.value, icon: "✕", color: "red" }
+  { label: "目标分数", value: targetScore.value, icon: "score", color: "blue" },
+  { label: "重点模块", value: focusModules.value, icon: "modules", color: "purple" },
+  { label: "每日学习时长", value: dailyStudyTime.value, icon: "duration", color: "cyan" },
+  { label: "最佳时段", value: bestStudyWindow.value, icon: "window", color: "gold" },
+  { label: "AI 建议强度", value: aiIntensity.value, icon: "ai", color: "red" }
 ]);
 
 const focusModules = computed(() => {
@@ -304,90 +383,62 @@ const aiIntensity = computed(() =>
 
 const favorites = computed(() => {
   const summary = favoritesSnapshot.value;
-  const total = summary.totalCount;
-  const templateCount = summary.countsByTask.RTS || summary.countsByTask.WE || 0;
-  const questionCount = total;
-  const materialCount = readLocalMaterialCount();
+  const counts = summary.countsByTask || {};
 
-  return [
-    { label: "收藏模板", count: templateCount, icon: "★", color: "gold" },
-    { label: "收藏题目", count: questionCount, icon: "▣", color: "green" },
-    { label: "收藏资料", count: materialCount, icon: "▤", color: "blue" }
-  ];
+  return favoriteTaskTypes.map((item) => ({
+    ...item,
+    count: Number(counts[item.type] || 0)
+  }));
 });
 
-const favoritesSourceNote = computed(() => {
-  if (favoritesSnapshot.value.loading) return "同步中";
-  if (favoritesSnapshot.value.source === "error") return "同步失败";
-  if (favoritesSnapshot.value.source === "local_missing_table") return "本地记录";
-  return "";
+const favoriteTotalCount = computed(() => Number(favoritesSnapshot.value.totalCount || 0));
+
+const favoriteSummaryText = computed(() => {
+  if (favoritesSnapshot.value.loading) return "正在同步你的重点题目。";
+  if (favoritesSnapshot.value.source === "error") return "收藏暂时同步失败，可以先进入题库继续练习。";
+  if (favoriteTotalCount.value > 0) {
+    return `已整理 ${formatInteger(favoriteTotalCount.value)} 个重点内容，适合考前集中复习。`;
+  }
+  return "把高频题、易错题和需要回看的题收藏起来，这里会成为你的复习清单。";
 });
 
-const commonModules = computed(() => {
-  const taskCounts = homeAnalytics.value?.taskWeekCounts || {};
-  const ranked = Object.entries(taskCounts)
-    .filter(([, count]) => Number(count || 0) > 0)
-    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))
-    .map(([taskType]) => taskType);
-
-  return (ranked.length ? ranked : ["RA", "DI", "WFD"]).slice(0, 3).concat("AI 私教");
-});
-
-const recentPages = computed(() => {
-  const lastTask = normalizeText(homeAnalytics.value?.lastPracticeTaskType);
-  const pages = [lastTask && `${lastTask} 练习`, "AI 私教", "学习报告", "题库"].filter(Boolean);
-  return [...new Set(pages)].slice(0, 4);
-});
+const favoriteTaskTypes = [
+  { type: "RA", label: "RA 朗读", hint: "朗读题", icon: "ra", color: "blue" },
+  { type: "RS", label: "RS 复述", hint: "复述句子", icon: "rs", color: "purple" },
+  { type: "RL", label: "RL 讲座", hint: "复述讲座", icon: "rl", color: "green" },
+  { type: "WFD", label: "WFD 听写", hint: "听写句子", icon: "wfd", color: "cyan" },
+  { type: "WE", label: "WE 作文", hint: "写作题", icon: "we", color: "gold" },
+  { type: "DI", label: "DI 图片", hint: "图片描述", icon: "di", color: "indigo" },
+  { type: "RTS", label: "RTS 情景", hint: "情景回应", icon: "rts", color: "orange" }
+];
 
 const devices = computed(() => {
   const current = detectCurrentDevice();
   return [
     {
-      icon: current.icon,
+      icon: getDeviceIconSource(current),
       name: current.name,
       meta: current.meta,
+      time: "正在使用",
       status: "当前设备",
       current: true
-    },
-    {
-      icon: "▯",
-      name: "iPhone 13",
-      meta: "iOS · Safari",
-      status: "3 小时前",
-      current: false
     }
   ];
 });
 
 const loginRecords = computed(() => {
+  const rows = Array.isArray(loginEventsSnapshot.value.rows) ? loginEventsSnapshot.value.rows : [];
   const current = detectCurrentDevice();
-  return [
-    {
-      icon: current.icon,
-      device: current.name,
-      location: profileLocation.value,
-      status: "当前在线",
-      online: true
-    },
-    {
-      icon: "▯",
-      device: "iPhone 13",
-      location: profileLocation.value,
-      status: "3 小时前"
-    },
-    {
-      icon: "▭",
-      device: "Windows PC",
-      location: profileLocation.value,
-      status: "昨天 11:42"
-    },
-    {
-      icon: "▭",
-      device: "iPad Air (5th gen)",
-      location: profileLocation.value,
-      status: "05-06 18:21"
-    }
-  ];
+  const currentRecordIndex = rows.findIndex((row) => doesLoginRecordMatchCurrentDevice(row, current));
+
+  return rows.slice(0, 5).map((row, index) => ({
+    icon: getDeviceIconSource(row),
+    device: row.device_label || "设备未记录",
+    meta: formatLoginEventMeta(row),
+    time: formatRelativeDateTime(row.created_at) || "时间未记录",
+    current: index === currentRecordIndex,
+    status: index === currentRecordIndex ? "当前设备" : ""
+  }));
 });
 
 function isNavActive(item) {
@@ -419,25 +470,129 @@ function openUpgrade() {
   });
 }
 
-function handleEditProfile() {
-  uiStore.showToast("当前可先更换头像；昵称、城市等资料表单待接入。", "info");
-  triggerAvatarPicker();
+function openEditProfileModal(event) {
+  event?.stopPropagation?.();
+  todayDateKey.value = getLocalDateKey();
+  profileDraft.value = createProfileDraftFromCurrentUser();
+  profileSaveError.value = "";
+  profileModalOpen.value = true;
 }
 
-function handleEditLearningConfig() {
-  uiStore.showToast("学习配置暂以 profiles/AI 计划读取为主，编辑表单待接入。", "info");
+function closeEditProfileModal() {
+  if (profileSaving.value) return;
+  profileModalOpen.value = false;
+  profileSaveError.value = "";
 }
 
-function openFavorites() {
-  router.push("/rts/favorites");
+async function handleLogout() {
+  if (logoutPending.value) return;
+  logoutPending.value = true;
+
+  try {
+    await authStore.logout();
+    uiStore.showToast("已退出登录", "success");
+    await router.replace("/auth");
+  } catch (error) {
+    console.error("Logout failed:", error);
+    uiStore.showToast(error?.message || "退出登录失败，请稍后重试", "warning");
+  } finally {
+    logoutPending.value = false;
+  }
 }
 
-function openCommonContent() {
-  router.push("/home#quick");
+async function saveProfileDraft() {
+  if (profileSaving.value) return;
+
+  const userId = normalizeText(authStore.user?.id);
+  if (!userId) {
+    profileSaveError.value = "请先登录后再保存资料";
+    uiStore.showToast(profileSaveError.value, "warning");
+    return;
+  }
+
+  const normalizedDraft = normalizeProfileDraft(profileDraft.value);
+  const validationError = validateProfileDraft(normalizedDraft);
+  if (validationError) {
+    profileSaveError.value = validationError;
+    uiStore.showToast(validationError, "warning");
+    return;
+  }
+
+  profileSaving.value = true;
+  profileSaveError.value = "";
+
+  try {
+    const currentMeta =
+      authStore.user?.user_metadata && typeof authStore.user.user_metadata === "object"
+        ? authStore.user.user_metadata
+        : {};
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: {
+        ...currentMeta,
+        display_name: normalizedDraft.display_name,
+        username: normalizedDraft.display_name,
+        city: normalizedDraft.city,
+        country: normalizedDraft.country,
+        target_score: normalizedDraft.target_score,
+        exam_date: normalizedDraft.exam_date,
+        current_stage: normalizedDraft.current_stage,
+        profile_updated_at: new Date().toISOString()
+      }
+    });
+
+    if (error) throw error;
+    applyUpdatedAuthUser(data?.user);
+
+    const profilePatch = buildExistingProfilePatch(normalizedDraft);
+    if (Object.keys(profilePatch).length) {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update(profilePatch)
+        .eq("id", userId);
+
+      if (profileError) throw profileError;
+    }
+
+    authStore.profile = {
+      ...(authStore.profile || {}),
+      display_name: normalizedDraft.display_name,
+      city: normalizedDraft.city,
+      country: normalizedDraft.country,
+      target_score: normalizedDraft.target_score,
+      exam_date: normalizedDraft.exam_date,
+      current_stage: normalizedDraft.current_stage
+    };
+
+    profileDraft.value = normalizedDraft;
+    profileModalOpen.value = false;
+    uiStore.showToast("个人资料已保存", "success");
+  } catch (error) {
+    console.error("Profile save failed:", error);
+    profileSaveError.value = error?.message || "保存失败，请稍后重试";
+    uiStore.showToast(profileSaveError.value, "warning");
+  } finally {
+    profileSaving.value = false;
+  }
 }
 
 function showLoginRecordsNotice() {
-  uiStore.showToast("登录设备记录目前是前端展示，待新增登录记录表/API 后可查看真实列表。", "info");
+  if (loginEventsSnapshot.value.loading) {
+    uiStore.showToast("正在同步最近 5 条登录记录", "info");
+    return;
+  }
+
+  if (loginEventsSnapshot.value.source === "table_missing") {
+    uiStore.showToast("登录记录表未配置，当前暂无真实记录", "info");
+    return;
+  }
+
+  if (loginEventsSnapshot.value.source === "error") {
+    uiStore.showToast("登录记录同步失败，请稍后重试", "warning");
+    return;
+  }
+
+  uiStore.showToast("当前仅展示数据库保存的最近 5 条登录记录", "info");
 }
 
 function triggerAvatarPicker() {
@@ -481,6 +636,107 @@ async function handleAvatarFileChange(event) {
   }
 }
 
+function createEmptyProfileDraft() {
+  return {
+    display_name: "",
+    city: "",
+    country: "",
+    target_score: "",
+    exam_date: "",
+    current_stage: ""
+  };
+}
+
+function createProfileDraftFromCurrentUser() {
+  return normalizeProfileDraft({
+    display_name: userDisplayName.value,
+    city: pickText(
+      profile.value?.city,
+      profile.value?.location_city,
+      profile.value?.study_city,
+      authStore.user?.user_metadata?.city
+    ),
+    country: pickText(
+      profile.value?.country,
+      profile.value?.region,
+      profile.value?.location_country,
+      authStore.user?.user_metadata?.country
+    ),
+    target_score: targetScore.value,
+    exam_date: examDate.value,
+    current_stage: currentStage.value
+  });
+}
+
+function normalizeProfileDraft(draft) {
+  return {
+    display_name: normalizeText(draft?.display_name),
+    city: normalizeText(draft?.city),
+    country: normalizeText(draft?.country),
+    target_score: formatTargetScore(draft?.target_score || defaultTargetScore),
+    exam_date: formatDateValue(draft?.exam_date, ""),
+    current_stage: normalizeStageValue(draft?.current_stage) || inferStageFromScore() || defaultProfileStage
+  };
+}
+
+function validateProfileDraft(draft) {
+  todayDateKey.value = getLocalDateKey();
+  if (draft.exam_date && draft.exam_date < todayDateKey.value) {
+    return "考试日期不能早于今天";
+  }
+  if (!profileStageOptions.includes(draft.current_stage)) {
+    return "请选择有效的当前阶段";
+  }
+  return "";
+}
+
+function normalizeStageValue(value) {
+  const normalized = normalizeText(value);
+  return profileStageOptions.includes(normalized) ? normalized : "";
+}
+
+function adjustTargetScore(delta) {
+  const current = parseTargetScoreNumber(profileDraft.value.target_score);
+  profileDraft.value.target_score = String(clampTargetScore(current + delta));
+}
+
+function applyUpdatedAuthUser(user) {
+  if (!user) return;
+  authStore.user = user;
+  if (authStore.session) {
+    authStore.session = {
+      ...authStore.session,
+      user
+    };
+  }
+}
+
+function buildExistingProfilePatch(draft) {
+  const currentProfile = authStore.profile || {};
+  const patch = {};
+
+  assignIfProfileKeyExists(patch, currentProfile, ["display_name", "username", "name", "full_name"], draft.display_name);
+  assignIfProfileKeyExists(patch, currentProfile, ["city", "location_city", "study_city"], draft.city);
+  assignIfProfileKeyExists(patch, currentProfile, ["country", "region", "location_country"], draft.country);
+  assignIfProfileKeyExists(patch, currentProfile, ["target_score", "goal_score", "pte_target_score"], draft.target_score);
+  assignIfProfileKeyExists(patch, currentProfile, ["exam_date", "test_date", "target_exam_date"], draft.exam_date || null);
+  assignIfProfileKeyExists(patch, currentProfile, ["current_stage", "stage", "learning_stage"], draft.current_stage);
+
+  if (Object.prototype.hasOwnProperty.call(currentProfile, "updated_at")) {
+    patch.updated_at = new Date().toISOString();
+  }
+
+  return patch;
+}
+
+function assignIfProfileKeyExists(patch, currentProfile, keys, value) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(currentProfile, key)) {
+      patch[key] = value;
+    }
+  }
+}
+
 async function loadProfileSnapshots({ reset = false } = {}) {
   if (profileRefreshPromise) {
     return profileRefreshPromise;
@@ -488,6 +744,7 @@ async function loadProfileSnapshots({ reset = false } = {}) {
 
   if (reset) {
     homeAnalytics.value = createEmptyHomeAnalytics();
+    loginEventsSnapshot.value = createEmptyLoginEventsSnapshot();
     profileProgress.value = createEmptyProfileProgress();
     favoritesSnapshot.value = createEmptyFavoritesSnapshot();
     planSnapshot.value = createEmptyPlanSnapshot();
@@ -501,17 +758,20 @@ async function loadProfileSnapshots({ reset = false } = {}) {
 
     const [
       analyticsSnapshot,
+      loginEvents,
       progressSnapshot,
       favoriteSummary,
       todayPlan
     ] = await Promise.all([
       loadHomeAnalyticsSnapshotForAuth(authStore),
+      loadLoginEventsForAuth(authStore),
       loadProfileProgressSnapshotForAuth(authStore),
       loadFavoritesSnapshotForAuth(),
       loadTodayPlanSnapshotForAuth()
     ]);
 
     homeAnalytics.value = analyticsSnapshot;
+    loginEventsSnapshot.value = loginEvents;
     profileProgress.value = progressSnapshot;
     favoritesSnapshot.value = favoriteSummary;
     planSnapshot.value = todayPlan;
@@ -620,37 +880,7 @@ async function loadFavoritesSnapshotForAuth() {
     };
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("favorites")
-      .select("task_type, question_id, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1000);
-
-    if (error) {
-      if (isMissingTableError(error, "favorites")) {
-        const localCounts = readLocalFavoriteCounts(userId);
-        return buildFavoritesSnapshotFromCounts(localCounts, "local_missing_table");
-      }
-      throw error;
-    }
-
-    const countsByTask = {};
-    (Array.isArray(data) ? data : []).forEach((row) => {
-      const taskType = normalizeTaskType(row?.task_type) || "OTHER";
-      countsByTask[taskType] = (countsByTask[taskType] || 0) + 1;
-    });
-
-    return buildFavoritesSnapshotFromCounts(countsByTask, "remote");
-  } catch (error) {
-    console.warn("Favorites summary load failed:", error);
-    return {
-      ...createEmptyFavoritesSnapshot(),
-      loading: false,
-      source: "error"
-    };
-  }
+  return buildFavoritesSnapshotFromCounts(readLocalFavoriteCounts(userId), "local_profile_summary");
 }
 
 async function loadTodayPlanSnapshotForAuth() {
@@ -811,32 +1041,12 @@ function buildFavoritesSnapshotFromCounts(countsByTask, source) {
 }
 
 function readLocalFavoriteCounts(userId) {
-  const taskTypes = ["RA", "RTS", "DI"];
+  const taskTypes = favoriteTaskTypes.map((item) => item.type);
   return taskTypes.reduce((counts, taskType) => {
     const key = `kai_kou_${taskType.toLowerCase()}_favorites_${userId}`;
     counts[taskType] = readJsonArrayLengthFromLocalStorage(key);
     return counts;
   }, {});
-}
-
-function readLocalMaterialCount() {
-  if (typeof localStorage === "undefined") return 0;
-  const userId = normalizeText(authStore.user?.id);
-  if (!userId) return 0;
-
-  const scopedKeys = [
-    `kai_kou_saved_materials_${userId}`,
-    `kai_kou_saved_materials:${userId}`,
-    `kai_kou_material_favorites_${userId}`
-  ];
-
-  const scopedCount = scopedKeys.reduce((total, key) => (
-    total + readJsonArrayLengthFromLocalStorage(key)
-  ), 0);
-
-  if (scopedCount > 0) return scopedCount;
-
-  return readJsonArrayLengthFromLocalStorage("kai_kou_saved_materials", userId);
 }
 
 function readJsonArrayLengthFromLocalStorage(key, userId = "") {
@@ -931,9 +1141,23 @@ function blobToDataUrl(blob) {
 }
 
 function detectCurrentDevice() {
+  const device = detectLoginEventDevice();
+
+  if (device.device_label || device.browser || device.os) {
+    return {
+      device_label: device.device_label,
+      browser: device.browser,
+      os: device.os,
+      name: device.device_label || "当前浏览器设备",
+      meta: [device.os, device.browser].filter(Boolean).join(" · ") || "设备信息未记录"
+    };
+  }
+
   if (typeof navigator === "undefined") {
     return {
-      icon: "▭",
+      device_label: "当前浏览器设备",
+      browser: "Browser",
+      os: "未知系统",
       name: "当前浏览器设备",
       meta: "Browser"
     };
@@ -951,18 +1175,31 @@ function detectCurrentDevice() {
   const isFirefox = /Firefox/i.test(ua);
 
   const browser = isEdge ? "Edge" : isFirefox ? "Firefox" : isChrome ? "Chrome 浏览器" : isSafari ? "Safari" : "浏览器";
-  if (isIphone) return { icon: "▯", name: "iPhone", meta: `iOS · ${browser}` };
-  if (isIpad) return { icon: "▭", name: "iPad", meta: `iPadOS · ${browser}` };
-  if (isAndroid) return { icon: "▯", name: "Android Phone", meta: `Android · ${browser}` };
-  if (isMac) return { icon: "▭", name: "MacBook Pro 14-inch", meta: `macOS · ${browser}` };
-  if (isWindows) return { icon: "▭", name: "Windows PC", meta: `Windows · ${browser}` };
-  return { icon: "▭", name: "当前浏览器设备", meta: browser };
+  if (isIphone) return { device_label: "iPhone", browser, os: "iOS", name: "iPhone", meta: `iOS · ${browser}` };
+  if (isIpad) return { device_label: "iPad", browser, os: "iPadOS", name: "iPad", meta: `iPadOS · ${browser}` };
+  if (isAndroid) return { device_label: "Android Phone", browser, os: "Android", name: "Android Phone", meta: `Android · ${browser}` };
+  if (isMac) return { device_label: "MacBook Pro 14-inch", browser, os: "macOS", name: "MacBook Pro 14-inch", meta: `macOS · ${browser}` };
+  if (isWindows) return { device_label: "Windows PC", browser, os: "Windows", name: "Windows PC", meta: `Windows · ${browser}` };
+  return { device_label: "当前浏览器设备", browser, os: "未知系统", name: "当前浏览器设备", meta: browser };
 }
 
-function formatLastLogin(value) {
-  const formatted = formatRelativeDateTime(value);
-  const device = detectCurrentDevice().name;
-  return formatted ? `${formatted} · ${device}` : `当前会话 · ${device}`;
+function doesLoginRecordMatchCurrentDevice(row, currentDevice) {
+  if (!row || !currentDevice) return false;
+  const sameFamily = classifyDeviceFamily(row) === classifyDeviceFamily(currentDevice);
+  const recordBrowser = normalizeText(row.browser).toLowerCase();
+  const currentBrowser = normalizeText(currentDevice.browser).toLowerCase();
+  return sameFamily && (!recordBrowser || !currentBrowser || recordBrowser === currentBrowser);
+}
+
+function formatLatestLoginText() {
+  const event = latestLoginEvent.value;
+  if (event) {
+    const formatted = formatRelativeDateTime(event.created_at) || "时间未记录";
+    return `${formatted} · ${event.device_label || "设备未记录"}`;
+  }
+
+  const fallback = formatRelativeDateTime(authStore.user?.last_sign_in_at);
+  return fallback ? `${fallback} · 设备未记录` : "暂无登录记录";
 }
 
 function formatRelativeDateTime(value) {
@@ -1014,12 +1251,19 @@ function formatDateValue(value, fallback) {
 }
 
 function formatTargetScore(value) {
-  const normalized = normalizeText(value);
-  if (!normalized) return "79+";
-  if (normalized.endsWith("+")) return normalized;
+  return String(clampTargetScore(parseTargetScoreNumber(value)));
+}
+
+function parseTargetScoreNumber(value) {
+  const normalized = normalizeText(value).replace("+", "");
   const numeric = Number(normalized);
-  if (Number.isFinite(numeric)) return `${Math.round(numeric)}+`;
-  return normalized;
+  return Number.isFinite(numeric) ? numeric : defaultTargetScore;
+}
+
+function clampTargetScore(value) {
+  const rounded = Math.round(Number(value));
+  if (!Number.isFinite(rounded)) return defaultTargetScore;
+  return Math.min(targetScoreMax, Math.max(targetScoreMin, rounded));
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -1146,7 +1390,7 @@ function sumBy(items, key) {
         <section class="page-heading">
           <h1>个人中心</h1>
           <span>PERSONAL CENTER</span>
-          <p>管理您的账号信息、学习身份配置、会员权益与设备安全</p>
+          <p>管理您的账号信息、学习身份配置、会员权益与登录记录</p>
         </section>
 
         <section class="dashboard-grid">
@@ -1164,7 +1408,7 @@ function sumBy(items, key) {
                     class="avatar-large"
                     :disabled="avatarUploading"
                     aria-label="更换头像"
-                    @click="triggerAvatarPicker"
+                    @click.stop="triggerAvatarPicker"
                   >
                     <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="头像" />
                     <span v-else>{{ userInitial }}</span>
@@ -1178,7 +1422,7 @@ function sumBy(items, key) {
                   />
                   <div class="profile-name">
                     {{ userDisplayName }}
-                    <button type="button" class="icon-edit" aria-label="编辑个人资料" @click="handleEditProfile">✎</button>
+                    <button type="button" class="icon-edit" aria-label="编辑个人资料" @click.stop="openEditProfileModal">✎</button>
                   </div>
                   <div class="profile-location">{{ profileLocation }}</div>
                   <div class="profile-vip">♛ {{ membershipPill.label }}</div>
@@ -1187,13 +1431,21 @@ function sumBy(items, key) {
 
                 <div class="profile-info">
                   <div v-for="row in profileInfoRows" :key="row.label" class="info-row">
-                    <span class="row-label"><i>{{ row.icon }}</i>{{ row.label }}</span>
+                    <span class="row-label">
+                      <span class="info-row-icon" aria-hidden="true" v-html="profileInfoIconMap[row.icon]"></span>
+                      {{ row.label }}
+                    </span>
                     <strong v-if="row.strong">{{ row.value }}</strong>
                     <span v-else class="email-value">{{ row.value }}</span>
                     <span v-if="row.badge" class="verified" :class="`verified--${row.badgeTone}`">{{ row.badge }}</span>
                   </div>
 
-                  <button class="primary-btn profile-btn" type="button" @click="handleEditProfile">编辑个人资料</button>
+                  <div class="profile-actions">
+                    <button class="primary-btn profile-btn" type="button" @click.stop="openEditProfileModal">编辑个人资料</button>
+                    <button class="logout-btn" type="button" :disabled="logoutPending" @click.stop="handleLogout">
+                      {{ logoutPending ? "退出中..." : "退出登录" }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </article>
@@ -1239,16 +1491,16 @@ function sumBy(items, key) {
             </article>
           </div>
 
-          <div class="dashboard-column">
+          <div class="dashboard-column summary-column">
             <article class="pc-card status-card">
               <div class="card-title">
-                <span class="title-icon">▤</span>
+                <span class="title-icon title-icon-svg" aria-hidden="true" v-html="accountStatusIconMap.summary"></span>
                 <span>账号状态摘要</span>
               </div>
 
               <div class="status-list">
                 <div v-for="item in accountStatusRows" :key="item.label" class="status-row">
-                  <span class="soft-icon" :class="item.color">{{ item.icon }}</span>
+                  <span class="soft-icon status-icon" :class="item.color" aria-hidden="true" v-html="accountStatusIconMap[item.icon]"></span>
                   <span class="status-label">{{ item.label }}</span>
                   <span class="status-value">{{ item.value }}</span>
                 </div>
@@ -1257,96 +1509,179 @@ function sumBy(items, key) {
 
             <article class="pc-card identity-card">
               <div class="card-title">
-                <span class="title-icon">⚙</span>
+                <span class="title-icon title-icon-svg" aria-hidden="true" v-html="identityIconMap.summary"></span>
                 <span>学习身份配置</span>
               </div>
 
               <div class="config-list">
                 <div v-for="item in identityConfig" :key="item.label" class="config-row">
-                  <span class="soft-icon" :class="item.color">{{ item.icon }}</span>
+                  <span class="soft-icon config-icon" :class="item.color" aria-hidden="true" v-html="identityIconMap[item.icon]"></span>
                   <span>{{ item.label }}</span>
                   <strong>{{ item.value }}</strong>
                 </div>
               </div>
-
-              <button class="ghost-btn full" type="button" @click="handleEditLearningConfig">编辑学习配置</button>
-            </article>
-
-            <article class="pc-card favorites-card">
-              <div class="card-title">
-                <span class="title-icon">★</span>
-                <span>我的收藏与常用内容</span>
-              </div>
-
-              <div class="favorites-inner">
-                <div class="favorite-box">
-                  <div class="section-mini-title">
-                    我的收藏
-                    <span v-if="favoritesSourceNote" class="source-note">{{ favoritesSourceNote }}</span>
-                  </div>
-                  <div class="favorite-tiles">
-                    <div v-for="item in favorites" :key="item.label" class="favorite-tile">
-                      <span class="tile-icon" :class="item.color">{{ item.icon }}</span>
-                      <span>{{ item.label }}</span>
-                      <strong>{{ formatFavoriteCount(item.count) }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="common-box">
-                  <div class="section-mini-title">最近使用</div>
-                  <div class="chip-line">
-                    <span class="chip-label">常用模块</span>
-                    <span v-for="item in commonModules" :key="item" class="mini-chip">{{ item }}</span>
-                  </div>
-                  <div class="chip-line">
-                    <span class="chip-label">最近访问</span>
-                    <span v-for="item in recentPages" :key="item" class="mini-chip">{{ item }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="two-actions">
-                <button class="ghost-btn" type="button" @click="openFavorites">★ 查看我的收藏</button>
-                <button class="ghost-btn" type="button" @click="openCommonContent">→ 进入常用内容</button>
-              </div>
             </article>
           </div>
+
+          <article class="pc-card favorites-card">
+            <div class="favorite-hero">
+              <div class="favorite-heading">
+                <span class="favorite-eyebrow">全题型收藏概览</span>
+                <h2>我的收藏</h2>
+                <p>{{ favoriteSummaryText }}</p>
+              </div>
+              <div class="favorite-total-pill">
+                <strong>{{ formatFavoriteCount(favoriteTotalCount) }}</strong>
+                <span>已收藏</span>
+              </div>
+            </div>
+
+            <div class="favorites-content">
+              <div class="favorite-tiles" aria-label="收藏分类">
+                <div
+                  v-for="item in favorites"
+                  :key="item.label"
+                  class="favorite-tile"
+                >
+                  <span class="tile-icon favorite-icon" :class="item.color" aria-hidden="true" v-html="favoriteIconMap[item.icon]"></span>
+                  <span class="favorite-tile-copy">
+                    <strong>{{ item.label }}</strong>
+                    <em>{{ item.hint }}</em>
+                  </span>
+                  <b>{{ formatFavoriteCount(item.count) }}</b>
+                </div>
+              </div>
+            </div>
+          </article>
 
           <article class="pc-card device-card">
             <div class="card-title">
               <span class="title-icon">▰</span>
-              <span>设备管理</span>
+              <span>设备与登录记录</span>
             </div>
 
-            <div class="device-layout">
+              <div class="device-layout">
               <div class="device-panel">
-                <div class="section-mini-title">当前登录设备（{{ devices.length }}）</div>
-                <div v-for="item in devices" :key="item.name" class="device-row">
-                  <span class="device-icon">{{ item.icon }}</span>
-                  <div>
+                <div class="section-mini-title">当前设备</div>
+                <div v-for="item in devices" :key="item.name" class="device-row device-record">
+                  <span class="device-image-wrap">
+                    <img :src="item.icon" :alt="`${item.name} 设备图标`" class="device-image" />
+                  </span>
+                  <div class="device-copy">
                     <strong>{{ item.name }}</strong>
                     <p>{{ item.meta }}</p>
                   </div>
-                  <span :class="item.current ? 'current-device' : 'device-time'">{{ item.status }}</span>
+                  <div class="device-side">
+                    <span class="device-time">{{ item.time }}</span>
+                    <span class="current-device">{{ item.status }}</span>
+                  </div>
                 </div>
               </div>
 
               <div class="device-panel login-panel">
                 <div class="section-mini-title">近期登录记录</div>
-                <div v-for="item in loginRecords" :key="`${item.device}-${item.status}`" class="login-row">
-                  <span class="device-icon small">{{ item.icon }}</span>
-                  <strong>{{ item.device }}</strong>
-                  <span>{{ item.location }}</span>
-                  <em :class="{ online: item.online }">{{ item.status }}</em>
-                </div>
-                <button class="link-btn" type="button" @click="showLoginRecordsNotice">查看全部登录记录 →</button>
+                <div v-if="loginEventsSnapshot.loading" class="login-empty">正在同步登录记录...</div>
+                <div v-else-if="loginEventsSnapshot.source === 'table_missing'" class="login-empty">登录记录表未配置，暂无真实记录</div>
+                <div v-else-if="loginEventsSnapshot.source === 'error'" class="login-empty login-empty--error">登录记录同步失败，请稍后重试</div>
+                <div v-else-if="!loginRecords.length" class="login-empty">暂无登录记录</div>
+                <template v-else>
+                  <div v-for="item in loginRecords" :key="`${item.device}-${item.time}`" class="login-row device-record">
+                    <span class="device-image-wrap small">
+                      <img :src="item.icon" :alt="`${item.device} 设备图标`" class="device-image" />
+                    </span>
+                    <div class="device-copy">
+                      <strong>{{ item.device }}</strong>
+                      <p>{{ item.meta }}</p>
+                    </div>
+                    <div class="device-side">
+                      <em>{{ item.time }}</em>
+                      <span v-if="item.current" class="current-device compact">{{ item.status }}</span>
+                    </div>
+                  </div>
+                </template>
+                <button class="link-btn" type="button" @click="showLoginRecordsNotice">仅显示最近 5 条登录记录</button>
               </div>
             </div>
           </article>
         </section>
       </main>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="profileModalOpen"
+        class="profile-modal-backdrop"
+        role="presentation"
+        @click.self="closeEditProfileModal"
+      >
+        <form class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" novalidate @submit.prevent="saveProfileDraft">
+          <div class="profile-modal-head">
+            <div>
+              <span>个人资料</span>
+              <h2 id="profile-modal-title">编辑个人资料</h2>
+            </div>
+            <button type="button" class="profile-modal-close" aria-label="关闭编辑个人资料" @click="closeEditProfileModal">×</button>
+          </div>
+
+          <div class="profile-modal-grid">
+            <label class="profile-field profile-field--full">
+              <span>昵称</span>
+              <input v-model.trim="profileDraft.display_name" type="text" autocomplete="nickname" placeholder="输入你的昵称" />
+            </label>
+
+            <label class="profile-field">
+              <span>城市</span>
+              <input v-model.trim="profileDraft.city" type="text" autocomplete="address-level2" placeholder="Melbourne" />
+            </label>
+
+            <label class="profile-field">
+              <span>国家或地区</span>
+              <input v-model.trim="profileDraft.country" type="text" autocomplete="country-name" placeholder="Australia" />
+            </label>
+
+            <label class="profile-field">
+              <span>目标分数</span>
+              <div class="score-stepper">
+                <input
+                  v-model.number="profileDraft.target_score"
+                  type="number"
+                  inputmode="numeric"
+                  :min="targetScoreMin"
+                  :max="targetScoreMax"
+                  step="1"
+                  placeholder="50"
+                />
+                <div class="score-stepper-actions" aria-label="调整目标分数">
+                  <button type="button" class="score-stepper-button score-stepper-button--up" aria-label="提高目标分数" @click="adjustTargetScore(1)"></button>
+                  <button type="button" class="score-stepper-button score-stepper-button--down" aria-label="降低目标分数" @click="adjustTargetScore(-1)"></button>
+                </div>
+              </div>
+            </label>
+
+            <label class="profile-field">
+              <span>考试日期</span>
+              <input v-model="profileDraft.exam_date" type="date" :min="todayDateKey" />
+            </label>
+
+            <label class="profile-field profile-field--full">
+              <span>当前阶段</span>
+              <select v-model="profileDraft.current_stage">
+                <option v-for="stage in profileStageOptions" :key="stage" :value="stage">{{ stage }}</option>
+              </select>
+            </label>
+          </div>
+
+          <p v-if="profileSaveError" class="profile-modal-error">{{ profileSaveError }}</p>
+
+          <div class="profile-modal-actions">
+            <button type="button" class="ghost-btn modal-action-btn" :disabled="profileSaving" @click="closeEditProfileModal">取消</button>
+            <button type="submit" class="primary-btn modal-action-btn" :disabled="profileSaving">
+              {{ profileSaving ? "保存中..." : "保存资料" }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1648,7 +1983,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr);
   gap: var(--layout-gap);
-  align-items: stretch;
+  align-items: start;
 }
 
 .dashboard-column {
@@ -1657,6 +1992,11 @@ button {
   flex-direction: column;
   gap: var(--layout-gap);
   height: 100%;
+}
+
+.summary-column {
+  align-self: start;
+  height: auto;
 }
 
 .dashboard-column:first-child .profile-card {
@@ -1705,6 +2045,20 @@ button {
 .title-icon {
   color: var(--c2);
   font-size: 14px;
+}
+
+.title-icon-svg {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title-icon-svg :deep(svg) {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2;
 }
 
 .profile-card {
@@ -1832,10 +2186,23 @@ button {
   font-weight: 700;
 }
 
-.row-label i {
-  color: var(--c2);
-  font-style: normal;
-  font-weight: 700;
+.info-row-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  color: #8b633d;
+  border: 1px solid rgba(139, 99, 61, 0.2);
+  border-radius: 8px;
+  background: rgba(139, 99, 61, 0.07);
+}
+
+.info-row-icon :deep(svg) {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.15;
 }
 
 .info-row strong {
@@ -1897,10 +2264,38 @@ button {
   color: #65472f;
 }
 
-.profile-btn {
+.profile-actions {
   margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-btn {
   width: min(226px, 100%);
   align-self: start;
+}
+
+.logout-btn {
+  min-height: 31px;
+  padding: 0 18px;
+  border: 1px solid rgba(160, 80, 61, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 246, 238, 0.72);
+  color: #9b3f2d;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.logout-btn:hover:not(:disabled) {
+  border-color: rgba(155, 63, 45, 0.54);
+  background: rgba(255, 237, 229, 0.9);
+}
+
+.logout-btn:disabled {
+  cursor: progress;
+  opacity: 0.68;
 }
 
 .status-card {
@@ -1953,6 +2348,16 @@ button {
   justify-content: center;
   font-size: 11px;
   font-weight: 800;
+}
+
+.status-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.status-icon :deep(svg) {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.15;
 }
 
 .soft-icon.purple { background: #efe8ff; color: #7c4dff; }
@@ -2061,28 +2466,19 @@ button {
   white-space: nowrap;
 }
 
-.mini-chip {
-  border: 1px solid #d9cdbb;
-  border-radius: 999px;
-  background: rgba(246, 241, 232, 0.78);
-  color: #5c5146;
-  font-size: 10px;
-  padding: 4px 7px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
 .membership-footer {
   margin-top: 0;
   padding: 10px 14px 13px;
   display: grid;
-  grid-template-columns: minmax(210px, 0.48fr) 1fr;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 8px;
 }
 
 .charge-btn {
-  min-height: 34px;
+  width: 100%;
+  min-height: 42px;
+  font-size: 15px;
 }
 
 .safe-text {
@@ -2092,39 +2488,136 @@ button {
 }
 
 .identity-card {
-  min-height: 164px;
+  min-height: auto;
   display: flex;
   flex-direction: column;
 }
 
 .config-list {
-  padding: 6px 18px 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  padding: 12px 14px 15px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.identity-card .full {
-  display: block;
-  width: calc(100% - 118px);
-  margin: auto auto 9px;
+.identity-card .config-row {
+  min-height: 56px;
+  padding: 8px;
+  border: 1px solid rgba(217, 205, 187, 0.76);
+  border-radius: 8px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  background: rgba(255, 252, 247, 0.55);
+}
+
+.identity-card .soft-icon {
+  grid-row: 1 / 3;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.identity-card .config-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.identity-card .config-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.05;
+}
+
+.identity-card .config-row > span:nth-child(2) {
+  color: #5c5146;
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.identity-card .config-row strong {
+  color: #2f2720;
+  font-size: 13px;
+  line-height: 1.18;
 }
 
 .favorites-card {
-  min-height: 142px;
+  grid-column: 1 / -1;
+  min-height: 188px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.favorites-inner {
+.favorite-hero {
+  padding: 15px 20px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid rgba(217, 205, 187, 0.78);
+  background:
+    linear-gradient(135deg, rgba(255, 244, 219, 0.72), rgba(246, 251, 247, 0.58) 52%, rgba(232, 240, 255, 0.48));
+}
+
+.favorite-heading {
+  min-width: 0;
+}
+
+.favorite-eyebrow {
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid rgba(196, 180, 156, 0.82);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 252, 247, 0.78);
+  color: #7a5b3b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.favorite-heading h2 {
+  margin: 7px 0 4px;
+  color: #241a12;
+  font-size: 24px;
+  line-height: 1.08;
+}
+
+.favorite-heading p {
+  margin: 0;
+  color: #6f655a;
+  font-size: 13px;
+}
+
+.favorite-total-pill {
+  width: 96px;
+  min-height: 62px;
+  border: 1px solid rgba(185, 159, 128, 0.72);
+  border-radius: 8px;
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-  gap: 8px;
-  padding: 7px 14px 0;
+  place-items: center;
+  align-content: center;
+  background: rgba(255, 252, 247, 0.72);
+  color: #7a5b3b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-.favorite-box,
-.common-box,
+.favorite-total-pill strong {
+  color: #241a12;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.favorite-total-pill span {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.favorites-content {
+  padding: 14px 16px 16px;
+}
+
 .device-panel {
   border: 1px solid #d9cdbb;
   border-radius: 8px;
@@ -2138,67 +2631,80 @@ button {
   font-weight: 900;
 }
 
-.source-note {
-  margin-left: 7px;
-  color: var(--mute);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .favorite-tiles {
-  margin-top: 5px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  align-items: start;
+  gap: 10px;
 }
 
 .favorite-tile {
-  min-height: 40px;
+  position: relative;
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid rgba(217, 205, 187, 0.9);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  font-size: 12px;
-  color: #332820;
+  align-items: flex-start;
+  gap: 9px;
+  background: rgba(255, 252, 247, 0.62);
+  color: #2f2720;
+  text-align: left;
 }
 
-.favorite-tile span {
+.favorite-tile .tile-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.favorite-tile .favorite-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.favorite-tile .favorite-icon :deep(svg) {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.05;
+}
+
+.favorite-tile-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.favorite-tile-copy strong {
+  color: #2b2118;
+  font-size: 14px;
+}
+
+.favorite-tile-copy em {
+  color: #81776b;
   font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
+  font-style: normal;
+  line-height: 1.25;
 }
 
-.favorite-tile strong {
-  font-size: 13px;
+.favorite-tile b {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: #6e5840;
+  font-size: 21px;
+  line-height: 1;
 }
 
 .tile-icon.gold { background: #fff0cf; color: #f5a623; }
+.tile-icon.orange { background: #ffe8d6; color: #d06f2a; }
 .tile-icon.green { background: #dff0e4; color: #50b86a; }
 .tile-icon.blue { background: #e6efff; color: #4f7bee; }
-
-.chip-line {
-  min-height: 22px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  color: #5f574e;
-}
-
-.chip-label {
-  color: #6e5840;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.two-actions {
-  margin-top: auto;
-  padding: 6px 14px 8px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
+.tile-icon.purple { background: #efe8ff; color: #7c4dff; }
+.tile-icon.cyan { background: #e5f7ff; color: #2b9fd8; }
+.tile-icon.indigo { background: #e6efff; color: #4f7bee; }
 
 .device-card {
   grid-column: 1 / -1;
@@ -2213,65 +2719,110 @@ button {
 }
 
 .device-panel {
-  min-height: 116px;
+  min-height: 126px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.device-row {
-  min-height: 42px;
+.device-record {
+  min-height: 58px;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
+  padding: 9px 0;
   border-bottom: 1px solid #e4dacd;
 }
 
-.device-row:last-child {
+.device-record:last-child {
   border-bottom: 0;
 }
 
-.device-icon {
-  width: 22px;
-  color: var(--c2);
-  font-size: 17px;
-  text-align: center;
+.device-image-wrap {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(196, 180, 156, 0.72);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(250, 246, 239, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
-.device-icon.small {
-  font-size: 14px;
+.device-image-wrap.small {
+  width: 32px;
+  height: 32px;
 }
 
-.device-row strong,
+.device-image {
+  width: 26px;
+  height: 26px;
+  display: block;
+  object-fit: contain;
+}
+
+.device-image-wrap.small .device-image {
+  width: 24px;
+  height: 24px;
+}
+
+.device-copy {
+  min-width: 0;
+}
+
+.device-copy strong,
 .login-row strong {
+  display: block;
   color: #2f2720;
   font-size: 13px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.device-row p {
+.device-copy p {
   margin: 3px 0 0;
   color: #8a8075;
   font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-side {
+  min-width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
 }
 
 .current-device {
-  padding: 5px 10px;
+  padding: 5px 9px;
   border-radius: 7px;
   background: #dff0e4;
   color: #4c9862;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.current-device.compact {
+  padding: 4px 8px;
 }
 
 .device-time {
   color: #7f756a;
   font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .login-row {
-  min-height: 24px;
-  display: grid;
-  grid-template-columns: 24px minmax(160px, 1fr) minmax(140px, 1fr) auto;
-  align-items: center;
-  gap: 9px;
   font-size: 12px;
   color: #7a7066;
 }
@@ -2280,6 +2831,7 @@ button {
   font-style: normal;
   color: #7a7066;
   text-align: right;
+  white-space: nowrap;
 }
 
 .login-row em.online {
@@ -2297,6 +2849,213 @@ button {
   cursor: pointer;
   font-size: 12px;
   font-weight: 800;
+}
+
+.profile-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(30, 18, 8, 0.34);
+  backdrop-filter: blur(6px);
+}
+
+.profile-modal {
+  width: min(520px, 100%);
+  border: 1px solid rgba(196, 180, 156, 0.92);
+  border-radius: 14px;
+  background: #faf6ef;
+  box-shadow: 0 24px 70px rgba(68, 47, 27, 0.24);
+  padding: 22px;
+}
+
+.profile-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.profile-modal-head span {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #d9cdbb;
+  border-radius: 999px;
+  color: #7a5b3b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profile-modal-head h2 {
+  margin: 8px 0 0;
+  color: #21170e;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.profile-modal-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d9cdbb;
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.78);
+  color: #7c5c3e;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.profile-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.profile-field--full {
+  grid-column: 1 / -1;
+}
+
+.profile-field span {
+  color: #6f6256;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.profile-field input,
+.profile-field select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d4c8b4;
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.88);
+  color: #22170f;
+  font: inherit;
+  font-size: 14px;
+  padding: 0 12px;
+  outline: none;
+}
+
+.profile-field select {
+  cursor: pointer;
+}
+
+.profile-field input:focus,
+.profile-field select:focus {
+  border-color: #a07850;
+  box-shadow: 0 0 0 3px rgba(160, 120, 80, 0.14);
+}
+
+.score-stepper {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d4c8b4;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  overflow: hidden;
+  background: rgba(255, 252, 247, 0.88);
+}
+
+.score-stepper:focus-within {
+  border-color: #a07850;
+  box-shadow: 0 0 0 3px rgba(160, 120, 80, 0.14);
+}
+
+.score-stepper input {
+  min-height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding-right: 10px;
+}
+
+.score-stepper input::-webkit-outer-spin-button,
+.score-stepper input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.score-stepper-actions {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  border-left: 1px solid rgba(196, 180, 156, 0.58);
+  background: rgba(245, 239, 228, 0.36);
+}
+
+.score-stepper-actions button {
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: #7c5c3e;
+  cursor: pointer;
+  padding: 0;
+}
+
+.score-stepper-button::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+}
+
+.score-stepper-button--up::before {
+  transform: translateY(2px) rotate(45deg);
+}
+
+.score-stepper-button--down::before {
+  transform: translateY(-2px) rotate(225deg);
+}
+
+.score-stepper-actions button + button {
+  border-top: 1px solid rgba(196, 180, 156, 0.58);
+}
+
+.score-stepper-actions button:hover {
+  background: rgba(239, 228, 212, 0.72);
+  color: #5f4026;
+}
+
+.score-stepper input:focus {
+  box-shadow: none;
+}
+
+.profile-modal-error {
+  margin: 12px 0 0;
+  color: #b5483f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.profile-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.modal-action-btn {
+  min-width: 108px;
+  min-height: 40px;
+  padding: 0 18px;
+}
+
+.modal-action-btn:disabled,
+.profile-modal-close:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
 @media (max-width: 1320px) {
