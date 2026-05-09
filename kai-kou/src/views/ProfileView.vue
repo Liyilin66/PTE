@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useUIStore } from "@/stores/ui";
 import { BILLING_PAUSED, BILLING_PAUSED_MESSAGE } from "@/lib/billing";
-import { getDeviceIconSource } from "@/lib/device-icons";
+import { classifyDeviceFamily, getDeviceIconSource } from "@/lib/device-icons";
 import {
   createEmptyHomeAnalytics,
   formatInteger,
@@ -12,8 +12,9 @@ import {
 } from "@/lib/home-analytics";
 import {
   createEmptyLoginEventsSnapshot,
-  formatLoginEventDevice,
-  loadLoginEventsForAuth
+  formatLoginEventMeta,
+  loadLoginEventsForAuth,
+  parseCurrentDevice
 } from "@/lib/login-events";
 import { supabase } from "@/lib/supabase";
 
@@ -107,6 +108,38 @@ const plans = [
     tags: ["无限练习", "AI 私教", "专属分析"]
   }
 ];
+
+const accountStatusIconMap = {
+  summary:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h7"/><path d="M9 12h7"/><path d="M9 19h5"/><path d="M5 5h.01"/><path d="M5 12h.01"/><path d="M5 19h.01"/></svg>',
+  login:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4l3 2"/><path d="M3.05 11a9 9 0 1 1 2.64 6.36"/><path d="M3 17h3v-3"/></svg>',
+  status:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 2.9 8 7 10 4.1-2 7-5.6 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>',
+  time:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12"/><path d="M6 21h12"/><path d="M7 3c0 4 5 5 5 9s-5 5-5 9"/><path d="M17 3c0 4-5 5-5 9s5 5 5 9"/></svg>',
+  memory:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6a3 3 0 0 1 5.4-1.8A3.7 3.7 0 0 1 19 7.4a3.2 3.2 0 0 1-.7 5.8A3.7 3.7 0 0 1 15 20a3 3 0 0 1-3-2 3 3 0 0 1-3 2 3.7 3.7 0 0 1-3.3-6.8A3.2 3.2 0 0 1 5 7.4 3.7 3.7 0 0 1 8 6Z"/><path d="M12 6v12"/><path d="M8.5 10H12"/><path d="M12 14h3.5"/></svg>',
+  plan:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 6h10"/><path d="M10 12h10"/><path d="M10 18h10"/><path d="m4 6 1 1 2-2"/><path d="m4 12 1 1 2-2"/><path d="m4 18 1 1 2-2"/></svg>'
+};
+
+const favoriteIconMap = {
+  ra:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><path d="M12 19v3"/></svg>',
+  rs:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 8h8a4 4 0 0 1 0 8H9"/><path d="m11 12-4 4 4 4"/><path d="M5 8h2"/><path d="M3 5h4"/></svg>',
+  rl:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19h16"/><path d="M7 19V9a5 5 0 0 1 10 0v10"/><path d="M9 10h6"/><path d="M12 3v3"/></svg>',
+  wfd:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M5 13h3v6H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2Z"/><path d="M19 13h-3v6h3a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2Z"/></svg>',
+  we:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4-10 10H6v-4L16 4Z"/><path d="m14 6 4 4"/><path d="M4 20h16"/></svg>',
+  di:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="m21 15-4.2-4.2a2 2 0 0 0-2.8 0L7 18"/></svg>',
+  rts:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18.5 4 21v-5.5A7.5 7.5 0 0 1 11.5 8h1A7.5 7.5 0 0 1 20 15.5 7.5 7.5 0 0 1 12.5 23h-1a7.4 7.4 0 0 1-4-1.2"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>'
+};
 
 const displayNavItems = computed(() =>
   navItems.map((item) => ({
@@ -217,35 +250,40 @@ const profileInfoRows = computed(() => [
   }
 ]);
 
+const latestLoginEvent = computed(() => {
+  const rows = Array.isArray(loginEventsSnapshot.value.rows) ? loginEventsSnapshot.value.rows : [];
+  return rows[0] || null;
+});
+
 const accountStatusRows = computed(() => [
   {
     label: "最近一次登录",
-    value: latestLoginStatusText.value,
-    icon: "◉",
+    value: formatLatestLoginText(),
+    icon: "login",
     color: "purple"
   },
   {
     label: "考员状态",
     value: buildVipStatusText(),
-    icon: "♛",
+    icon: "status",
     color: "gold"
   },
   {
     label: "做题时长/天数",
     value: buildPracticeTimeText(),
-    icon: "◈",
+    icon: "time",
     color: "green"
   },
   {
     label: "AI 私教记忆",
     value: buildAgentMemoryText(),
-    icon: "A",
+    icon: "memory",
     color: "blue"
   },
   {
     label: "今日计划状态",
     value: buildPlanStatusText(),
-    icon: "✓",
+    icon: "plan",
     color: "teal"
   }
 ]);
@@ -338,70 +376,63 @@ const aiIntensity = computed(() => {
 
 const favorites = computed(() => {
   const summary = favoritesSnapshot.value;
-  const total = summary.totalCount;
-  const templateCount = summary.countsByTask.RTS || summary.countsByTask.WE || 0;
-  const questionCount = total;
-  const materialCount = readLocalMaterialCount();
+  const counts = summary.countsByTask || {};
 
+  return favoriteTaskTypes.map((item) => ({
+    ...item,
+    count: Number(counts[item.type] || 0)
+  }));
+});
+
+const favoriteTotalCount = computed(() => Number(favoritesSnapshot.value.totalCount || 0));
+
+const favoriteSummaryText = computed(() => {
+  if (favoritesSnapshot.value.loading) return "正在同步你的重点题目。";
+  if (favoritesSnapshot.value.source === "error") return "收藏暂时同步失败，可以先进入题库继续练习。";
+  if (favoriteTotalCount.value > 0) {
+    return `已整理 ${formatInteger(favoriteTotalCount.value)} 个重点内容，适合考前集中复习。`;
+  }
+  return "把高频题、易错题和需要回看的题收藏起来，这里会成为你的复习清单。";
+});
+
+const favoriteTaskTypes = [
+  { type: "RA", label: "RA 朗读", hint: "朗读题", icon: "ra", color: "blue" },
+  { type: "RS", label: "RS 复述", hint: "复述句子", icon: "rs", color: "purple" },
+  { type: "RL", label: "RL 讲座", hint: "复述讲座", icon: "rl", color: "green" },
+  { type: "WFD", label: "WFD 听写", hint: "听写句子", icon: "wfd", color: "cyan" },
+  { type: "WE", label: "WE 作文", hint: "写作题", icon: "we", color: "gold" },
+  { type: "DI", label: "DI 图片", hint: "图片描述", icon: "di", color: "indigo" },
+  { type: "RTS", label: "RTS 情景", hint: "情景回应", icon: "rts", color: "orange" }
+];
+
+const devices = computed(() => {
+  const current = detectCurrentDevice();
   return [
-    { label: "收藏模板", count: templateCount, icon: "★", color: "gold" },
-    { label: "收藏题目", count: questionCount, icon: "▣", color: "green" },
-    { label: "收藏资料", count: materialCount, icon: "▤", color: "blue" }
+    {
+      icon: getDeviceIconSource(current),
+      name: current.name,
+      meta: current.meta,
+      time: "正在使用",
+      status: "当前设备",
+      current: true
+    }
   ];
 });
 
-const favoritesSourceNote = computed(() => {
-  if (favoritesSnapshot.value.loading) return "同步中";
-  if (favoritesSnapshot.value.source === "error") return "同步失败";
-  if (favoritesSnapshot.value.source === "local_missing_table") return "本地记录";
-  return "";
+const loginRecords = computed(() => {
+  const rows = Array.isArray(loginEventsSnapshot.value.rows) ? loginEventsSnapshot.value.rows : [];
+  const current = detectCurrentDevice();
+  const currentRecordIndex = rows.findIndex((row) => doesLoginRecordMatchCurrentDevice(row, current));
+
+  return rows.slice(0, 5).map((row, index) => ({
+    icon: getDeviceIconSource(row),
+    device: row.device_label || "设备未记录",
+    meta: formatLoginEventMeta(row),
+    time: formatRelativeDateTime(row.created_at || row.logged_in_at) || "时间未记录",
+    current: index === currentRecordIndex,
+    status: index === currentRecordIndex ? "当前设备" : ""
+  }));
 });
-
-const commonModules = computed(() => {
-  const taskCounts = homeAnalytics.value?.taskWeekCounts || {};
-  const ranked = Object.entries(taskCounts)
-    .filter(([, count]) => Number(count || 0) > 0)
-    .sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0))
-    .map(([taskType]) => taskType);
-
-  return (ranked.length ? ranked : ["RA", "DI", "WFD"]).slice(0, 3).concat("AI 私教");
-});
-
-const recentPages = computed(() => {
-  const lastTask = normalizeText(homeAnalytics.value?.lastPracticeTaskType);
-  const pages = [lastTask && `${lastTask} 练习`, "AI 私教", "学习报告", "题库"].filter(Boolean);
-  return [...new Set(pages)].slice(0, 4);
-});
-
-const loginEvents = computed(() => loginEventsSnapshot.value.events || []);
-const latestLoginEvent = computed(() => loginEvents.value[0] || null);
-const latestLoginStatusText = computed(() => {
-  if (loginEventsSnapshot.value.loading) return "登录记录同步中";
-  if (latestLoginEvent.value) return formatLoginEventSummary(latestLoginEvent.value);
-  return formatLastLoginFallback(authStore.user?.last_sign_in_at);
-});
-
-const devices = computed(() =>
-  loginEvents.value.map((event, index) => ({
-    id: event.id || `${event.logged_in_at}-${index}`,
-    icon: getDeviceIconSource(event),
-    name: formatLoginEventDevice(event),
-    meta: formatLoginEventBrowser(event),
-    status: formatRelativeDateTime(event.logged_in_at) || "时间未记录",
-    current: index === 0
-  }))
-);
-
-const loginRecords = computed(() =>
-  loginEvents.value.map((event, index) => ({
-    id: event.id || `${event.logged_in_at}-${index}`,
-    icon: getDeviceIconSource(event),
-    device: formatLoginEventDevice(event),
-    browser: formatLoginEventBrowser(event),
-    status: formatRelativeDateTime(event.logged_in_at) || "时间未记录",
-    online: index === 0
-  }))
-);
 
 function isNavActive(item) {
   if (item.key === "profile") return route.path === "/profile";
@@ -450,10 +481,6 @@ function handleEditProfile() {
 
 function openFavorites() {
   router.push("/rts/favorites");
-}
-
-function openCommonContent() {
-  router.push("/home#quick");
 }
 
 async function handleLogout() {
@@ -970,26 +997,6 @@ function readLocalFavoriteCounts(userId) {
   }, {});
 }
 
-function readLocalMaterialCount() {
-  if (typeof localStorage === "undefined") return 0;
-  const userId = normalizeText(authStore.user?.id);
-  if (!userId) return 0;
-
-  const scopedKeys = [
-    `kai_kou_saved_materials_${userId}`,
-    `kai_kou_saved_materials:${userId}`,
-    `kai_kou_material_favorites_${userId}`
-  ];
-
-  const scopedCount = scopedKeys.reduce((total, key) => (
-    total + readJsonArrayLengthFromLocalStorage(key)
-  ), 0);
-
-  if (scopedCount > 0) return scopedCount;
-
-  return readJsonArrayLengthFromLocalStorage("kai_kou_saved_materials", userId);
-}
-
 function readJsonArrayLengthFromLocalStorage(key, userId = "") {
   if (typeof localStorage === "undefined") return 0;
   try {
@@ -1081,35 +1088,66 @@ function blobToDataUrl(blob) {
   });
 }
 
-function formatLoginEventSummary(event) {
-  const formatted = formatRelativeDateTime(event?.logged_in_at);
-  const deviceText = formatLoginEventFullDevice(event);
-  if (formatted && deviceText) return `${formatted} · ${deviceText}`;
-  if (formatted) return formatted;
-  return deviceText || "暂无记录";
+function detectCurrentDevice() {
+  const device = parseCurrentDevice();
+
+  if (device.device_label || device.browser || device.os) {
+    return {
+      device_label: device.device_label,
+      browser: device.browser,
+      os: device.os,
+      name: device.device_label || "当前浏览器设备",
+      meta: [device.os, device.browser].filter(Boolean).join(" · ") || "设备信息未记录"
+    };
+  }
+
+  if (typeof navigator === "undefined") {
+    return {
+      device_label: "当前浏览器设备",
+      browser: "浏览器",
+      os: "未知系统",
+      name: "当前浏览器设备",
+      meta: "浏览器"
+    };
+  }
+
+  const ua = navigator.userAgent || "";
+  const isMac = /Macintosh|Mac OS X/i.test(ua);
+  const isWindows = /Windows/i.test(ua);
+  const isIphone = /iPhone/i.test(ua);
+  const isIpad = /iPad/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  const isChrome = /Chrome|CriOS/i.test(ua) && !/Edg/i.test(ua);
+  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS/i.test(ua);
+  const isEdge = /Edg/i.test(ua);
+  const isFirefox = /Firefox/i.test(ua);
+
+  const browser = isEdge ? "Edge" : isFirefox ? "Firefox" : isChrome ? "Chrome 浏览器" : isSafari ? "Safari" : "浏览器";
+  if (isIphone) return { device_label: "iPhone", browser, os: "iOS", name: "iPhone", meta: `iOS · ${browser}` };
+  if (isIpad) return { device_label: "iPad", browser, os: "iPadOS", name: "iPad", meta: `iPadOS · ${browser}` };
+  if (isAndroid) return { device_label: "Android Phone", browser, os: "Android", name: "Android Phone", meta: `Android · ${browser}` };
+  if (isMac) return { device_label: "MacBook Pro 14-inch", browser, os: "macOS", name: "MacBook Pro 14-inch", meta: `macOS · ${browser}` };
+  if (isWindows) return { device_label: "Windows PC", browser, os: "Windows", name: "Windows PC", meta: `Windows · ${browser}` };
+  return { device_label: "当前浏览器设备", browser, os: "未知系统", name: "当前浏览器设备", meta: browser };
 }
 
-function formatLoginEventBrowser(event) {
-  const browser = normalizeText(event?.browser);
-  return browser && browser !== "Unknown Browser" ? browser : "浏览器未知";
+function doesLoginRecordMatchCurrentDevice(row, currentDevice) {
+  if (!row || !currentDevice) return false;
+  const sameFamily = classifyDeviceFamily(row) === classifyDeviceFamily(currentDevice);
+  const recordBrowser = normalizeText(row.browser).toLowerCase();
+  const currentBrowser = normalizeText(currentDevice.browser).toLowerCase();
+  return sameFamily && (!recordBrowser || !currentBrowser || recordBrowser === currentBrowser);
 }
 
-function formatLoginEventFullDevice(event) {
-  const parts = [];
-  const device = formatLoginEventDevice(event);
-  const browser = normalizeText(event?.browser);
-  if (device && device !== "Unknown Device") parts.push(device);
-  if (browser && browser !== "Unknown Browser") parts.push(browser);
-  if (parts.length) return parts.join(" · ");
+function formatLatestLoginText() {
+  const event = latestLoginEvent.value;
+  if (event) {
+    const formatted = formatRelativeDateTime(event.created_at || event.logged_in_at) || "时间未记录";
+    return `${formatted} · ${event.device_label || "设备未记录"}`;
+  }
 
-  const legacy = normalizeText(event?.device_label);
-  return legacy || "Unknown Device";
-}
-
-function formatLastLoginFallback(value) {
-  const formatted = formatRelativeDateTime(value);
-  if (formatted) return `${formatted} · 设备未记录`;
-  return "暂无记录";
+  const fallback = formatRelativeDateTime(authStore.user?.last_sign_in_at);
+  return fallback ? `${fallback} · 设备未记录` : "暂无登录记录";
 }
 
 function formatRelativeDateTime(value) {
@@ -1701,13 +1739,13 @@ function sumBy(items, key) {
           <div class="dashboard-column">
             <article class="pc-card status-card">
               <div class="card-title">
-                <span class="title-icon">▤</span>
+                <span class="title-icon title-icon-svg" aria-hidden="true" v-html="accountStatusIconMap.summary"></span>
                 <span>账号状态摘要</span>
               </div>
 
               <div class="status-list">
                 <div v-for="item in accountStatusRows" :key="item.label" class="status-row">
-                  <span class="soft-icon" :class="item.color">{{ item.icon }}</span>
+                  <span class="soft-icon status-icon" :class="item.color" aria-hidden="true" v-html="accountStatusIconMap[item.icon]"></span>
                   <span class="status-label">{{ item.label }}</span>
                   <span class="status-value">{{ item.value }}</span>
                 </div>
@@ -1731,57 +1769,54 @@ function sumBy(items, key) {
               <div class="auto-config-note">根据练习数据自动更新</div>
             </article>
 
-            <article class="pc-card favorites-card">
-              <div class="card-title">
-                <span class="title-icon">★</span>
-                <span>我的收藏与常用内容</span>
-              </div>
-
-              <div class="favorites-inner">
-                <div class="favorite-box">
-                  <div class="section-mini-title">
-                    我的收藏
-                    <span v-if="favoritesSourceNote" class="source-note">{{ favoritesSourceNote }}</span>
-                  </div>
-                  <div class="favorite-tiles">
-                    <div v-for="item in favorites" :key="item.label" class="favorite-tile">
-                      <span class="tile-icon" :class="item.color">{{ item.icon }}</span>
-                      <span>{{ item.label }}</span>
-                      <strong>{{ formatFavoriteCount(item.count) }}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="common-box">
-                  <div class="section-mini-title">最近使用</div>
-                  <div class="chip-line">
-                    <span class="chip-label">常用模块</span>
-                    <span v-for="item in commonModules" :key="item" class="mini-chip">{{ item }}</span>
-                  </div>
-                  <div class="chip-line">
-                    <span class="chip-label">最近访问</span>
-                    <span v-for="item in recentPages" :key="item" class="mini-chip">{{ item }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="two-actions">
-                <button class="ghost-btn" type="button" @click="openFavorites">★ 查看我的收藏</button>
-                <button class="ghost-btn" type="button" @click="openCommonContent">→ 进入常用内容</button>
-              </div>
-            </article>
           </div>
+
+          <article class="pc-card favorites-card">
+            <div class="favorite-hero">
+              <div class="favorite-heading">
+                <span class="favorite-eyebrow">全题型收藏概览</span>
+                <h2>我的收藏</h2>
+                <p>{{ favoriteSummaryText }}</p>
+              </div>
+              <div class="favorite-total-pill">
+                <strong>{{ formatFavoriteCount(favoriteTotalCount) }}</strong>
+                <span>已收藏</span>
+              </div>
+            </div>
+
+            <div class="favorites-content">
+              <div class="favorite-tiles" aria-label="收藏分类">
+                <div
+                  v-for="item in favorites"
+                  :key="item.label"
+                  class="favorite-tile"
+                  role="button"
+                  tabindex="0"
+                  @click="openFavorites"
+                  @keydown.enter.prevent="openFavorites"
+                  @keydown.space.prevent="openFavorites"
+                >
+                  <span class="tile-icon favorite-icon" :class="item.color" aria-hidden="true" v-html="favoriteIconMap[item.icon]"></span>
+                  <span class="favorite-tile-copy">
+                    <strong>{{ item.label }}</strong>
+                    <em>{{ item.hint }}</em>
+                  </span>
+                  <b>{{ formatFavoriteCount(item.count) }}</b>
+                </div>
+              </div>
+            </div>
+          </article>
 
           <article class="pc-card device-card">
             <div class="card-title">
               <span class="title-icon">▰</span>
-              <span>设备管理</span>
+              <span>设备与登录记录</span>
             </div>
 
             <div class="device-layout">
               <div class="device-panel">
-                <div class="section-mini-title">最近登录设备（{{ devices.length }}）</div>
-                <div v-for="item in devices" :key="item.id" class="device-row">
+                <div class="section-mini-title">当前设备</div>
+                <div v-for="item in devices" :key="item.name" class="device-row device-record">
                   <span class="device-image-wrap">
                     <img :src="item.icon" :alt="`${item.name} 设备图标`" class="device-image" />
                   </span>
@@ -1789,29 +1824,35 @@ function sumBy(items, key) {
                     <strong>{{ item.name }}</strong>
                     <p>{{ item.meta }}</p>
                   </div>
-                  <span :class="item.current ? 'current-device' : 'device-time'">{{ item.status }}</span>
-                </div>
-                <div v-if="!devices.length" class="empty-login-state">
-                  暂无真实登录设备记录
+                  <div class="device-side">
+                    <span class="device-time">{{ item.time }}</span>
+                    <span class="current-device">{{ item.status }}</span>
+                  </div>
                 </div>
               </div>
 
               <div class="device-panel login-panel">
                 <div class="section-mini-title">近期登录记录</div>
-                <div v-for="item in loginRecords" :key="item.id" class="login-row">
-                  <span class="device-image-wrap small">
-                    <img :src="item.icon" :alt="`${item.device} 设备图标`" class="device-image" />
-                  </span>
-                  <div class="device-copy">
-                    <strong>{{ item.device }}</strong>
-                    <p>{{ item.browser }}</p>
+                <div v-if="loginEventsSnapshot.loading" class="login-empty">正在同步登录记录...</div>
+                <div v-else-if="loginEventsSnapshot.source === 'missing_table'" class="login-empty">登录记录表未配置，暂无真实记录</div>
+                <div v-else-if="loginEventsSnapshot.source === 'error'" class="login-empty login-empty--error">登录记录同步失败，请稍后重试</div>
+                <div v-else-if="!loginRecords.length" class="login-empty">暂无登录记录</div>
+                <template v-else>
+                  <div v-for="item in loginRecords" :key="`${item.device}-${item.time}`" class="login-row device-record">
+                    <span class="device-image-wrap small">
+                      <img :src="item.icon" :alt="`${item.device} 设备图标`" class="device-image" />
+                    </span>
+                    <div class="device-copy">
+                      <strong>{{ item.device }}</strong>
+                      <p>{{ item.meta }}</p>
+                    </div>
+                    <div class="device-side">
+                      <em>{{ item.time }}</em>
+                      <span v-if="item.current" class="current-device compact">{{ item.status }}</span>
+                    </div>
                   </div>
-                  <em :class="{ online: item.online }">{{ item.status }}</em>
-                </div>
-                <div v-if="!loginRecords.length" class="empty-login-state">
-                  暂无真实登录记录
-                </div>
-                <button class="link-btn" type="button" @click="showLoginRecordsNotice">查看全部登录记录 →</button>
+                </template>
+                <button class="link-btn" type="button" @click="showLoginRecordsNotice">仅显示最近 5 条登录记录</button>
               </div>
             </div>
           </article>
@@ -2306,6 +2347,18 @@ button {
   font-size: 14px;
 }
 
+.title-icon-svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title-icon-svg :deep(svg) {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.1;
+}
+
 .profile-card {
   min-height: 275px;
   display: flex;
@@ -2775,6 +2828,16 @@ button {
   font-weight: 800;
 }
 
+.status-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.status-icon :deep(svg) {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.15;
+}
+
 .soft-icon.purple { background: #efe8ff; color: #7c4dff; }
 .soft-icon.gold { background: #fff0cf; color: #da8b18; }
 .soft-icon.green { background: #dff0e4; color: #4c9862; }
@@ -2942,20 +3005,83 @@ button {
 }
 
 .favorites-card {
-  min-height: 142px;
+  grid-column: 1 / -1;
+  min-height: 188px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.favorites-inner {
+.favorite-hero {
+  padding: 15px 20px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid rgba(217, 205, 187, 0.78);
+  background:
+    linear-gradient(135deg, rgba(255, 244, 219, 0.72), rgba(246, 251, 247, 0.58) 52%, rgba(232, 240, 255, 0.48));
+}
+
+.favorite-heading {
+  min-width: 0;
+}
+
+.favorite-eyebrow {
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid rgba(196, 180, 156, 0.82);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 252, 247, 0.78);
+  color: #7a5b3b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.favorite-heading h2 {
+  margin: 7px 0 4px;
+  color: #241a12;
+  font-size: 24px;
+  line-height: 1.08;
+}
+
+.favorite-heading p {
+  margin: 0;
+  color: #6f655a;
+  font-size: 13px;
+}
+
+.favorite-total-pill {
+  width: 96px;
+  min-height: 62px;
+  border: 1px solid rgba(185, 159, 128, 0.72);
+  border-radius: 8px;
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
-  gap: 8px;
-  padding: 7px 14px 0;
+  place-items: center;
+  align-content: center;
+  background: rgba(255, 252, 247, 0.72);
+  color: #7a5b3b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-.favorite-box,
-.common-box,
+.favorite-total-pill strong {
+  color: #241a12;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.favorite-total-pill span {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.favorites-content {
+  padding: 14px 16px 16px;
+}
+
 .device-panel {
   border: 1px solid #d9cdbb;
   border-radius: 8px;
@@ -2969,67 +3095,86 @@ button {
   font-weight: 900;
 }
 
-.source-note {
-  margin-left: 7px;
-  color: var(--mute);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .favorite-tiles {
-  margin-top: 5px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  align-items: start;
+  gap: 10px;
 }
 
 .favorite-tile {
-  min-height: 40px;
+  position: relative;
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid rgba(217, 205, 187, 0.9);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  font-size: 12px;
-  color: #332820;
+  align-items: flex-start;
+  gap: 9px;
+  background: rgba(255, 252, 247, 0.62);
+  color: #2f2720;
+  text-align: left;
+  cursor: pointer;
 }
 
-.favorite-tile span {
+.favorite-tile:focus-visible {
+  outline: 2px solid rgba(124, 92, 62, 0.35);
+  outline-offset: 2px;
+}
+
+.favorite-tile .tile-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.favorite-tile .favorite-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+.favorite-tile .favorite-icon :deep(svg) {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.05;
+}
+
+.favorite-tile-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.favorite-tile-copy strong {
+  color: #2b2118;
+  font-size: 14px;
+}
+
+.favorite-tile-copy em {
+  color: #81776b;
   font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
+  font-style: normal;
+  line-height: 1.25;
 }
 
-.favorite-tile strong {
-  font-size: 13px;
+.favorite-tile b {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: #6e5840;
+  font-size: 21px;
+  line-height: 1;
 }
 
 .tile-icon.gold { background: #fff0cf; color: #f5a623; }
+.tile-icon.orange { background: #ffe8d6; color: #d06f2a; }
 .tile-icon.green { background: #dff0e4; color: #50b86a; }
 .tile-icon.blue { background: #e6efff; color: #4f7bee; }
-
-.chip-line {
-  min-height: 22px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  color: #5f574e;
-}
-
-.chip-label {
-  color: #6e5840;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.two-actions {
-  margin-top: auto;
-  padding: 6px 14px 8px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
+.tile-icon.purple { background: #efe8ff; color: #7c4dff; }
+.tile-icon.cyan { background: #e5f7ff; color: #2b9fd8; }
+.tile-icon.indigo { background: #e6efff; color: #4f7bee; }
 
 .device-card {
   grid-column: 1 / -1;
@@ -3044,19 +3189,23 @@ button {
 }
 
 .device-panel {
-  min-height: 116px;
+  min-height: 126px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.device-row {
-  min-height: 42px;
+.device-record {
+  min-height: 58px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
+  padding: 9px 0;
   border-bottom: 1px solid #e4dacd;
 }
 
-.device-row:last-child {
+.device-record:last-child {
   border-bottom: 0;
 }
 
@@ -3113,26 +3262,37 @@ button {
   white-space: nowrap;
 }
 
+.device-side {
+  min-width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
 .current-device {
-  padding: 5px 10px;
+  padding: 5px 9px;
   border-radius: 7px;
   background: #dff0e4;
   color: #4c9862;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.current-device.compact {
+  padding: 4px 8px;
 }
 
 .device-time {
   color: #7f756a;
   font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .login-row {
-  min-height: 42px;
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
   font-size: 12px;
   color: #7a7066;
 }
@@ -3141,20 +3301,20 @@ button {
   font-style: normal;
   color: #7a7066;
   text-align: right;
+  white-space: nowrap;
 }
 
-.login-row em.online {
-  color: #4c9862;
-  font-weight: 900;
-}
-
-.empty-login-state {
+.login-empty {
   display: flex;
   min-height: 42px;
   align-items: center;
   color: #8a8075;
   font-size: 12px;
   font-weight: 700;
+}
+
+.login-empty--error {
+  color: #b86045;
 }
 
 .link-btn {
