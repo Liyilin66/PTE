@@ -408,7 +408,10 @@ function normalizeText(value) {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 18px 18px 16px;
+  box-sizing: border-box;
+  height: 64px;
+  flex: 0 0 64px;
+  padding: 0 18px;
   border-bottom: .5px solid #d4cdbf;
   text-decoration: none;
 }
@@ -541,8 +544,9 @@ function normalizeText(value) {
 
 .ai-tutor-loading-topbar {
   display: flex;
-  height: 50px;
-  flex: 0 0 50px;
+  box-sizing: border-box;
+  height: 64px;
+  flex: 0 0 64px;
   align-items: center;
   justify-content: space-between;
   padding: 0 28px;

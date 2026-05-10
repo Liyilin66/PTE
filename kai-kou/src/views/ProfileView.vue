@@ -1046,44 +1046,13 @@ function blobToDataUrl(blob) {
 function detectCurrentDevice() {
   const device = parseCurrentDevice();
 
-  if (device.device_label || device.browser || device.os) {
-    return {
-      device_label: device.device_label,
-      browser: device.browser,
-      os: device.os,
-      name: device.device_label || "当前浏览器设备",
-      meta: [device.os, device.browser].filter(Boolean).join(" · ") || "设备信息未记录"
-    };
-  }
-
-  if (typeof navigator === "undefined") {
-    return {
-      device_label: "当前浏览器设备",
-      browser: "浏览器",
-      os: "未知系统",
-      name: "当前浏览器设备",
-      meta: "浏览器"
-    };
-  }
-
-  const ua = navigator.userAgent || "";
-  const isMac = /Macintosh|Mac OS X/i.test(ua);
-  const isWindows = /Windows/i.test(ua);
-  const isIphone = /iPhone/i.test(ua);
-  const isIpad = /iPad/i.test(ua);
-  const isAndroid = /Android/i.test(ua);
-  const isChrome = /Chrome|CriOS/i.test(ua) && !/Edg/i.test(ua);
-  const isSafari = /Safari/i.test(ua) && !/Chrome|CriOS/i.test(ua);
-  const isEdge = /Edg/i.test(ua);
-  const isFirefox = /Firefox/i.test(ua);
-
-  const browser = isEdge ? "Edge" : isFirefox ? "Firefox" : isChrome ? "Chrome 浏览器" : isSafari ? "Safari" : "浏览器";
-  if (isIphone) return { device_label: "iPhone", browser, os: "iOS", name: "iPhone", meta: `iOS · ${browser}` };
-  if (isIpad) return { device_label: "iPad", browser, os: "iPadOS", name: "iPad", meta: `iPadOS · ${browser}` };
-  if (isAndroid) return { device_label: "Android Phone", browser, os: "Android", name: "Android Phone", meta: `Android · ${browser}` };
-  if (isMac) return { device_label: "MacBook Pro 14-inch", browser, os: "macOS", name: "MacBook Pro 14-inch", meta: `macOS · ${browser}` };
-  if (isWindows) return { device_label: "Windows PC", browser, os: "Windows", name: "Windows PC", meta: `Windows · ${browser}` };
-  return { device_label: "当前浏览器设备", browser, os: "未知系统", name: "当前浏览器设备", meta: browser };
+  return {
+    device_label: device.device_label,
+    browser: device.browser,
+    os: device.os,
+    name: device.device_label || "当前浏览器设备",
+    meta: [device.os, device.browser].filter(Boolean).join(" · ") || "设备信息未记录"
+  };
 }
 
 function doesLoginRecordMatchCurrentDevice(row, currentDevice) {
@@ -1706,61 +1675,66 @@ button {
 }
 
 .profile-sidebar {
-  width: 220px;
-  min-height: 100vh;
-  background: var(--bg2);
-  border-right: 1px solid #d7cfc0;
   display: flex;
-  flex: 0 0 220px;
+  flex: 0 0 200px;
+  width: 200px;
   flex-direction: column;
+  background: #e5dfd4;
+  border-right: 0.5px solid #d4cdbf;
 }
 
 .profile-logo {
-  height: 68px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
+  height: 64px;
+  flex: 0 0 64px;
   padding: 0 18px;
-  color: var(--c0);
   text-decoration: none;
-  border-bottom: 1px solid #d7cfc0;
+  border-bottom: 0.5px solid #d4cdbf;
 }
 
 .profile-logo-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--c2);
-  display: grid;
-  place-items: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #7c5c3e;
+  flex-shrink: 0;
 }
 
 .profile-logo-name {
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  color: #2c1f0e;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
 }
 
 .profile-nav {
-  padding: 22px 12px;
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
+  padding: 22px 12px 24px;
 }
 
 .profile-nav-item {
-  height: 42px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 10px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: #8c8174;
-  font-size: 15px;
-  font-weight: 500;
+  gap: 11px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0.5px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #9a8f80;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.8px;
+  line-height: 1.3;
+  text-align: left;
   text-decoration: none;
   transition: background 0.13s, border-color 0.13s, color 0.13s;
 }
@@ -1771,21 +1745,20 @@ button {
 }
 
 .profile-nav-item--active {
-  color: var(--c2);
-  background: var(--bg3);
   border-color: #cabdaa;
+  background: #d9cfbd;
+  color: #7c5c3e;
+  font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(245, 239, 228, 0.5);
-  font-weight: 700;
 }
 
 .profile-nav-icon {
-  width: 20px;
-  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: currentColor;
-  flex: 0 0 20px;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
 }
 
 .profile-nav-icon svg {
@@ -1794,37 +1767,42 @@ button {
 }
 
 .profile-sidebar-footer {
-  padding: 0 14px 22px;
+  padding: 16px 12px 18px;
+  border-top: 0.5px solid #d4cdbf;
 }
 
 .profile-promo {
-  min-height: 105px;
-  padding: 16px;
-  border-radius: 12px;
-  background: var(--bg3);
-  border: 1px solid #cfc4b1;
-  color: var(--c2);
+  padding: 12px;
+  border: 0.5px solid #c4baa8;
+  border-radius: 10px;
+  background: #d8cebc;
 }
 
 .profile-promo-title {
-  font-size: 14px;
-  font-weight: 800;
+  margin-bottom: 2px;
+  color: #7c5c3e;
+  font-size: 11.5px;
+  font-weight: 500;
 }
 
 .profile-promo-sub {
-  margin-top: 7px;
-  font-size: 12px;
-  color: var(--soft);
+  margin-bottom: 9px;
+  color: #9a8f80;
+  font-size: 10.5px;
 }
 
 .profile-promo-button {
-  margin-top: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  border-radius: 7px;
-  padding: 8px 14px;
-  background: var(--c2);
-  color: #fff8ee;
-  font-weight: 800;
+  border-radius: 6px;
+  background: #7c5c3e;
+  color: #f5efe4;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 6px 13px;
   cursor: pointer;
 }
 
@@ -1837,10 +1815,10 @@ button {
 }
 
 .profile-topbar {
-  height: 56px;
-  flex: 0 0 56px;
+  height: 64px;
+  flex: 0 0 64px;
   background: var(--bg2);
-  border-bottom: 1px solid #d7cfc0;
+  border-bottom: 0.5px solid #d7cfc0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3055,8 +3033,8 @@ button {
 
 @media (max-width: 1320px) {
   .profile-sidebar {
-    width: 206px;
-    flex-basis: 206px;
+    width: 200px;
+    flex-basis: 200px;
   }
 
   .profile-main {

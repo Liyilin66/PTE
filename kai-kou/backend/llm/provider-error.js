@@ -47,14 +47,25 @@ export function toProviderError(provider, error) {
   if (error instanceof ProviderError) return error;
 
   const status = Number.isFinite(Number(error?.status)) ? Number(error.status) : undefined;
+  const connectTimeout = isConnectTimeoutError(error);
   const timeout = isTimeoutError(error);
   const network = isNetworkError(error);
+
+  if (connectTimeout) {
+    return createProviderError(provider, {
+      message: `${provider} connect timeout`,
+      status,
+      raw_error_type: `${provider}_connect_timeout`,
+      fallback_allowed: true,
+      cause: error
+    });
+  }
 
   if (timeout) {
     return createProviderError(provider, {
       message: `${provider} timeout`,
       status,
-      raw_error_type: `${provider}_timeout`,
+      raw_error_type: `${provider}_response_timeout`,
       fallback_allowed: true,
       cause: error
     });
@@ -96,14 +107,23 @@ function resolveFallbackAllowed(status, details) {
   return FALLBACK_HTTP_STATUS.has(status);
 }
 
+function isConnectTimeoutError(error) {
+  const code = `${error?.code || ""}`.toUpperCase();
+  const causeCode = `${error?.cause?.code || ""}`.toUpperCase();
+  const message = `${error?.message || ""}`.toLowerCase();
+  if (code === "UND_ERR_CONNECT_TIMEOUT" || causeCode === "UND_ERR_CONNECT_TIMEOUT") return true;
+  if ((code === "ETIMEDOUT" || causeCode === "ETIMEDOUT") && message.includes("fetch failed")) return true;
+  return message.includes("connect timeout") || message.includes("connect timed out");
+}
+
 function isTimeoutError(error) {
   const name = `${error?.name || ""}`.toLowerCase();
   const code = `${error?.code || ""}`.toUpperCase();
   const causeCode = `${error?.cause?.code || ""}`.toUpperCase();
   const message = `${error?.message || ""}`.toLowerCase();
   if (name === "aborterror") return true;
-  if (code === "ABORT_ERR" || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT") return true;
-  if (causeCode === "ETIMEDOUT" || causeCode === "UND_ERR_CONNECT_TIMEOUT") return true;
+  if (code === "ABORT_ERR" || code === "ETIMEDOUT") return true;
+  if (causeCode === "ETIMEDOUT") return true;
   return message.includes("timed out") || message.includes("timeout");
 }
 

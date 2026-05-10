@@ -1388,7 +1388,7 @@ const hasRecentItems = computed(() => recentItems.value.length > 0);
   color:var(--c0);overflow:hidden;
 }
 .home-agent-sidebar{display:flex;flex:0 0 200px;width:200px;flex-direction:column;background:#e5dfd4;border-right:.5px solid #d4cdbf;}
-.home-agent-logo{display:flex;align-items:center;gap:9px;padding:18px 18px 16px;border-bottom:.5px solid #d4cdbf;text-decoration:none;}
+.home-agent-logo{display:flex;align-items:center;gap:9px;height:64px;flex:0 0 64px;padding:0 18px;border-bottom:.5px solid #d4cdbf;text-decoration:none;}
 .home-agent-logo-icon{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:8px;background:#7c5c3e;flex-shrink:0;}
 .home-agent-logo-name{color:#2c1f0e;font-size:17px;font-weight:500;letter-spacing:.03em;}
 .home-agent-nav{display:flex;flex:1;flex-direction:column;gap:8px;padding:22px 12px 24px;}
@@ -1404,7 +1404,7 @@ const hasRecentItems = computed(() => recentItems.value.length > 0);
 .home-agent-promo-sub{margin-bottom:9px;color:#9a8f80;font-size:10.5px;}
 .home-agent-promo-button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:#7c5c3e;color:#f5efe4;font-size:11px;line-height:1;padding:6px 13px;cursor:pointer;font-family:inherit;}
 .main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;}
-.topbar{height:50px;flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
+.topbar{height:64px;flex-shrink:0;background:var(--bg2);border-bottom:.5px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 22px;}
 .tb-greet{font-size:13.5px;font-weight:700;color:var(--c0);}
 .tb-sub{font-size:10px;color:var(--mute);}
 .tb-right{display:flex;align-items:center;gap:8px;}

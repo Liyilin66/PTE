@@ -89,8 +89,8 @@ export async function loadLoginEventsForAuth(authStore) {
   }
 }
 
-export function parseCurrentDevice() {
-  if (typeof navigator === "undefined") {
+export function parseCurrentDevice(navigatorLike = getNavigatorLike()) {
+  if (!navigatorLike) {
     return {
       device_label: "当前浏览器设备",
       browser: "浏览器",
@@ -98,14 +98,14 @@ export function parseCurrentDevice() {
     };
   }
 
-  return parseUserAgent(navigator.userAgent || "");
+  return parseUserAgent(navigatorLike.userAgent || "", navigatorLike);
 }
 
-export function parseUserAgent(userAgent) {
+export function parseUserAgent(userAgent, navigatorLike = {}) {
   const ua = normalizeText(userAgent);
-  const os = detectOS(ua);
+  const os = detectOS(ua, navigatorLike);
   const browser = detectBrowser(ua);
-  const device_label = detectDeviceLabel(ua, os);
+  const device_label = detectDeviceLabel(ua, os, navigatorLike);
 
   return {
     device_label,
@@ -133,11 +133,10 @@ export function formatLoginEventMeta(event) {
   return [os, browser].filter(Boolean).join(" · ") || "设备信息未记录";
 }
 
-function detectOS(ua) {
+function detectOS(ua, navigatorLike = {}) {
   if (!ua) return "Unknown OS";
-  if (/ipad/i.test(ua)) return "iPadOS";
+  if (isIPadOSDevice(ua, navigatorLike)) return "iPadOS";
   if (/iphone|ipod/i.test(ua)) return "iOS";
-  if (/macintosh/i.test(ua) && /mobile/i.test(ua)) return "iPadOS";
   if (/android/i.test(ua)) return "Android";
   if (/windows nt/i.test(ua)) return "Windows";
   if (/mac os x|macintosh/i.test(ua)) return "macOS";
@@ -146,17 +145,16 @@ function detectOS(ua) {
 
 function detectBrowser(ua) {
   if (!ua) return "Unknown Browser";
-  if (/edg\//i.test(ua)) return "Edge";
-  if (/chrome|crios/i.test(ua) && !/edg\//i.test(ua)) return "Chrome";
+  if (/edg\/|edgios|edga/i.test(ua)) return "Edge";
+  if (/chrome|crios/i.test(ua) && !/edg\/|edgios|edga/i.test(ua)) return "Chrome";
   if (/firefox|fxios/i.test(ua)) return "Firefox";
-  if (/safari/i.test(ua) && !/chrome|crios|android/i.test(ua)) return "Safari";
+  if (/safari/i.test(ua) && !/chrome|crios|android|edgios|edga|fxios/i.test(ua)) return "Safari";
   return "Unknown Browser";
 }
 
-function detectDeviceLabel(ua, os) {
-  if (/ipad/i.test(ua)) return "iPad";
+function detectDeviceLabel(ua, os, navigatorLike = {}) {
+  if (isIPadOSDevice(ua, navigatorLike)) return "iPad";
   if (/iphone|ipod/i.test(ua)) return "iPhone";
-  if (/macintosh/i.test(ua) && /mobile/i.test(ua)) return "iPad";
   if (/android/i.test(ua)) return /mobile/i.test(ua) ? "Android Phone" : "Android Tablet";
   if (os === "Windows") return "Windows PC";
   if (os === "macOS") return "Mac";
@@ -200,4 +198,15 @@ function normalizeText(value) {
 
 function normalizePayloadText(value, fallback) {
   return (normalizeText(value) || fallback).slice(0, 80);
+}
+
+function getNavigatorLike() {
+  return typeof navigator === "undefined" ? null : navigator;
+}
+
+function isIPadOSDevice(ua, navigatorLike = {}) {
+  if (/ipad/i.test(ua)) return true;
+  const platform = normalizeText(navigatorLike?.platform);
+  const maxTouchPoints = Number(navigatorLike?.maxTouchPoints || 0);
+  return platform === "MacIntel" && maxTouchPoints > 1;
 }

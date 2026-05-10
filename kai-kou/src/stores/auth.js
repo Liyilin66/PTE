@@ -7,6 +7,10 @@ import { supabase } from "@/lib/supabase";
 let initPromise = null;
 let authSubscription = null;
 const RESET_PASSWORD_PATH = "/reset-password";
+const AGENT_WORKSPACE_SESSION_PREFIXES = [
+  "agent-workspace-booted:",
+  "agent-workspace-snapshot-v1:"
+];
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -78,6 +82,7 @@ export const useAuthStore = defineStore("auth", {
             }
 
             if (event === "SIGNED_OUT") {
+              clearAgentWorkspaceSessionArtifacts();
               this.resetUsageState();
               this.loaded = false;
             }
@@ -197,6 +202,7 @@ export const useAuthStore = defineStore("auth", {
 
     async logout() {
       await supabase.auth.signOut();
+      clearAgentWorkspaceSessionArtifacts();
       this.session = null;
       this.user = null;
       this.resetUsageState();
@@ -412,6 +418,20 @@ function applyAccessState(store, access) {
   store.accessStatus = access.accessStatus;
   store.canUseAiScoring = access.canUseAiScoring;
   store.canPractice = access.canUseAiScoring;
+}
+
+function clearAgentWorkspaceSessionArtifacts() {
+  if (typeof window === "undefined") return;
+  try {
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
+      if (key && AGENT_WORKSPACE_SESSION_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Best-effort AI Tutor boot-cache cleanup.
+  }
 }
 
 function isAuthLockRaceError(error) {
