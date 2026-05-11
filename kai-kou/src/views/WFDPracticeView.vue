@@ -309,7 +309,14 @@ async function handleSubmit() {
         task_type: "WFD",
         question_id: question.value.id || "unknown",
         transcript: answer,
-        score_json: { score, correct, total },
+        score_json: {
+          score,
+          correct,
+          total,
+          wordResults,
+          userInput: answer,
+          correctAnswer: question.value.content || ""
+        },
         feedback
       });
 

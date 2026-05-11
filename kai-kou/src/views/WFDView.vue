@@ -178,7 +178,7 @@
             <div v-for="item in scoringDimensions" :key="item.title" class="score-item">
               <div class="si-hd">
                 <span class="si-name">{{ item.title }}</span>
-                <span class="si-weight">约{{ item.percent }}%</span>
+                <span class="si-weight">{{ item.scoreLabel }}</span>
               </div>
               <div class="si-desc">{{ item.description }}</div>
             </div>
@@ -204,11 +204,11 @@
         </section>
 
         <section class="panel-card">
-          <div class="pc-header"><span class="pc-star">◎</span> {{ realMistakeItems.length ? "高频错误点" : "常见错误示例" }}</div>
+          <div class="pc-header"><span class="pc-star">◎</span> 高频错误点</div>
           <div class="pc-body">
             <div class="misread-head">
               <div class="mh-count">{{ mistakeItems.length }}</div>
-              <div class="mh-sub">{{ realMistakeItems.length ? "基于最近 WFD" : "常见示例" }}</div>
+              <div class="mh-sub">{{ mistakeItems.length ? "基于最近 WFD" : "完成练习后生成" }}</div>
             </div>
 
             <div v-if="mistakeItems.length" class="misread-list">
@@ -252,19 +252,12 @@ const recommendationBatch = ref(0);
 const RECENT_HISTORY_DISPLAY_LIMIT = 10;
 const TODAY_RECOMMENDATION_LIMIT = 10;
 
-const fallbackMistakes = [
-  { label: "receive / recieve", countText: "常见易混拼写" },
-  { label: "their / there / they're", countText: "常见同音混淆" },
-  { label: "affect / effect", countText: "常见词义混淆" },
-  { label: "a / an / the", countText: "常见冠词漏写" }
-];
-
 const writingTips = [
-  "先整体把握，再逐词拼写",
-  "注意连读、弱读和语调变化",
-  "数字、专有名词要特别留意",
-  "拼写不确定时，先写大概再检查",
-  "听完对照，分析错误并复练"
+  "听到什么写什么，不要把原句改写成自己的表达",
+  "每个正确且拼写正确的词都有分，小词也要补全",
+  "不确定的词先按发音落字，再检查拼写和词形",
+  "提交前重点扫漏词、多词和明显拼写错误",
+  "复练时盯自己的高频错词，而不是只背整句"
 ];
 
 onMounted(async () => {
@@ -326,10 +319,40 @@ const normalizedLogs = computed(() => {
       scorePercent,
       correct: Number.isFinite(correct) ? correct : 0,
       total: Number.isFinite(total) ? total : 0,
+      scoreJson,
+      correctAnswer: normalizeText(scoreJson.correctAnswer || scoreJson.correct_answer) || getQuestionAnswer(question),
       transcript: `${log.transcript || ""}`,
       createdAt: parseDate(log.created_at)
     };
   });
+});
+
+const wordErrorStats = computed(() => {
+  const stats = {
+    expected: 0,
+    correct: 0,
+    missing: 0,
+    extra: 0,
+    changed: 0
+  };
+
+  normalizedLogs.value.forEach((log) => {
+    const expectedText = log.correctAnswer || getQuestionAnswer(log.question);
+    if (!expectedText || !log.transcript) return;
+    const expected = tokenizeWfdWords(expectedText);
+    const actual = tokenizeWfdWords(log.transcript);
+    if (!expected.length) return;
+
+    stats.expected += expected.length;
+    alignWfdWords(expected, actual).forEach((operation) => {
+      if (operation.type === "correct") stats.correct += 1;
+      else if (operation.type === "missing") stats.missing += 1;
+      else if (operation.type === "extra") stats.extra += 1;
+      else if (operation.type === "replace") stats.changed += 1;
+    });
+  });
+
+  return stats;
 });
 
 const recentAveragePercent = computed(() => {
@@ -377,6 +400,9 @@ const summaryTiles = computed(() => [
 ]);
 
 const spellingMetric = computed(() => {
+  if (wordErrorStats.value.expected > 0) {
+    return Math.round((wordErrorStats.value.correct / wordErrorStats.value.expected) * 30);
+  }
   const totals = normalizedLogs.value.filter((item) => item.total > 0);
   if (!totals.length) return 0;
   const correct = totals.reduce((sum, item) => sum + item.correct, 0);
@@ -386,13 +412,18 @@ const spellingMetric = computed(() => {
 });
 
 const metricBars = computed(() => {
+  const expected = wordErrorStats.value.expected;
   const spelling = spellingMetric.value || Math.round((recentAveragePercent.value || 0) * 0.3);
-  const singular = Math.max(0, Math.min(30, Math.round(spelling * 0.85)));
-  const article = Math.max(0, Math.min(30, Math.round(spelling * 0.75)));
+  const completeness = expected
+    ? Math.round(((expected - wordErrorStats.value.missing) / expected) * 30)
+    : Math.max(0, Math.min(30, Math.round(spelling * 0.9)));
+  const cleanInput = expected
+    ? Math.round(((expected - Math.min(expected, wordErrorStats.value.extra + wordErrorStats.value.changed)) / expected) * 30)
+    : Math.max(0, Math.min(30, Math.round(spelling * 0.85)));
   return [
-    { label: "拼写", value: spelling, percent: toMetricPercent(spelling), color: "#5A9E6A" },
-    { label: "单复数", value: singular, percent: toMetricPercent(singular), color: "#C07840" },
-    { label: "冠词", value: article, percent: toMetricPercent(article), color: "#7C5C3E" }
+    { label: "逐词正确", value: spelling, percent: toMetricPercent(spelling), color: "#5A9E6A" },
+    { label: "漏词控制", value: Math.max(0, Math.min(30, completeness)), percent: toMetricPercent(completeness), color: "#C07840" },
+    { label: "错词控制", value: Math.max(0, Math.min(30, cleanInput)), percent: toMetricPercent(cleanInput), color: "#7C5C3E" }
   ];
 });
 
@@ -406,7 +437,7 @@ const coachAdvice = computed(() => {
   }
 
   if ((metricBars.value[1]?.value || 0) < 18) {
-    return "单复数和冠词容易丢分，建议复听句尾和名词短语。";
+    return "最近漏词偏多，建议复听句尾、小词和名词短语。";
   }
 
   return "近期表现稳定，可以加入中等和困难题，训练长句记忆与语法一致性。";
@@ -540,27 +571,26 @@ const recentRecords = computed(() => {
 });
 
 const scoringDimensions = computed(() => {
-  const base = Math.round(recentAveragePercent.value || 45);
   return [
     {
-      title: "拼写",
-      description: "考察单词拼写准确度，包括易错字母、词形变化等。",
-      percent: clampPercent(base)
+      title: "逐词得分",
+      description: "WFD 按词给分：每个听对、写对并拼写正确的词计 1 分。",
+      scoreLabel: "1分/词"
     },
     {
-      title: "单复数",
-      description: "考察名词单复数形式的正确使用。",
-      percent: clampPercent(base - 8)
+      title: "拼写准确",
+      description: "拼错、词形写错或把词听成别的词，该词通常不得分。",
+      scoreLabel: "0分/错词"
     },
     {
-      title: "冠词",
-      description: "考察 a/an/the 等冠词的正确使用。",
-      percent: clampPercent(base - 15)
+      title: "完整复现",
+      description: "漏写、多写或顺序明显错乱会拉低逐词匹配，冠词、介词、复数 s 都要保留。",
+      scoreLabel: "看词数"
     },
     {
-      title: "时态",
-      description: "考察动词时态与语法一致性。",
-      percent: clampPercent(base - 12)
+      title: "影响分项",
+      description: "WFD 同时贡献 Listening 和 Writing，没有单独的流利度、语法维度。",
+      scoreLabel: "L + W"
     }
   ];
 });
@@ -568,11 +598,7 @@ const scoringDimensions = computed(() => {
 const realMistakeItems = computed(() => collectMistakes());
 
 const mistakeItems = computed(() => {
-  if (realMistakeItems.value.length) return realMistakeItems.value;
-  return fallbackMistakes.map((item) => ({
-    ...item,
-    question: pickQuestionByWord(item.label)
-  }));
+  return realMistakeItems.value;
 });
 
 function buildDifficultyCard(id, icon, title, description, tone) {
@@ -625,28 +651,25 @@ function pickRandomQuestion(pool) {
   return pool[Math.floor(Math.random() * pool.length)] || null;
 }
 
-function pickQuestionByWord(label) {
-  const firstWord = `${label || ""}`.split(/[\/\s]+/)[0]?.toLowerCase();
-  if (!firstWord) return null;
-  return questions.value.find((question) => `${question.content || question.audio_script || ""}`.toLowerCase().includes(firstWord)) || null;
-}
-
 function collectMistakes() {
   const counts = new Map();
 
-  normalizedLogs.value.forEach((log) => {
+  normalizedLogs.value.slice(0, 80).forEach((log) => {
     const question = log.question;
-    if (!question?.content || !log.transcript) return;
+    const expectedText = log.correctAnswer || getQuestionAnswer(question);
+    if (!expectedText || !log.transcript) return;
 
-    const expected = tokenize(question.content);
-    const actual = tokenize(log.transcript);
+    const expected = tokenizeWfdWords(expectedText);
+    const actual = tokenizeWfdWords(log.transcript);
+    if (!expected.length) return;
 
-    expected.forEach((word, index) => {
-      if (!word || actual[index] === word) return;
-      const actualWord = actual[index] || "";
-      const key = actualWord ? `${word} / ${actualWord}` : word;
+    alignWfdWords(expected, actual).forEach((mistake) => {
+      if (mistake.type === "correct") return;
+      const display = buildMistakeDisplay(mistake);
+      if (!display) return;
+      const key = `${display.type}:${display.label}:${display.variant || ""}`;
       const existing = counts.get(key) || {
-        label: key,
+        ...display,
         count: 0,
         question
       };
@@ -660,9 +683,153 @@ function collectMistakes() {
     .slice(0, 4)
     .map((item) => ({
       label: item.label,
-      countText: `错题频次 ${item.count} 次`,
+      countText: formatMistakeCountText(item),
       question: item.question
     }));
+}
+
+function buildMistakeDisplay(mistake) {
+  const expected = normalizeText(mistake.expected?.display);
+  const actual = normalizeText(mistake.actual?.display);
+
+  if (mistake.type === "missing" && expected) {
+    return {
+      type: "missing",
+      label: expected,
+      variant: ""
+    };
+  }
+
+  if (mistake.type === "extra" && actual) {
+    return {
+      type: "extra",
+      label: actual,
+      variant: ""
+    };
+  }
+
+  if (mistake.type === "replace" && expected) {
+    return {
+      type: isLikelySpellingMiss(expected, actual) ? "spelling" : "replace",
+      label: expected,
+      variant: actual
+    };
+  }
+
+  return null;
+}
+
+function formatMistakeCountText(item) {
+  const countText = `${item.count} 次`;
+  if (item.type === "missing") return `漏写 ${countText}`;
+  if (item.type === "extra") return `多写 ${countText}`;
+  if (item.type === "spelling") return item.variant ? `常写成 ${item.variant} · ${countText}` : `拼写错 ${countText}`;
+  if (item.variant) return `听成 ${item.variant} · ${countText}`;
+  return `写错 ${countText}`;
+}
+
+function alignWfdWords(expected, actual) {
+  const rows = expected.length + 1;
+  const cols = actual.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = 1; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 1; j < cols; j += 1) dp[0][j] = j;
+
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const replaceCost = expected[i - 1].normalized === actual[j - 1].normalized ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j - 1] + replaceCost,
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1
+      );
+    }
+  }
+
+  const operations = [];
+  let i = expected.length;
+  let j = actual.length;
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0) {
+      const replaceCost = expected[i - 1].normalized === actual[j - 1].normalized ? 0 : 1;
+      if (dp[i][j] === dp[i - 1][j - 1] + replaceCost) {
+        operations.push({
+          type: replaceCost === 0 ? "correct" : "replace",
+          expected: expected[i - 1],
+          actual: actual[j - 1]
+        });
+        i -= 1;
+        j -= 1;
+        continue;
+      }
+    }
+
+    if (i > 0 && dp[i][j] === dp[i - 1][j] + 1) {
+      operations.push({
+        type: "missing",
+        expected: expected[i - 1],
+        actual: null
+      });
+      i -= 1;
+      continue;
+    }
+
+    operations.push({
+      type: "extra",
+      expected: null,
+      actual: actual[j - 1]
+    });
+    j -= 1;
+  }
+
+  return operations.reverse();
+}
+
+function tokenizeWfdWords(text) {
+  return `${text || ""}`
+    .split(/\s+/)
+    .map((word) => {
+      const display = normalizeText(word.replace(/^[^a-z0-9']+|[^a-z0-9']+$/gi, ""));
+      const normalized = normalizeWfdWord(display);
+      return normalized ? { display, normalized } : null;
+    })
+    .filter(Boolean);
+}
+
+function normalizeWfdWord(word) {
+  return `${word || ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9']/g, "")
+    .trim();
+}
+
+function isLikelySpellingMiss(expected, actual) {
+  const expectedWord = normalizeWfdWord(expected);
+  const actualWord = normalizeWfdWord(actual);
+  if (!expectedWord || !actualWord) return false;
+  if (expectedWord[0] !== actualWord[0]) return false;
+  return levenshteinDistance(expectedWord, actualWord) <= Math.max(1, Math.ceil(expectedWord.length * 0.34));
+}
+
+function levenshteinDistance(left, right) {
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const dp = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let i = 1; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 1; j < cols; j += 1) dp[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[left.length][right.length];
 }
 
 function parseScoreJson(value) {
@@ -713,23 +880,19 @@ function resolveScene(question) {
 function getWordCount(question) {
   const explicit = Number(question?.word_count ?? question?.wordCount ?? 0);
   if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
-  const content = `${question?.content || question?.audio_script || ""}`.trim();
+  const content = getQuestionAnswer(question);
   if (!content) return 0;
   return content.split(/\s+/).filter(Boolean).length;
+}
+
+function getQuestionAnswer(question) {
+  return normalizeText(question?.content || question?.audio_script);
 }
 
 function estimateSeconds(question) {
   const explicit = Number(question?.duration ?? question?.duration_sec ?? question?.durationSec ?? 0);
   if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
   return Math.max(12, Math.round(getWordCount(question) / 2.7));
-}
-
-function tokenize(text) {
-  return `${text || ""}`
-    .toLowerCase()
-    .replace(/[^a-z0-9'\s-]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
 }
 
 function truncate(value, maxLength) {
@@ -764,11 +927,6 @@ function clampScore(value) {
   return Math.max(0, Math.min(100, score));
 }
 
-function clampPercent(value) {
-  const percent = Math.round(Number(value) || 0);
-  return Math.max(0, Math.min(100, percent));
-}
-
 function toMetricPercent(value) {
   return Math.max(0, Math.min(100, Math.round((Number(value) || 0) / 30 * 100)));
 }
@@ -783,6 +941,11 @@ function formatInteger(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "0";
   return `${Math.round(number)}`;
+}
+
+function normalizeText(value) {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return `${value}`.trim();
 }
 </script>
 
