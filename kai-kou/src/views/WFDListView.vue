@@ -55,7 +55,7 @@ function goListenMode() {
 
 function startPractice(question) {
   practiceStore.setSelectedQuestion(question);
-  router.push("/wfd");
+  router.push("/wfd/practice");
 }
 
 onMounted(async () => {

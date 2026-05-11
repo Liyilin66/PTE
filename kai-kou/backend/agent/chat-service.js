@@ -11,6 +11,9 @@ const THANKS_PATTERN = /^(?:\s*(?:谢谢|谢了|感谢|多谢|辛苦了|thank yo
 const CASUAL_PATTERN = /^(?:\s*(?:好|好的|可以|行|嗯|嗯嗯|收到|明白|知道了|ok|okay|好的呀|可以的)[!！。？?，,\s]*)$/i;
 const IDENTITY_PATTERN = /(你是谁|你是什么|你是干嘛的|你叫什么|你是做什么的|你是什么模型|你用的什么模型|你是gpt吗|你是不是大模型|你是谁开发的)/i;
 const CAPABILITY_PATTERN = /(你能做什么|你有什么功能|你可以帮我什么|你会什么|你能帮我什么)/i;
+const UNRELATED_SYMBOL_ONLY_PATTERN = /^[\s\p{P}\p{S}]+$/u;
+const UNRELATED_INSULT_OR_FRUSTRATION_PATTERN = /(你有病|有病吧|神经病|傻逼|傻子|蠢|脑子有问题|垃圾|废物|烦死|烦死了|气死|崩溃|无语|服了|滚|烂透|sb|shit|fuck)/i;
+const UNRELATED_VIOLENT_OR_SELF_HARM_PATTERN = /(杀人|杀了(?:他|她|它|他们|她们|别人|对方|人)|杀掉(?:他|她|它|他们|她们|别人|对方|人)|打死(?:他|她|它|他们|她们|别人|对方|人)|弄死(?:他|她|它|他们|她们|别人|对方|人)|捅死|砍死|伤害别人|伤害他人|伤害对方|报复社会|放火|爆炸|炸掉|自杀|想死|伤害自己|(?:我想|我要|想去|准备|打算)(?:杀|打死|弄死|伤害|捅|砍|揍|报复)|\b(?:kill|murder|hurt|stab|shoot|beat)\s+(?:someone|somebody|people|him|her|them|others)\b)/i;
 const DATA_ANALYSIS_PATTERN = /(我最近怎么样|我最近的(?:练习|表现)|最近记录|最近练得怎么样|哪项最弱|分析我的薄弱项|复盘最近|最近有没有退步|我的分数怎么样|我的练习记录|我的练习情况|最近表现|帮我分析|为什么这次.*分低|这次.*为什么.*分低|这次.*哪里有问题|主要问题|改进方向|最近一次.*分数|最新一次.*分数|上一次.*分数|最后一次.*分数|最近一条.*分数|具体分数|最近一次练习|最新一次练习|上一次练习|最后一次练习|完成了多少|做了多少|练了多少|多少道题|做题数量|练习数量|总共|累计|到现在|目前一共|均分|平均分|总平均|我的成绩|统计一下|数据统计|历史记录)/i;
 const PLAN_PATTERN = /(计划|规划|今天练什么|给我安排|学习安排|训练安排|7天计划|7 天计划|七天计划|冲刺计划|冲分计划|提分计划|备考计划|每天练什么|帮我制定计划|给我.*计划|下一步练什么|今日计划|训练计划|今天该练什么|今天该怎么练|安排训练)/i;
 const REGENERATE_PLAN_PATTERN = /(重新生成|换一版|再来一版|不满意|这个计划不好|换个计划|重新安排|再生成一份|不要这个|换一种安排|再换一版|重新来一份|换份计划)/i;
@@ -109,6 +112,7 @@ export function detectAgentIntent(message, { recentMessages = [] } = {}) {
   const normalizedMessage = normalizeText(message);
   if (!normalizedMessage) return "pte_qa";
 
+  if (classifyUnrelatedMessage(normalizedMessage) === "violent_intent_or_threat") return "unrelated";
   if (IDENTITY_PATTERN.test(normalizedMessage)) return "identity";
   if (CAPABILITY_PATTERN.test(normalizedMessage)) return "capability";
   if (isRegeneratePlanIntentMessage(normalizedMessage, recentMessages)) return "regenerate_plan";
@@ -120,6 +124,15 @@ export function detectAgentIntent(message, { recentMessages = [] } = {}) {
   if (THANKS_PATTERN.test(normalizedMessage)) return "thanks";
   if (CASUAL_PATTERN.test(normalizedMessage) || isContinuationIntentMessage(normalizedMessage)) return "casual";
   return "unrelated";
+}
+
+export function classifyUnrelatedMessage(message = "") {
+  const normalizedMessage = normalizeText(message);
+
+  if (isViolentIntentOrThreat(normalizedMessage)) return "violent_intent_or_threat";
+  if (isInsultOrFrustration(normalizedMessage)) return "insult_or_frustration";
+  if (isEmptyOrSymbolMessage(normalizedMessage)) return "empty_or_symbol";
+  return "normal_offtopic";
 }
 
 export function shouldUsePracticeData({ intent, message, recentMessages = [] } = {}) {
@@ -197,13 +210,39 @@ export function tryBuildFastPathAgentReply({ intent = "pte_qa", message = "", co
   }
 
   if (normalizedIntent === "unrelated") {
-    return "这个问题可能不属于 PTE 备考范围。我可以继续帮你看练习记录、题型技巧或训练计划。";
+    return buildUnrelatedFastPathReply(normalizedMessage);
   }
 
   if (normalizedIntent !== "data_analysis") return null;
   if (!summary || !isPureStatisticsQuestion(normalizedMessage)) return null;
 
   return buildStatisticsFastPathReply(summary, normalizedMessage);
+}
+
+function buildUnrelatedFastPathReply(message) {
+  switch (classifyUnrelatedMessage(message)) {
+    case "violent_intent_or_threat":
+      return "我不能帮助伤害自己或别人。如果你现在很激动，先离开现场、不要靠近对方或危险物品，联系身边可信的人或当地紧急服务。等你冷静下来，我可以继续帮你回到 PTE 训练。";
+    case "insult_or_frustration":
+      return "可以骂，但别浪费训练时间。你可以直接说：分析弱项、生成计划，或者问某个题型怎么提分。";
+    case "empty_or_symbol":
+      return "我没看懂你的问题。你可以直接问：今天练什么、分析弱项、安排 20 分钟练习。";
+    case "normal_offtopic":
+    default:
+      return "这个问题不属于 PTE 备考范围。你可以让我分析练习记录、讲题型技巧，或生成训练计划。";
+  }
+}
+
+function isViolentIntentOrThreat(message) {
+  return Boolean(message) && UNRELATED_VIOLENT_OR_SELF_HARM_PATTERN.test(message);
+}
+
+function isInsultOrFrustration(message) {
+  return Boolean(message) && UNRELATED_INSULT_OR_FRUSTRATION_PATTERN.test(message);
+}
+
+function isEmptyOrSymbolMessage(message) {
+  return !message || UNRELATED_SYMBOL_ONLY_PATTERN.test(message);
 }
 
 export function buildPracticeAnalysisReplyFromSummary(summary, message = "") {
