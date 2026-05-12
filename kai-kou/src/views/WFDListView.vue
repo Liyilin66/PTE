@@ -14,14 +14,14 @@ const allQuestions = ref([]);
 const practiceLogs = ref([]);
 const practiceLogsError = ref("");
 const loading = ref(true);
-const searchText = ref("");
-const selectedDifficulty = ref("all");
+const historyLoading = ref(false);
+const favoriteLoading = ref(false);
+const searchQ = ref("");
+const selectedDiff = ref("all");
 const selectedStatus = ref("all");
-const sortDescending = ref(true);
 const favoriteIds = ref(new Set());
-const practiceOrder = ref("sequence");
-const playbackCount = ref("single");
-const autoPlay = ref("on");
+const favoriteBusyIds = ref(new Set());
+const practiceMode = ref("rand");
 
 const preferredRecommendationIds = ["WFD_020", "WFD_054", "WFD_061"];
 
@@ -168,54 +168,57 @@ const statusCounts = computed(() => {
 
   return {
     all: total,
-    unpracticed,
-    practiced,
-    improve: needImprove,
-    favorites: favoriteIds.value.size
+    new: unpracticed,
+    done: practiced,
+    weak: needImprove,
+    favorite: favoriteIds.value.size
   };
 });
 
 const hasRealLogs = computed(() => normalizedLogs.value.length > 0);
 
-const statsCards = computed(() => {
+const myStats = computed(() => {
   const recentAverage = hasRealLogs.value
     ? formatScore90(average(normalizedLogs.value.map((item) => item.scorePercent)))
     : "--";
-  const practiced = statusCounts.value.practiced;
-  const unpracticed = statusCounts.value.unpracticed;
+  const practiced = statusCounts.value.done;
+  const unpracticed = statusCounts.value.new;
 
   return [
-    { label: "近期均分", value: recentAverage },
-    { label: "已练题数", value: formatInteger(practiced) },
-    { label: "未练题数", value: formatInteger(unpracticed) }
+    { label: "近期均分", val: recentAverage, color: "var(--c0)" },
+    { label: "已练题数", val: formatInteger(practiced), color: "var(--c2)" },
+    { label: "未练题数", val: formatInteger(unpracticed), color: "var(--mute)" }
   ];
 });
 
-const statusFilters = computed(() => [
-  { value: "all", label: "所有状态", count: statusCounts.value.all, icon: "▣", color: "cream" },
-  { value: "unpracticed", label: "未练习", count: statusCounts.value.unpracticed, icon: "", color: "blue" },
-  { value: "practiced", label: "已练习", count: statusCounts.value.practiced, icon: "✓", color: "green" },
-  { value: "improve", label: "需加强", count: statusCounts.value.improve, icon: "!", color: "orange" },
-  { value: "favorites", label: "已收藏", count: statusCounts.value.favorites, icon: "★", color: "brown" }
+const statusOpts = computed(() => [
+  { val: "all", label: "所有状态", count: statusCounts.value.all, icon: "📋" },
+  { val: "new", label: "未练习", count: statusCounts.value.new, icon: "🔵" },
+  { val: "done", label: "已练习", count: statusCounts.value.done, icon: "✅" },
+  { val: "weak", label: "需加强", count: statusCounts.value.weak, icon: "⚠️" },
+  { val: "favorite", label: "已收藏", count: statusCounts.value.favorite, icon: "★" }
 ]);
 
-const difficultyOptions = computed(() => [
-  { value: "all", label: "全部难度", count: difficultyCounts.value.all, icon: "▣", tone: "all" },
-  { value: "easy", label: "简单", count: difficultyCounts.value.easy, icon: "★", tone: "easy" },
-  { value: "medium", label: "中等", count: difficultyCounts.value.medium, icon: "★", tone: "medium" },
-  { value: "hard", label: "困难", count: difficultyCounts.value.hard, icon: "★", tone: "hard" }
+const diffOpts = computed(() => [
+  { val: "all", label: "全部难度", icon: "📚", count: difficultyCounts.value.all },
+  { val: "easy", label: "简单", icon: "⭐", count: difficultyCounts.value.easy },
+  { val: "medium", label: "中等", icon: "⭐⭐", count: difficultyCounts.value.medium },
+  { val: "hard", label: "困难", icon: "⭐⭐⭐", count: difficultyCounts.value.hard }
 ]);
+
+const diffLabel = computed(() => diffOpts.value.find((item) => item.val === selectedDiff.value)?.label || "全部难度");
+const statusLabel = computed(() => statusOpts.value.find((item) => item.val === selectedStatus.value)?.label || "所有状态");
 
 const filteredQuestions = computed(() => {
-  const keyword = searchText.value.trim().toLowerCase();
+  const keyword = searchQ.value.trim().toLowerCase();
 
   let list = normalizedQuestions.value.filter((question) => {
-    if (selectedDifficulty.value !== "all" && question.difficulty !== selectedDifficulty.value) return false;
+    if (selectedDiff.value !== "all" && question.difficulty !== selectedDiff.value) return false;
 
-    if (selectedStatus.value === "unpracticed" && practicedIds.value.has(question.id)) return false;
-    if (selectedStatus.value === "practiced" && !practicedIds.value.has(question.id)) return false;
-    if (selectedStatus.value === "improve" && !isNeedImprove(question.id)) return false;
-    if (selectedStatus.value === "favorites" && !favoriteIds.value.has(question.id)) return false;
+    if (selectedStatus.value === "new" && practicedIds.value.has(question.id)) return false;
+    if (selectedStatus.value === "done" && !practicedIds.value.has(question.id)) return false;
+    if (selectedStatus.value === "weak" && !isNeedImprove(question.id)) return false;
+    if (selectedStatus.value === "favorite" && !favoriteIds.value.has(question.id)) return false;
 
     if (!keyword) return true;
 
@@ -233,11 +236,10 @@ const filteredQuestions = computed(() => {
   });
 
   list = [...list].sort(compareQuestionsByRecentUpdate);
-  if (!sortDescending.value) list.reverse();
   return list;
 });
 
-const cardItems = computed(() => filteredQuestions.value.map((question, index) => buildQuestionCard(question, index)));
+const filteredList = computed(() => filteredQuestions.value.map((question) => buildQuestionCard(question)));
 
 const recommendedQuestions = computed(() => {
   const byPreferredId = preferredRecommendationIds
@@ -252,51 +254,54 @@ const recommendedQuestions = computed(() => {
   return [...byPreferredId, ...ruleRanked].slice(0, 3);
 });
 
-const recommendationItems = computed(() => {
+const aiRec = computed(() => {
   return recommendedQuestions.value.map((question) => ({
     id: question.id,
-    difficulty: question.difficultyLabel,
+    diff: question.difficultyLabel,
     words: question.wordCount,
     question
   }));
 });
 
-const distributionItems = computed(() => {
+const diffDist = computed(() => {
   const total = Math.max(1, difficultyCounts.value.all);
   return [
-    { key: "easy", label: "简单", count: difficultyCounts.value.easy, percent: Math.round((difficultyCounts.value.easy / total) * 100) },
-    { key: "medium", label: "中等", count: difficultyCounts.value.medium, percent: Math.round((difficultyCounts.value.medium / total) * 100) },
-    { key: "hard", label: "困难", count: difficultyCounts.value.hard, percent: Math.round((difficultyCounts.value.hard / total) * 100) }
+    { label: "简单", count: difficultyCounts.value.easy, pct: Math.round((difficultyCounts.value.easy / total) * 100), color: "var(--grn)" },
+    { label: "中等", count: difficultyCounts.value.medium, pct: Math.round((difficultyCounts.value.medium / total) * 100), color: "var(--org)" },
+    { label: "困难", count: difficultyCounts.value.hard, pct: Math.round((difficultyCounts.value.hard / total) * 100), color: "var(--red)" }
   ];
 });
 
-const practiceStages = [
-  {
-    title: "新手阶段",
-    text: "从简单题开始，建立基础语感和节奏感，培养自信心。",
-    color: "green"
-  },
-  {
-    title: "提升阶段",
-    text: "主攻中等题，集中突破流利度和语句组织能力。",
-    color: "orange"
-  },
-  {
-    title: "冲刺阶段",
-    text: "攻克困难题，应对考试高压和长句挑战。",
-    color: "red"
-  }
-];
+const loadingCopy = computed(() => {
+  if (loading.value) return "正在加载 WFD 题库...";
+  return "正在整理练习记录...";
+});
 
 function buildQuestionCard(question) {
   const logs = logsByQuestionId.value.get(question.id) || [];
   const latestLog = logs[0] || null;
+  const myScore = latestLog ? formatScore10(latestLog.scorePercent) : null;
 
   return {
-    ...question,
-    myScore: latestLog ? formatScore10(latestLog.scorePercent) : "--",
+    id: question.id,
+    source: {
+      ...(question || {}),
+      id: question.id,
+      taskType: "WFD",
+      task_type: "WFD",
+      content: question.content,
+      audio_script: question.audio_script || question.audioScript || question.content,
+      word_count: question.wordCount,
+      wordCount: question.wordCount
+    },
+    summaryText: summarizeQuestionText(question.content || "WFD 听写题目"),
+    words: question.wordCount,
+    sec: question.estimatedSeconds,
+    level: question.difficulty,
+    diff: question.difficultyLabel,
+    myScore,
+    isWeak: isNeedImprove(question.id),
     history: logs.length ? logs.slice(0, 3).map(formatHistoryLog) : [],
-    historyUnavailable: Boolean(practiceLogsError.value),
     isFavorite: favoriteIds.value.has(question.id)
   };
 }
@@ -332,34 +337,11 @@ function isNeedImprove(questionId) {
   return Boolean(latest && latest.scorePercent > 0 && latest.scorePercent < 80);
 }
 
-function selectStatus(value) {
-  selectedStatus.value = value;
-}
-
-function selectDifficulty(value) {
-  selectedDifficulty.value = value;
-}
-
-function toggleSortDirection() {
-  sortDescending.value = !sortDescending.value;
-}
-
-function setPracticeOrder(value) {
-  practiceOrder.value = value;
-}
-
-function setPlaybackCount(value) {
-  playbackCount.value = value;
-}
-
-function setAutoPlay(value) {
-  autoPlay.value = value;
-}
-
 function startPractice(question) {
-  if (question) {
+  const target = question?.source || question?.question || question;
+  if (target) {
     practiceStore.setSelectedQuestion({
-      ...(question || {}),
+      ...(target || {}),
       taskType: "WFD",
       task_type: "WFD"
     });
@@ -370,11 +352,14 @@ function startPractice(question) {
 
 function startFilteredPractice() {
   const pool = filteredQuestions.value.length ? filteredQuestions.value : normalizedQuestions.value;
-  const question = practiceOrder.value === "random" ? pickRandom(pool) : pool[0];
+  const question = practiceMode.value === "rand" ? pickRandom(pool) : pool[0];
   startPractice(question || null);
 }
 
-function toggleFavorite(questionId) {
+function toggleFavorite(questionOrId) {
+  const questionId = normalizeText(questionOrId?.id || questionOrId);
+  if (!questionId) return;
+
   const next = new Set(favoriteIds.value);
   if (next.has(questionId)) {
     next.delete(questionId);
@@ -390,8 +375,8 @@ function goWfdCenter() {
   router.push("/wfd");
 }
 
-function exitBank() {
-  router.push("/home");
+function goPractice(questionOrMode) {
+  startPractice(questionOrMode);
 }
 
 function loadFavorites() {
@@ -431,6 +416,13 @@ function getWordCount(question) {
 
   const content = getQuestionText(question);
   return content ? content.split(/\s+/).filter(Boolean).length : 0;
+}
+
+function summarizeQuestionText(text) {
+  const normalized = normalizeText(text);
+  const maxLength = 185;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
 function estimateSeconds(question, wordCount = getWordCount(question)) {
@@ -589,1076 +581,366 @@ function normalizeText(value) {
 </script>
 
 <template>
-  <div class="wfd-bank-page" data-testid="wfd-bank-page">
-    <header class="topbar" data-testid="wfd-topbar">
-      <button class="top-back" type="button" @click="goWfdCenter">‹ WFD 练习中心</button>
-      <h1>WFD 题库</h1>
-      <div class="top-right">
-        <span class="vip-pill">● {{ authStore.statusText.replace(/^✅\s*/, "") || "VIP · 无限练习" }}</span>
-        <button class="logout-btn" type="button" @click="exitBank">退出</button>
+  <div class="shell" data-testid="wfd-list-page">
+    <header class="topbar">
+      <button class="tb-back" type="button" data-testid="wfd-list-back" @click="goWfdCenter">
+        <span class="tb-arr">‹</span>WFD 练习中心
+      </button>
+      <div class="tb-title">WFD 题库</div>
+      <div class="tb-right">
+        <div class="vip-pill"><span class="vip-dot"></span>VIP · 无限练习</div>
+        <button class="exit-btn" type="button" @click="goWfdCenter">退出</button>
       </div>
     </header>
 
-    <main class="page-layout" data-testid="wfd-three-column-layout">
-      <aside class="left-rail">
-        <section class="card status-card">
-          <div class="card-title">❖ 练习状态</div>
-          <div class="status-list">
+    <div class="page-body">
+      <aside class="filter-col">
+        <div class="fc-section">
+          <div class="fc-title">练习状态</div>
+          <div class="fc-opts">
             <button
-              v-for="item in statusFilters"
-              :key="item.value"
-              class="status-item"
-              :class="{ active: selectedStatus === item.value }"
+              v-for="s in statusOpts"
+              :key="s.val"
+              class="fc-opt"
+              :class="{ active: selectedStatus === s.val }"
               type="button"
-              @click="selectStatus(item.value)"
+              :data-testid="`wfd-status-${s.val}`"
+              @click="selectedStatus = s.val"
             >
-              <span class="status-left">
-                <span class="status-icon" :class="item.color">{{ item.icon }}</span>
-                <span>{{ item.label }}</span>
-              </span>
-              <span class="count-pill">{{ item.count }}</span>
+              <span class="fo-icon">{{ s.icon }}</span>
+              <span class="fo-label">{{ s.label }}</span>
+              <span class="fo-count">{{ s.count }}</span>
             </button>
           </div>
-        </section>
-
-        <section class="card ai-card">
-          <div class="card-title">💡 AI 推荐</div>
-          <div class="ai-list">
-            <button
-              v-for="item in recommendationItems"
-              :key="item.id"
-              class="ai-row"
-              type="button"
-              data-testid="wfd-ai-practice"
-              @click="startPractice(item.question)"
-            >
-              <span class="id-tag">{{ item.id }}</span>
-              <span>{{ item.difficulty }} · {{ item.words }}词</span>
-              <strong>练 →</strong>
-            </button>
-          </div>
-        </section>
-
-        <section class="card data-card">
-          <div class="card-title">❖ 我的 WFD 数据</div>
-          <div class="data-grid">
-            <div v-for="item in statsCards" :key="item.label" class="data-box">
-              <strong>{{ item.value }}</strong>
-              <span>{{ item.label }}</span>
-            </div>
-          </div>
-        </section>
-      </aside>
-
-      <section class="main-column">
-        <div class="search-row">
-          <label class="search-box">
-            <span>⌕</span>
-            <input
-              v-model="searchText"
-              data-testid="wfd-search-input"
-              type="text"
-              placeholder="搜索题目内容 / 题号 / 关键词..."
-            />
-          </label>
-          <span class="total-count">共 {{ filteredQuestions.length }} 题</span>
         </div>
 
-        <div class="filter-row">
-          <div class="difficulty-tabs">
-            <button
-              v-for="option in difficultyOptions"
-              :key="option.value"
-              class="tab"
-              :class="[option.tone, { active: selectedDifficulty === option.value }]"
-              type="button"
-              :data-testid="`wfd-difficulty-${option.value}`"
-              @click="selectDifficulty(option.value)"
-            >
-              <span class="tab-icon">{{ option.icon }}</span>{{ option.label }}<em>{{ option.count }}</em>
-            </button>
+        <div class="fc-section">
+          <div class="fc-title">AI 推荐</div>
+          <div class="ai-rec-card">
+            <div class="arc-banner">
+              <span class="arc-ico">💡</span>
+              <span>根据错词和练习记录，优先练中等难度听写题</span>
+            </div>
+            <div class="arc-list">
+              <button
+                v-for="r in aiRec"
+                :key="r.id"
+                class="arc-item"
+                type="button"
+                @click="goPractice(r)"
+              >
+                <div class="arc-code">{{ r.id }}</div>
+                <div class="arc-meta">{{ r.diff }} · {{ r.words }}词</div>
+                <div class="arc-go">练 →</div>
+              </button>
+            </div>
           </div>
-          <button class="sort-btn" type="button" data-testid="wfd-sort-button" @click="toggleSortDirection">
-            按最近更新⌄
+        </div>
+
+        <div class="fc-section">
+          <div class="fc-title">我的 WFD 数据</div>
+          <div class="my-stats">
+            <div v-for="s in myStats" :key="s.label" class="ms-item">
+              <div class="ms-val" :style="{ color: s.color }">{{ s.val }}</div>
+              <div class="ms-lbl">{{ s.label }}</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <div class="search-bar">
+          <div class="sb-input-wrap">
+            <span class="sb-ico">🔍</span>
+            <input
+              v-model="searchQ"
+              class="sb-input"
+              data-testid="wfd-search"
+              placeholder="搜索题目内容…"
+            />
+            <button v-if="searchQ" class="sb-clear" type="button" @click="searchQ = ''">✕</button>
+          </div>
+          <div class="sb-stats">
+            共 <b data-testid="wfd-result-count">{{ filteredList.length }}</b> 道题
+            <span v-if="selectedDiff !== 'all'">· {{ diffLabel }}</span>
+            <span v-if="selectedStatus !== 'all'">· {{ statusLabel }}</span>
+          </div>
+        </div>
+
+        <div class="diff-tabs" aria-label="难度筛选">
+          <button
+            v-for="d in diffOpts"
+            :key="d.val"
+            class="dt-item"
+            :class="{ active: selectedDiff === d.val }"
+            type="button"
+            :data-testid="`wfd-diff-${d.val}`"
+            @click="selectedDiff = d.val"
+          >
+            <span class="dt-icon">{{ d.icon }}</span>
+            <span class="dt-label">{{ d.label }}</span>
+            <span class="dt-count">{{ d.count }}</span>
           </button>
         </div>
 
-        <section class="question-list" data-testid="wfd-question-list">
-          <div v-if="loading" class="loading-state">
-            <div class="spinner"></div>
-            <p>正在加载题库...</p>
-          </div>
+        <div v-if="loading || historyLoading || favoriteLoading" class="state-card">
+          <div class="loading-dot"></div>
+          <p>{{ loadingCopy }}</p>
+        </div>
 
-          <article v-for="item in cardItems" v-else :key="item.id" class="question-card" data-testid="wfd-question-card">
-            <div class="question-top">
-              <div class="question-meta">
-                <span class="qid">{{ item.id }}</span>
-                <span class="level-badge" :class="item.difficultyClass">{{ item.difficultyLabel }}</span>
-                <span>{{ item.wordCount }} 词</span>
-                <span>约 {{ item.estimatedSeconds }} 秒</span>
+        <div v-else-if="filteredList.length" class="q-list" data-testid="wfd-question-list">
+          <article
+            v-for="q in filteredList"
+            :key="q.id"
+            class="q-card"
+            :class="{ 'q-card--active': q.isWeak }"
+            data-testid="wfd-question-card"
+          >
+            <div class="qc-top">
+              <div class="qc-meta">
+                <span class="qc-id">{{ q.id }}</span>
+                <span class="qc-diff" :class="q.level">{{ q.diff }}</span>
+                <span class="qc-words">{{ q.words }} 词</span>
+                <span class="qc-sec">约 {{ q.sec }} 秒</span>
               </div>
-
-              <div class="question-actions">
+              <div class="qc-right">
                 <button
-                  class="star-btn"
-                  :class="{ active: item.isFavorite }"
+                  class="qc-fav"
+                  :class="{ active: q.isFavorite }"
                   type="button"
-                  :aria-label="item.isFavorite ? '取消收藏' : '收藏题目'"
-                  @click="toggleFavorite(item.id)"
+                  :disabled="favoriteBusyIds.has(q.id)"
+                  :aria-label="q.isFavorite ? '取消收藏' : '收藏'"
+                  @click.stop="toggleFavorite(q)"
                 >
-                  {{ item.isFavorite ? "★" : "☆" }}
+                  {{ q.isFavorite ? "★" : "☆" }}
                 </button>
-                <span class="my-score">我的：{{ item.myScore }}</span>
-                <button class="practice-btn" type="button" data-testid="wfd-card-practice" @click="startPractice(item)">
+                <span
+                  v-if="q.myScore"
+                  class="qc-score"
+                  :style="{ color: Number(q.myScore) >= 8 ? 'var(--grn)' : 'var(--org)' }"
+                >
+                  我的：{{ q.myScore }}
+                </span>
+                <button
+                  class="qc-go"
+                  type="button"
+                  data-testid="wfd-card-practice"
+                  @click="goPractice(q)"
+                >
                   练习
                 </button>
               </div>
             </div>
-
-            <p class="sentence">{{ item.content || "WFD 听写题目" }}</p>
-
-            <div class="history-row">
-              <div v-for="history in item.history" :key="`${item.id}-${history.date}-${history.score}`" class="history-item">
-                <span>{{ history.date }}</span>
-                <strong>{{ history.score }}</strong>
-                <div class="history-track">
-                  <i :class="history.color" :style="{ width: `${history.percent}%` }"></i>
-                </div>
+            <div class="qc-text">{{ q.summaryText }}</div>
+            <div v-if="q.history.length" class="qc-hist">
+              <div v-for="h in q.history" :key="`${q.id}-${h.date}-${h.score}`" class="qch-item">
+                <span class="qch-date">{{ h.date }}</span>
+                <div class="qch-bar-bg"><div class="qch-bar-fill" :style="{ width: `${h.percent}%` }"></div></div>
+                <span class="qch-val">{{ h.score }}</span>
               </div>
-              <div v-if="!item.history.length" class="history-empty">
-                {{ item.historyUnavailable ? "历史记录暂不可用" : "暂无练习记录" }}
-              </div>
-              <button class="expand-btn" type="button" aria-label="展开历史">⌄</button>
             </div>
           </article>
+        </div>
 
-          <div v-if="!loading && !cardItems.length" class="empty-state">
-            <strong>没有找到匹配的题目</strong>
-            <span>试试其他关键词或筛选条件</span>
-          </div>
-        </section>
-      </section>
+        <div v-else class="state-card">
+          <strong>没有找到匹配的题目</strong>
+          <p>试试其他关键词或筛选条件</p>
+        </div>
+      </main>
 
-      <aside class="right-rail">
-        <section class="card advice-card">
-          <div class="card-title">💡 选题建议</div>
-          <div class="stage-list">
-            <div v-for="stage in practiceStages" :key="stage.title" class="stage-row">
-              <span class="stage-dot" :class="stage.color"></span>
+      <aside class="guide-col">
+        <div class="gc-card">
+          <div class="gc-hd">✦ 选题建议</div>
+          <div class="gc-body">
+            <div class="gc-tip-item">
+              <div class="gc-tip-dot" style="background:var(--grn)"></div>
               <div>
-                <strong>{{ stage.title }}</strong>
-                <p>{{ stage.text }}</p>
+                <div class="gc-tip-title">新手阶段</div>
+                <div class="gc-tip-desc">从简单听写开始，稳定拼写和短句记忆</div>
+              </div>
+            </div>
+            <div class="gc-tip-item">
+              <div class="gc-tip-dot" style="background:var(--org)"></div>
+              <div>
+                <div class="gc-tip-title">提升阶段</div>
+                <div class="gc-tip-desc">主攻中等题，集中突破单复数和冠词细节</div>
+              </div>
+            </div>
+            <div class="gc-tip-item">
+              <div class="gc-tip-dot" style="background:var(--red)"></div>
+              <div>
+                <div class="gc-tip-title">冲刺阶段</div>
+                <div class="gc-tip-desc">攻克困难题，应对长句记忆和复杂语法</div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section class="card setting-card">
-          <div class="card-title">⚙ 本次练习设置</div>
-          <div class="setting-list">
+        <div class="gc-card">
+          <div class="gc-hd">◈ 本次练习设置</div>
+          <div class="gc-body">
             <div class="setting-row">
-              <span>出题方式</span>
-              <div class="segmented">
-                <button :class="{ selected: practiceOrder === 'sequence' }" type="button" @click="setPracticeOrder('sequence')">顺序</button>
-                <button :class="{ selected: practiceOrder === 'random' }" type="button" @click="setPracticeOrder('random')">随机</button>
+              <span class="sr-label">出题方式</span>
+              <div class="sr-opts">
+                <button class="sr-opt" :class="{ act: practiceMode === 'seq' }" type="button" @click="practiceMode = 'seq'">顺序</button>
+                <button class="sr-opt" :class="{ act: practiceMode === 'rand' }" type="button" @click="practiceMode = 'rand'">随机</button>
               </div>
             </div>
             <div class="setting-row">
-              <span>播放次数</span>
-              <div class="segmented">
-                <button :class="{ selected: playbackCount === 'single' }" type="button" @click="setPlaybackCount('single')">单次</button>
-                <button :class="{ selected: playbackCount === 'double' }" type="button" @click="setPlaybackCount('double')">双次</button>
-              </div>
+              <span class="sr-label">播放次数</span>
+              <span class="sr-fixed">单次播放</span>
             </div>
-            <div class="setting-row">
-              <span>自动播放</span>
-              <div class="segmented">
-                <button :class="{ selected: autoPlay === 'on' }" type="button" @click="setAutoPlay('on')">开</button>
-                <button :class="{ selected: autoPlay === 'off' }" type="button" @click="setAutoPlay('off')">关</button>
-              </div>
-            </div>
+            <button class="start-all-btn" type="button" data-testid="wfd-start-filtered" @click="startFilteredPractice">
+              🎧 开始练习全部筛选题
+            </button>
           </div>
-          <button class="start-all-btn" type="button" data-testid="wfd-start-filtered" @click="startFilteredPractice">
-            ▶ 开始练习全部筛选题
-          </button>
-        </section>
+        </div>
 
-        <section class="card distribution-card">
-          <div class="card-title">◷ 难度分布</div>
-          <div class="dist-list">
-            <div v-for="item in distributionItems" :key="item.key" class="dist-row">
-              <span :class="item.key">{{ item.label }}</span>
-              <div class="dist-track">
-                <i :class="item.key" :style="{ width: `${item.percent}%` }"></i>
-              </div>
-              <em>{{ item.count }}</em>
+        <div class="gc-card">
+          <div class="gc-hd">◎ 难度分布</div>
+          <div class="gc-body">
+            <div v-for="d in diffDist" :key="d.label" class="dd-row">
+              <span class="dd-lbl" :style="{ color: d.color }">{{ d.label }}</span>
+              <div class="dd-bar-bg"><div class="dd-bar-fill" :style="{ width: `${d.pct}%`, background: d.color }"></div></div>
+              <span class="dd-cnt">{{ d.count }}</span>
             </div>
           </div>
-        </section>
+        </div>
+
       </aside>
-    </main>
+    </div>
   </div>
 </template>
 
+
 <style scoped>
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
-button,
-input {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-.wfd-bank-page {
-  min-height: 100vh;
-  width: 100%;
-  background: #eee8dd;
-  color: #2b2118;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-.topbar {
-  height: 60px;
-  display: grid;
-  grid-template-columns: clamp(230px, 18vw, 310px) 1fr clamp(230px, 18vw, 310px);
-  align-items: center;
-  padding: 0 28px;
-  background: linear-gradient(180deg, #876441 0%, #775536 100%);
-  color: #fff8ee;
-  border-bottom: 1px solid rgba(75, 49, 28, 0.22);
-}
-
-.topbar h1 {
-  margin: 0;
-  text-align: center;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.top-back,
-.logout-btn {
-  border: 0;
-  background: transparent;
-  color: rgba(255, 248, 238, 0.88);
-  font-weight: 800;
-}
-
-.top-back {
-  justify-self: start;
-  font-size: 15px;
-}
-
-.top-right {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-width: 0;
-}
-
-.vip-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  max-width: 180px;
-  padding: 0 14px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #dff4df;
-  color: #168243;
-  font-size: 13px;
-  font-weight: 900;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.logout-btn {
-  font-size: 14px;
-}
-
-.page-layout {
-  min-height: calc(100vh - 60px);
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 260px;
-  gap: 18px;
-  width: 100%;
-  max-width: 1720px;
-  margin: 0 auto;
-  padding: 22px;
-  overflow: visible;
-  align-items: start;
-}
-
-.left-rail,
-.right-rail,
-.main-column {
-  min-width: 0;
-  overflow: visible;
-}
-
-.left-rail,
-.right-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  align-self: start;
-}
-
-.card {
-  overflow: hidden;
-  background: rgba(255, 252, 246, 0.88);
-  border: 1px solid #d7c9b7;
-  border-radius: 12px;
-  box-shadow: 0 8px 18px rgba(93, 64, 34, 0.035), inset 0 1px 0 rgba(255, 255, 255, 0.62);
-}
-
-.card-title {
-  height: 49px;
-  display: flex;
-  align-items: center;
-  padding: 0 17px;
-  border-bottom: 1px solid #e2d6c7;
-  font-size: 14.5px;
-  font-weight: 900;
-}
-
-.status-list {
-  padding: 11px 13px 14px;
-}
-
-.status-item {
-  width: 100%;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border: 0;
-  border-radius: 9px;
-  padding: 0 10px;
-  background: transparent;
-  color: #6d5d4b;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.status-item + .status-item {
-  margin-top: 4px;
-}
-
-.status-item.active {
-  background: #ece3d6;
-  color: #2b2118;
-}
-
-.status-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.status-icon {
-  width: 19px;
-  height: 19px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.status-icon.cream {
-  background: #faefe2;
-  color: #d6703c;
-}
-
-.status-icon.blue {
-  background: linear-gradient(135deg, #71b8ff, #2d69cf);
-  border-radius: 50%;
-}
-
-.status-icon.green {
-  background: #58bf76;
-  color: #fff;
-}
-
-.status-icon.orange {
-  color: #d98820;
-}
-
-.status-icon.brown {
-  color: #937a5d;
-}
-
-.count-pill {
-  min-width: 30px;
-  height: 24px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0 8px;
-  border-radius: 7px;
-  background: #ddd2c2;
-  color: #7c5c3e;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.ai-list {
-  padding: 11px 13px 14px;
-}
-
-.ai-row {
-  width: 100%;
-  height: 38px;
-  display: grid;
-  grid-template-columns: 78px minmax(0, 1fr) 42px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #6d5d4b;
-  font-size: 13px;
-  text-align: left;
-}
-
-.ai-row:hover {
-  background: rgba(236, 227, 214, 0.7);
-}
-
-.ai-row + .ai-row {
-  margin-top: 7px;
-}
-
-.ai-row span:nth-child(2) {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.ai-row strong {
-  color: #7c5c3e;
-  text-align: right;
-}
-
-.id-tag {
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #decdb9;
-  border-radius: 6px;
-  background: #f5eadb;
-  color: #7b5a39;
-  font-size: 13px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.data-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 7px;
-  padding: 15px;
-}
-
-.data-box {
-  height: 70px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #ded2c2;
-  border-radius: 9px;
-  background: #f6efe5;
-}
-
-.data-box strong {
-  font-size: 25px;
-  line-height: 1;
-  font-weight: 950;
-}
-
-.data-box span {
-  color: #847564;
-  font-size: 12px;
-}
-
-.main-column {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.search-row {
-  height: 48px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 86px;
-  align-items: center;
-  gap: 16px;
-}
-
-.search-box {
-  height: 48px;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: center;
-  padding: 0 15px;
-  border: 1px solid #d0c1ae;
-  border-radius: 11px;
-  background: rgba(255, 252, 246, 0.86);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
-}
-
-.search-box span {
-  color: #b3997d;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.search-box input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #4a3a2a;
-  font-size: 15px;
-}
-
-.search-box input::placeholder {
-  color: #b5a899;
-}
-
-.total-count {
-  color: #7b5a39;
-  font-size: 16px;
-  font-weight: 800;
-  text-align: right;
-}
-
-.filter-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  min-width: 0;
-}
-
-.difficulty-tabs {
-  display: flex;
-  align-items: center;
-  flex: 1 1 560px;
-  flex-wrap: wrap;
-  gap: 10px;
-  min-width: 0;
-}
-
-.tab,
-.sort-btn {
-  height: 36px;
-  border: 1px solid #decfbe;
-  border-radius: 999px;
-  background: rgba(255, 252, 246, 0.75);
-  color: #6f604f;
-  font-size: 13.5px;
-  font-weight: 850;
-  white-space: nowrap;
-}
-
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 13px;
-}
-
-.tab.active {
-  background: #7a5738;
-  border-color: #7a5738;
-  color: #fff8ee;
-}
-
-.tab.easy .tab-icon {
-  color: #31a064;
-}
-
-.tab.medium .tab-icon {
-  color: #e19a26;
-}
-
-.tab.hard .tab-icon {
-  color: #c74f4f;
-}
-
-.tab em {
-  min-width: 26px;
-  height: 21px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 999px;
-  background: rgba(124, 92, 62, 0.14);
-  font-size: 12.5px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-.tab.active em {
-  background: rgba(255, 255, 255, 0.18);
-}
-
-.sort-btn {
-  flex: 0 0 126px;
-  width: 126px;
-  margin-left: auto;
-  border-radius: 9px;
-  color: #7c5c3e;
-}
-
-.question-list {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  overflow: visible;
-  padding-bottom: 32px;
-}
-
-.question-card {
-  min-height: 0;
-  padding: 15px 18px 12px;
-  border: 1px solid #d7c9b7;
-  border-radius: 12px;
-  background: rgba(255, 252, 246, 0.88);
-  box-shadow: 0 7px 18px rgba(93, 64, 34, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.question-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.question-meta,
-.question-actions {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.question-meta {
-  color: #8b7966;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.qid {
-  min-width: 76px;
-  height: 28px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid #dfcbb4;
-  border-radius: 6px;
-  background: #f6eddf;
-  color: #5c3c1f;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.level-badge {
-  height: 26px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.level-badge.easy {
-  border: 1px solid #b8ddbf;
-  background: #e5f3e8;
-  color: #2f8e52;
-}
-
-.level-badge.medium {
-  border: 1px solid #edcba4;
-  background: #fff1e0;
-  color: #d47419;
-}
-
-.level-badge.hard {
-  border: 1px solid #ebbab6;
-  background: #ffe7e5;
-  color: #c4333b;
-}
-
-.question-actions {
-  flex: 0 0 auto;
-}
-
-.star-btn {
-  width: 32px;
-  height: 32px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid #decdb9;
-  border-radius: 9px;
-  background: #f9f1e8;
-  color: #b3987a;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.star-btn.active {
-  color: #b77c25;
-  background: #fff0d7;
-}
-
-.my-score {
-  color: #ce6b1a;
-  font-size: 16px;
-  font-weight: 950;
-  white-space: nowrap;
-}
-
-.practice-btn {
-  width: 64px;
-  height: 38px;
-  border: 0;
-  border-radius: 10px;
-  background: #7b5a39;
-  color: #fff8ee;
-  font-size: 15px;
-  font-weight: 950;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.sentence {
-  margin: 13px 0 13px;
-  color: #2f261d;
-  font-size: 15.5px;
-  line-height: 1.45;
-}
-
-.history-row {
-  min-height: 36px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) 26px;
-  align-items: center;
-  gap: 10px;
-  padding: 0 9px 0 13px;
-  border: 1px solid #eadccc;
-  border-radius: 9px;
-  background: rgba(250, 246, 239, 0.62);
-}
-
-.history-item {
-  display: grid;
-  grid-template-columns: 40px 30px minmax(38px, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: #7c6c5d;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.history-item + .history-item {
-  border-left: 1px solid #e1d4c5;
-  padding-left: 10px;
-}
-
-.history-empty {
-  grid-column: 1 / 4;
-  color: #9b8976;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.history-item strong {
-  color: #7a5a3d;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.history-track {
-  height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e6ded3;
-}
-
-.history-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-}
-
-.history-track i.green {
-  background: #5ca96d;
-}
-
-.history-track i.orange {
-  background: #df8539;
-}
-
-.history-track i.red {
-  background: #cf3546;
-}
-
-.expand-btn {
-  width: 26px;
-  height: 26px;
-  border: 0;
-  background: transparent;
-  color: #8d7965;
-  font-size: 18px;
-}
-
-.stage-list {
-  padding: 15px 16px 16px;
-}
-
-.stage-row {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 12px;
-  color: #7d6d5d;
-}
-
-.stage-row + .stage-row {
-  margin-top: 18px;
-}
-
-.stage-dot {
-  width: 10px;
-  height: 10px;
-  margin-top: 5px;
-  border-radius: 50%;
-}
-
-.stage-dot.green {
-  background: #5aaf72;
-}
-
-.stage-dot.orange {
-  background: #e48d30;
-}
-
-.stage-dot.red {
-  background: #c94444;
-}
-
-.stage-row strong {
-  display: block;
-  margin-bottom: 8px;
-  color: #403126;
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.stage-row p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.58;
-}
-
-.setting-list {
-  padding: 15px 15px 8px;
-}
-
-.setting-row {
-  display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  color: #574637;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.segmented {
-  display: flex;
-  gap: 7px;
-  justify-content: flex-end;
-}
-
-.segmented button {
-  width: 56px;
-  height: 31px;
-  border: 1px solid #dfd2c2;
-  border-radius: 8px;
-  background: #f2eadf;
-  color: #5e4b3b;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.segmented button.selected {
-  background: #e8dccd;
-  color: #2f241b;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-.start-all-btn {
-  width: calc(100% - 30px);
-  height: 42px;
-  margin: 0 15px 15px;
-  border: 0;
-  border-radius: 9px;
-  background: #7b5a39;
-  color: #fff8ee;
-  font-size: 15px;
-  font-weight: 950;
-  box-shadow: 0 8px 15px rgba(93, 64, 34, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.dist-list {
-  padding: 17px 17px 18px;
-}
-
-.dist-row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 28px;
-  align-items: center;
-  gap: 12px;
-  color: #7d6d5d;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.dist-row + .dist-row {
-  margin-top: 18px;
-}
-
-.dist-row span.easy,
-.dist-row span.green,
-.dist-row span:first-child.easy {
-  color: #27945c;
-}
-
-.dist-row span.medium {
-  color: #d27219;
-}
-
-.dist-row span.hard {
-  color: #cc303d;
-}
-
-.dist-track {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #ded5c9;
-}
-
-.dist-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-}
-
-.dist-track i.easy {
-  background: #5ca96d;
-}
-
-.dist-track i.medium {
-  background: #df8539;
-}
-
-.dist-track i.hard {
-  background: #cf3546;
-}
-
-.dist-row em {
-  color: #8b7764;
-  font-style: normal;
-  text-align: right;
-}
-
-.loading-state,
-.empty-state {
-  min-height: 220px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 12px;
-  border: 1px solid #d7c9b7;
-  border-radius: 12px;
-  background: rgba(255, 252, 246, 0.72);
-  color: #8b7966;
-}
-
-.empty-state strong {
-  color: #3c2c1f;
-  font-size: 18px;
-}
-
-.empty-state span,
-.loading-state p {
-  font-size: 13px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 4px solid #e6d8c8;
-  border-top-color: #7b5a39;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 1366px) {
-  .page-layout {
-    grid-template-columns: 244px minmax(0, 1fr) 244px;
-    gap: 16px;
-    padding: 18px;
-  }
-
-  .difficulty-tabs {
-    gap: 7px;
-  }
-
-  .tab {
-    padding: 0 10px;
-  }
-
-  .question-card {
-    padding-left: 17px;
-    padding-right: 17px;
-  }
-
-  .history-row {
-    gap: 8px;
-  }
-
-  .history-item {
-    grid-template-columns: 38px 30px minmax(34px, 1fr);
-    gap: 7px;
-  }
-}
-
-@media (max-width: 1279px) {
-  .page-layout {
-    grid-template-columns: 232px minmax(0, 1fr) 232px;
-    gap: 14px;
-    padding: 16px;
-  }
-
-  .topbar {
-    padding: 0 22px;
-  }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+button,input{font:inherit;}
+button{border:0;background:transparent;cursor:pointer;}
+button:disabled{cursor:not-allowed;opacity:.58;}
+.shell{
+  --c0:#1E1208;--c1:#3A2510;--c2:#7C5C3E;--c3:#A07850;
+  --bg0:#F5EFE4;--bg1:#EDE8DC;--bg2:#E4DDD0;--bg3:#D8D0C0;
+  --card:#FAF6EF;--card2:#F2EBE0;--bdr:#D4C8B4;--bdr2:#C4B49C;
+  --grn:#5A9E6A;--grn2:#DFF0E4;--grn3:#A8D4B4;
+  --org:#C07840;--org2:#F2E4D0;--org3:#D4B090;
+  --red:#B84040;--red2:#F5E0DC;--red3:#D4A8A0;
+  --mute:#A89070;
+  display:flex;flex-direction:column;width:100vw;height:100vh;
+  background:var(--bg1);
+  font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
+  color:var(--c0);overflow:hidden;
+}
+.topbar{height:52px;flex-shrink:0;background:var(--c2);display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+.tb-back{display:flex;align-items:center;gap:6px;color:rgba(250,246,239,.7);font-size:13px;}
+.tb-arr{font-size:16px;}
+.tb-title{font-size:15px;font-weight:700;color:#FAF6EF;}
+.tb-right{display:flex;align-items:center;gap:10px;}
+.vip-pill{display:flex;align-items:center;gap:5px;background:#DFF0E4;border:1px solid #A8D4B4;border-radius:99px;padding:4px 11px;font-size:11px;color:#2D6A3A;font-weight:600;}
+.vip-dot{width:5px;height:5px;border-radius:50%;background:#5A9E6A;}
+.exit-btn{font-size:12.5px;color:rgba(250,246,239,.65);}
+.page-body{flex:1;display:flex;min-height:0;overflow:hidden;}
+.filter-col{width:220px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--bdr);overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:14px;}
+.filter-col::-webkit-scrollbar,.main-area::-webkit-scrollbar,.guide-col::-webkit-scrollbar{width:3px;}
+.filter-col::-webkit-scrollbar-thumb,.main-area::-webkit-scrollbar-thumb,.guide-col::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:99px;}
+.fc-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin-bottom:8px;}
+.fc-opts{display:flex;flex-direction:column;gap:3px;}
+.fc-opt{width:100%;display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;font-size:12.5px;color:var(--mute);transition:background .12s;text-align:left;}
+.fc-opt:hover{background:var(--card);}
+.fc-opt.active{background:var(--card);color:var(--c2);font-weight:600;}
+.fo-icon{font-size:12px;}
+.fo-label{flex:1;}
+.fo-count{font-size:10px;background:var(--bdr);border-radius:4px;padding:1px 5px;color:var(--c1);}
+.ai-rec-card{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;}
+.arc-banner{padding:8px 10px;background:var(--org2);border-bottom:1px solid var(--org3);font-size:11px;color:var(--org);display:flex;gap:5px;line-height:1.5;}
+.arc-ico{flex-shrink:0;}
+.arc-list{padding:6px 8px;display:flex;flex-direction:column;gap:3px;}
+.arc-item{width:100%;display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;transition:background .12s;text-align:left;}
+.arc-item:hover{background:var(--card2);}
+.arc-code{font-size:10px;font-weight:700;color:var(--c2);background:var(--card2);border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;}
+.arc-meta{flex:1;font-size:10.5px;color:var(--mute);}
+.arc-go{font-size:11px;color:var(--c2);font-weight:600;}
+.my-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.ms-item{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:8px 4px;text-align:center;}
+.ms-val{font-size:15px;font-weight:800;line-height:1;}
+.ms-lbl{font-size:9px;color:var(--mute);margin-top:2px;}
+.main-area{flex:1;min-width:0;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:12px;}
+.search-bar{display:flex;align-items:center;gap:14px;}
+.sb-input-wrap{flex:1;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--bdr2);border-radius:10px;padding:9px 13px;transition:border-color .13s;}
+.sb-input-wrap:focus-within{border-color:var(--c2);}
+.sb-ico{font-size:14px;color:var(--mute);}
+.sb-input{flex:1;border:none;background:transparent;font-size:13.5px;color:var(--c0);outline:none;font-family:inherit;}
+.sb-input::placeholder{color:var(--mute);}
+.sb-clear{color:var(--mute);font-size:12px;}
+.sb-stats{font-size:12px;color:var(--mute);white-space:nowrap;}
+.sb-stats b{color:var(--c0);}
+.diff-tabs{display:flex;gap:7px;flex-wrap:wrap;}
+.dt-item{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:5px 10px;border-radius:99px;font-size:12.5px;color:var(--mute);background:var(--card2);border:1px solid var(--bdr);transition:background .12s,color .12s,border-color .12s;}
+.dt-item.active{background:var(--c2);color:#FAF6EF;border-color:var(--c2);font-weight:600;}
+.dt-icon{font-size:11.5px;line-height:1;}
+.dt-count{min-width:20px;height:18px;padding:0 6px;border-radius:99px;background:rgba(126,94,58,.12);color:var(--c1);font-size:10.5px;font-weight:700;line-height:18px;text-align:center;}
+.dt-item.active .dt-count{background:rgba(250,246,239,.18);color:#FAF6EF;}
+.q-list{display:flex;flex-direction:column;gap:10px;}
+.q-card{background:var(--card);border:1px solid var(--bdr);border-radius:13px;padding:14px 16px;transition:box-shadow .13s;}
+.q-card:hover{box-shadow:0 3px 12px rgba(44,21,8,.07);}
+.q-card--active{border-color:var(--c2);background:linear-gradient(135deg,var(--card) 0%,#F0E8DC 100%);}
+.qc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;}
+.qc-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.qc-id{font-size:11px;font-weight:700;color:var(--c2);background:var(--card2);border:1px solid var(--bdr);border-radius:5px;padding:2px 7px;}
+.qc-diff{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;}
+.qc-diff.hard{background:var(--red2);color:var(--red);border:1px solid var(--red3);}
+.qc-diff.medium{background:var(--org2);color:var(--org);border:1px solid var(--org3);}
+.qc-diff.easy{background:var(--grn2);color:var(--grn);border:1px solid var(--grn3);}
+.qc-words,.qc-sec{font-size:10.5px;color:var(--mute);}
+.qc-right{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+.qc-fav{width:27px;height:27px;border:1px solid var(--bdr);border-radius:8px;background:var(--card2);color:var(--mute);font-size:14px;line-height:1;}
+.qc-fav.active{background:#FFF3CC;border-color:#E7C871;color:#A97800;}
+.qc-score{font-size:12.5px;font-weight:700;}
+.qc-go{background:var(--c2);color:#FAF6EF;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:600;font-family:inherit;transition:background .12s;}
+.qc-go:hover{background:#6A4D32;}
+.qc-text{font-size:13px;color:var(--c1);line-height:1.75;margin-bottom:8px;}
+.qc-hist{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--bdr);padding-top:9px;}
+.qch-item{display:flex;align-items:center;gap:8px;}
+.qch-date{font-size:9.5px;color:var(--mute);width:36px;flex-shrink:0;}
+.qch-bar-bg{flex:1;height:5px;background:var(--bdr);border-radius:99px;overflow:hidden;}
+.qch-bar-fill{height:100%;background:var(--c2);border-radius:99px;}
+.qch-val{font-size:10.5px;font-weight:700;color:var(--c2);width:22px;text-align:right;flex-shrink:0;}
+.state-card{min-height:220px;background:var(--card);border:1px solid var(--bdr);border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;color:var(--mute);font-size:13px;text-align:center;}
+.state-card strong{font-size:16px;color:var(--c0);}
+.loading-dot{width:28px;height:28px;border:3px solid var(--org);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.guide-col{width:232px;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--bdr);overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;}
+.gc-card{background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;}
+.gc-hd{padding:10px 13px 9px;border-bottom:1px solid var(--bdr);font-size:12px;font-weight:700;color:var(--c0);}
+.gc-body{padding:11px 13px;display:flex;flex-direction:column;gap:9px;}
+.gc-tip-item{display:flex;gap:9px;align-items:flex-start;}
+.gc-tip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.gc-tip-title{font-size:12px;font-weight:600;color:var(--c0);margin-bottom:2px;}
+.gc-tip-desc{font-size:11px;color:var(--mute);line-height:1.5;}
+.setting-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.sr-label{font-size:11.5px;color:var(--c1);}
+.sr-opts{display:flex;gap:4px;}
+.sr-opt{font-size:11px;padding:3px 10px;border-radius:6px;background:var(--card2);border:1px solid var(--bdr);color:var(--mute);}
+.sr-opt.act{background:var(--c2);color:#FAF6EF;border-color:var(--c2);}
+.sr-fixed{font-size:11px;font-weight:600;color:var(--c2);background:var(--card2);border:1px solid var(--bdr);border-radius:6px;padding:3px 10px;white-space:nowrap;}
+.start-all-btn{width:100%;background:var(--c2);color:#FAF6EF;border:none;border-radius:9px;padding:10px 0;font-size:12.5px;font-weight:600;font-family:inherit;margin-top:4px;}
+.dd-row{display:flex;align-items:center;gap:7px;}
+.dd-lbl{font-size:10.5px;font-weight:600;width:26px;flex-shrink:0;}
+.dd-bar-bg{flex:1;height:5px;background:var(--bdr);border-radius:99px;overflow:hidden;}
+.dd-bar-fill{height:100%;border-radius:99px;}
+.dd-cnt{font-size:10.5px;color:var(--mute);width:18px;text-align:right;flex-shrink:0;}
+@media (max-width:1366px){
+  .filter-col{width:210px;padding:13px 10px;}
+  .guide-col{width:224px;padding:13px 10px;}
+  .main-area{padding:16px 18px;}
+  .qc-text{line-height:1.68;}
+}
+@media (max-width:1280px){
+  .topbar{padding:0 22px;}
+  .filter-col{width:204px;}
+  .guide-col{width:214px;}
+  .main-area{padding:15px 16px;}
+  .search-bar{gap:10px;}
+  .qc-right{gap:7px;}
 }
 </style>
